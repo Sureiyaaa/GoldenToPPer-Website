@@ -1,0 +1,62 @@
+{
+  "stats": [
+    {
+      "value": 10,
+      "suffix": "+",
+      "label": "Years of Excellence"
+    },
+    {
+      "value": 9,
+      "suffix": "",
+      "label": "Mega Projects"
+    },
+    {
+      "value": 1500,
+      "suffix": "+",
+      "label": "Units Turned Over"
+    },
+    {
+      "value": 12,
+      "suffix": "+",
+      "label": "Industry Awards"
+    }
+  ],
+  "milestones": [
+    {
+      "year": "2013",
+      "title": "The Golden Topper brand was founded",
+      "desc": "The brand was founded in early 2013 by an assemblage of experienced technical professionals coming from established real estate developers in Mainland China.",
+      "img": "/images/story/2013_Milestone.png"
+    },
+    {
+      "year": "2017",
+      "title": "The brand expanded to the Philippines",
+      "desc": "GT branched out to the Philippines, setting its sights on the country’s two regions — Luzon and Visayas, headed by its President, Mr. Allan Crisologo.",
+      "img": "/images/story/2017_Milestone.webp"
+    },
+    {
+      "year": "2019",
+      "title": "Corporate launching celebration",
+      "desc": "A remarkable milestone, the Group of Companies hosted its grand launch event, unveiling its planned projects to esteemed guests.",
+      "img": "/images/story/2019_Milestone.webp"
+    },
+    {
+      "year": "2021",
+      "title": "Acquired Regent Construction International",
+      "desc": "With its own construction arm, Regent Construction International, Inc., a triple A contractor, Golden Topper aims to be an active player in developing urban projects.",
+      "img": "/images/story/2021_Milestone.png"
+    },
+    {
+      "year": "2022",
+      "title": "Best Developer in Cebu Award",
+      "desc": "In recognition of its projects in the Cebu province, City Clou and El Sol, Golden Topper accepted the award for Best Developer in Cebu at the Dot Property Awards 2022.",
+      "img": "/images/story/2022_Milestone.jpg"
+    },
+    {
+      "year": "2023",
+      "title": "Local Social Welfare Initiative of the Year",
+      "desc": "The Group received the award for Local Social Welfare Initiative - Philippines 2023 at the Gov Media Awards for its contribution in the Naga Housing Project.",
+      "img": "/images/story/2023_Milestone.jpg"
+    }
+  ]
+}

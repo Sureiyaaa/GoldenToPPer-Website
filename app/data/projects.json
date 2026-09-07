@@ -1,0 +1,68 @@
+[
+  {
+    "id": 1,
+    "name": "City Clou",
+    "location": "0549 DIONISIO JAKOSALEM ST., CEBU CITY",
+    "proximity": "1.6km to Cebu Business Park",
+    "image": "/images/projects/City_Clou_Projects.png",
+    "status": "Under Construction",
+    "type": "Mixed-Use Estate",
+    "concept": "Community Business District",
+    "turnover": "Completion: Early 2026",
+    "units": [
+      "Studio",
+      "One Bedroom"
+    ],
+    "slug": "cityclou"
+  },
+  {
+    "id": 2,
+    "name": "El Sol",
+    "location": "SEAGROVE, PUNTA ENGAÑO, LAPU-LAPU CITY, CEBU",
+    "proximity": "15 mins from Mactan Airport",
+    "image": "/images/projects/el_sol_projects.webp",
+    "status": "Pre-Selling",
+    "type": "Resort-Style Condominium",
+    "concept": "Leisure Condominium",
+    "turnover": "Phase 1 Pre-Selling",
+    "units": [
+      "Studio",
+      "One Bedroom",
+      "One Bedroom Suite"
+    ],
+    "slug": "elsol"
+  },
+  {
+    "id": 3,
+    "name": "La Vida",
+    "location": "1802 F.B. HARRISON STREET, BRGY. 16, ZONE 1, PASAY CITY",
+    "proximity": "Minutes from Mall of Asia & Casino Corridor",
+    "image": "/images/projects/la-vida.webp",
+    "status": "Ready For Occupancy",
+    "type": "High-Rise Residential",
+    "concept": "Premium Bayside Living",
+    "turnover": "Completed 2024",
+    "units": [
+      "Studio",
+      "Studio Suite"
+    ],
+    "slug": "lavida"
+  },
+  {
+    "id": 4,
+    "name": "Park One",
+    "location": "ALABANG-ZAPOTE ROAD COR. DAANG RADYAL, BARANGAY ZAPOTE, LAS PIÑAS",
+    "proximity": "Minutes away from Alabang CBD & Metro Manila",
+    "image": "/images/projects/park-one.webp",
+    "status": "Pre-Selling",
+    "type": "Contemporary Residential",
+    "concept": "Your Gateway to the South",
+    "turnover": "Tower 1: Q1 2028",
+    "units": [
+      "Two Bedroom",
+      "One Bedroom",
+      "Studio"
+    ],
+    "slug": "parkone"
+  }
+]

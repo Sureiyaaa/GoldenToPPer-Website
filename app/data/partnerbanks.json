@@ -1,0 +1,83 @@
+{
+  "banks": [
+    {
+      "id": 1,
+      "name": "Bank of the Philippine Islands (BPI)",
+      "image": "/images/banks-partner/BPI.webp",
+      "loanAmount": "Up to 90%",
+      "terms": "Up to 20 years",
+      "description": "Loan interest rates are based on the prevailing rate during the drawdown date."
+    },
+    {
+      "id": 2,
+      "name": "Security Bank Corporation (SBC)",
+      "image": "/images/banks-partner/SBC.webp",
+      "loanAmount": "Up to 90%",
+      "terms": "Up to 20 years",
+      "description": "Loan interest rates are based on the prevailing rate during the drawdown date."
+    },
+    {
+      "id": 3,
+      "name": "Wealth Development Bank",
+      "image": "/images/banks-partner/WDB.webp",
+      "loanAmount": "Up to 80%",
+      "terms": "Up to 15 years",
+      "description": "Loan interest rates are based on the prevailing rate during the drawdown date."
+    },
+    {
+      "id": 4,
+      "name": "Banco De Oro (BDO)",
+      "image": "/images/banks-partner/BDO.webp",
+      "loanAmount": "Up to 85%",
+      "terms": "Up to 25 years",
+      "description": "Loan interest rates are based on the prevailing rate during the drawdown date."
+    },
+    {
+      "id": 5,
+      "name": "Metrobank",
+      "image": "/images/banks-partner/MB.webp",
+      "loanAmount": "Up to 80%",
+      "terms": "Up to 25 years",
+      "description": "Loan interest rates are based on the prevailing rate during the drawdown date."
+    },
+    {
+      "id": 6,
+      "name": "Sterling Bank of Asia",
+      "image": "/images/banks-partner/SBA.webp",
+      "loanAmount": "Up to 80%",
+      "terms": "Up to 25 years",
+      "description": "Loan interest rates are based on the prevailing rate during the drawdown date."
+    },
+    {
+      "id": 7,
+      "name": "Philippines Veterans Bank",
+      "image": "/images/banks-partner/VB.webp",
+      "loanAmount": "Up to 80%",
+      "terms": "Up to 25 years",
+      "description": "Loan interest rates are based on the prevailing rate during the drawdown date."
+    },
+    {
+      "id": 8,
+      "name": "Rizal Commercial Banking Corporation",
+      "image": "/images/banks-partner/RCBC.webp",
+      "loanAmount": "Up to 80%",
+      "terms": "Up to 25 years",
+      "description": "Loan interest rates are based on the prevailing rate during the drawdown date."
+    },
+    {
+      "id": 9,
+      "name": "Asia United Bank ",
+      "image": "/images/banks-partner/AUB.webp",
+      "loanAmount": "Up to 80%",
+      "terms": "Up to 25 years",
+      "description": "Loan interest rates are based on the prevailing rate during the drawdown date."
+    }
+  ],
+  "selection": [
+    "All Projects",
+    "Park One",
+    "El Sol",
+    "City Clou",
+    "La Vida"
+  ]
+}

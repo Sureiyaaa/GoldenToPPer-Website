@@ -1,0 +1,40 @@
+{
+  "promotions": [
+    {
+      "id": 1,
+      "title": "The Grand Pinnacle Estates",
+      "slug": "grand-pinnacle-estates",
+      "tag": "Pre-Selling",
+      "validUntil": "August 31, 2026",
+      "image": "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?q=80&w=2000&auto=format&fit=crop",
+      "excerpt": "Secure your legacy. Enjoy a 10% discount on spot downpayments for all 4-bedroom luxury villas and priority selection for corner lots."
+    },
+    {
+      "id": 2,
+      "title": "Lumina Residences BGC",
+      "slug": "lumina-residences-bgc",
+      "tag": "Ready For Occupancy",
+      "validUntil": "July 15, 2026",
+      "image": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?q=80&w=2000&auto=format&fit=crop",
+      "excerpt": "Move in immediately with only a 5% downpayment. Early claimers receive a complimentary premium interior styling package worth PHP 250,000."
+    },
+    {
+      "id": 3,
+      "title": "Horizon Bay Towers",
+      "slug": "horizon-bay-towers",
+      "tag": "Pre-Selling",
+      "validUntil": "October 31, 2026",
+      "image": "https://images.unsplash.com/photo-1515263487990-61b07816b324?q=80&w=2000&auto=format&fit=crop",
+      "excerpt": "Exclusive early bird rates for our newest oceanfront development. Zero interest on monthly amortizations stretched across 60 months."
+    },
+    {
+      "id": 4,
+      "title": "The Corporate Suites",
+      "slug": "corporate-suites-makati",
+      "tag": "Commercial",
+      "validUntil": "December 31, 2026",
+      "image": "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?q=80&w=2000&auto=format&fit=crop",
+      "excerpt": "Elevate your business operations. Avail of waived association dues for the first 2 years upon turnover of your premium office space."
+    }
+  ]
+}

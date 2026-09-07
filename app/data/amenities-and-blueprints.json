@@ -1,0 +1,260 @@
+{
+  "CityClou": {
+    "amenities": [
+      {
+        "id": 1,
+        "name": "Dedicated Retail Area",
+        "img": "/images/projects/city-clou-amenities/dedicated_retail_area_city-clou.png",
+        "description": "Enjoy everyday convenience with a dedicated retail space offering shops, cafés, and essential services just steps from your home."
+      },
+      {
+        "id": 2,
+        "name": "Lap Pool",
+        "img": "/images/projects/city-clou-amenities/lap_pool_city-clou.png",
+        "description": "Take a refreshing swim or stay active in our beautifully designed lap pool, perfect for relaxation or daily fitness routines."
+      },
+      {
+        "id": 3,
+        "name": "Game Room",
+        "img": "/images/projects/city-clou-amenities/gameroom_cityclou.png",
+        "description": "Unwind and have fun in the game room, a lively space designed for entertainment, friendly competition, and social gatherings."
+      },
+      {
+        "id": 4,
+        "name": "Kid's Playroom",
+        "img": "/images/projects/city-clou-amenities/playroom_cityclou.png",
+        "description": "A safe and colorful space where children can play, explore, and enjoy fun activities designed just for them."
+      },
+      {
+        "id": 5,
+        "name": "Lounge Area",
+        "img": "/images/projects/city-clou-amenities/lounge_cityclou.png",
+        "description": "Relax in the elegant lounge area, a welcoming space perfect for casual meetings, quiet moments, or socializing with guests."
+      },
+      {
+        "id": 6,
+        "name": "Library",
+        "img": "/images/projects/city-clou-amenities/library_cityclou.png",
+        "description": "Escape into a peaceful environment ideal for reading, studying, or working in a calm and inspiring atmosphere."
+      },
+      {
+        "id": 7,
+        "name": "Function Rooms",
+        "img": "/images/projects/city-clou-amenities/function_room_cityclou.png",
+        "description": "Host memorable celebrations, meetings, or private events in our versatile function rooms designed for comfort and style."
+      },
+      {
+        "id": 8,
+        "name": "Gym",
+        "img": "/images/projects/city-clou-amenities/gym_cityclou.png",
+        "description": "Stay fit and energized in our fully equipped gym featuring modern equipment for strength training and cardio workouts."
+      },
+      {
+        "id": 9,
+        "name": "Yoga Room",
+        "img": "/images/projects/city-clou-amenities/yoga_cityclou.png",
+        "description": "Find balance and relaxation in the yoga room, a serene space designed for meditation, stretching, and mindful movement."
+      }
+    ],
+    "blueprints": [
+      {
+        "id": "studio-b",
+        "title": "Studio (Tower B)",
+        "size": "± 27.38 - 31.97 sqm",
+        "image": "/images/projects/city-clou-blueprints/studio_b.png",
+        "description": "A cleverly designed space maximizing efficiency and comfort, perfect for young professionals and dynamic individuals."
+      },
+      {
+        "id": "studio-c",
+        "title": "Studio (Tower C)",
+        "size": "± ± 27 - 32.40 sqm",
+        "image": "/images/projects/city-clou-blueprints/studio_c.png",
+        "description": "An open-concept haven featuring smart storage solutions and a layout that breathes natural light."
+      },
+      {
+        "id": "one",
+        "title": "One Bedroom (Tower B)",
+        "size": "± 36.89 - 42.84 sqm",
+        "image": "/images/projects/city-clou-blueprints/one_br_b.png",
+        "description": "Spacious and elegant, offering a distinct separation between living and resting areas for ultimate privacy and relaxation."
+      }
+    ]
+  },
+  "ElSol": {
+    "amenities": [
+      {
+        "id": 1,
+        "name": "Lounge and Bar",
+        "img": "/images/projects/el-sol-amenities/lounge_and_bar.png",
+        "description": "Immerse yourself in our Olympic-length lap pool, perfect for your daily aquatic workouts or a refreshing weekend dip under the sun."
+      },
+      {
+        "id": 2,
+        "name": "Swimming Pool with Kiddie Pool",
+        "img": "/images/projects/el-sol-amenities/swimming_pool_with_kiddie_pool.png",
+        "description": "Experience ultimate convenience with curated boutique shops and essential services located just steps away from your lobby."
+      },
+      {
+        "id": 3,
+        "name": "Function Rooms",
+        "img": "/images/projects/el-sol-amenities/function_rooms_el_sol.png",
+        "description": "Achieve your fitness goals in our state-of-the-art gym. Fully equipped with modern cardio machines and free weights, it offers everything you need for a high-performance workout."
+      },
+      {
+        "id": 4,
+        "name": "Outdoor Bar and Lounge",
+        "img": "/images/projects/el-sol-amenities/outdoor_bar_and_lounge.png",
+        "description": "A sophisticated space designed for relaxation and casual meetings, featuring plush seating and an atmosphere of refined elegance."
+      },
+      {
+        "id": 5,
+        "name": "Gym with Yoga Room",
+        "img": "/images/projects/el-sol-amenities/gym_with_yoga_room.png",
+        "description": "Find your focus in our quiet, well-appointed library. The perfect sanctuary for remote work, studying, or diving into a good book."
+      },
+      {
+        "id": 6,
+        "name": "Rerecreational Court ",
+        "img": "/images/projects/el-sol-amenities/recreational_court.png",
+        "description": "A safe, vibrant, and interactive space where your little ones can explore, play, and make new friends within the community."
+      },
+      {
+        "id": 7,
+        "name": "Children's Playroom",
+        "img": "/images/projects/el-sol-amenities/childrens_playroom.png",
+        "description": "Unwind and socialize in our fully equipped game room, featuring billiards, table tennis, and entertainment for all ages."
+      }
+    ],
+    "blueprints": [
+      {
+        "id": "1br",
+        "title": "One Bedroom",
+        "size": "± 32.24 to ±38.49 sqm",
+        "image": "/images/projects/el-sol-blueprints/one-bedroom.webp",
+        "description": "A cleverly designed space maximizing efficiency and comfort, perfect for young professionals and dynamic individuals."
+      },
+      {
+        "id": "1brs",
+        "title": "One Bedroom Suite",
+        "size": "± 40.65 sqm",
+        "image": "/images/projects/el-sol-blueprints/one-bedroom-suite.webp",
+        "description": "An open-concept haven featuring smart storage solutions and a layout that breathes natural light."
+      },
+      {
+        "id": "stdo",
+        "title": "Studio",
+        "size": "± 21.22 sqm",
+        "image": "/images/projects/el-sol-blueprints/studio.webp",
+        "description": "Spacious and elegant, offering a distinct separation between living and resting areas for ultimate privacy and relaxation."
+      }
+    ]
+  },
+  "LaVida": {
+    "amenities": [
+      {
+        "id": 1,
+        "name": "Dedicated Retail Area",
+        "img": "/images/projects/la-vida-amenities/dedicated_retail_area_lavida.png",
+        "description": "Immerse yourself in our Olympic-length lap pool, perfect for your daily aquatic workouts or a refreshing weekend dip under the sun."
+      },
+      {
+        "id": 2,
+        "name": "Kid's Playroom",
+        "img": "/images/projects/la-vida-amenities/kids_playroom_lavida.png",
+        "description": "Experience ultimate convenience with curated boutique shops and essential services located just steps away from your lobby."
+      },
+      {
+        "id": 3,
+        "name": "Lap Pool",
+        "img": "/images/projects/la-vida-amenities/lap_pool_lavida.png",
+        "description": "Achieve your fitness goals in our state-of-the-art gym. Fully equipped with modern cardio machines and free weights, it offers everything you need for a high-performance workout."
+      },
+      {
+        "id": 4,
+        "name": "Function Rooms",
+        "img": "/images/projects/la-vida-amenities/function_rooms_lavida.png",
+        "description": "A sophisticated space designed for relaxation and casual meetings, featuring plush seating and an atmosphere of refined elegance."
+      },
+      {
+        "id": 5,
+        "name": "Kiddie Pool",
+        "img": "/images/projects/la-vida-amenities/kiddie_pool_lavida.png",
+        "description": "Find your focus in our quiet, well-appointed library. The perfect sanctuary for remote work, studying, or diving into a good book."
+      },
+      {
+        "id": 6,
+        "name": "Jogging Trail",
+        "img": "/images/projects/la-vida-amenities/jogging_trail_lavida.png",
+        "description": "A safe, vibrant, and interactive space where your little ones can explore, play, and make new friends within the community."
+      }
+    ],
+    "blueprints": [
+      {
+        "id": "1br",
+        "title": "Studio Suite - 2BR layout",
+        "size": "± 37.8 sqm",
+        "image": "/images/projects/la-vida-blueprints/studio-suite-2br.webp",
+        "description": "A cleverly designed space maximizing efficiency and comfort, perfect for young professionals and dynamic individuals."
+      },
+      {
+        "id": "1brs",
+        "title": "Studio Suite - 1BR layout",
+        "size": "± 37.8 sqm",
+        "image": "/images/projects/la-vida-blueprints/studio-suite-1br.webp",
+        "description": "An open-concept haven featuring smart storage solutions and a layout that breathes natural light."
+      },
+      {
+        "id": "stdo",
+        "title": "Studio",
+        "size": "± 31.5 to 37.8 sqm",
+        "image": "/images/projects/la-vida-blueprints/studio_lavida.webp",
+        "description": "Spacious and elegant, offering a distinct separation between living and resting areas for ultimate privacy and relaxation."
+      }
+    ]
+  },
+  "ParkOne": {
+    "amenities": [
+      {
+        "id": 1,
+        "name": "Lap Pool",
+        "img": "/images/projects/park-one-amenities/lap-pool-parkone.jpg",
+        "description": "Immerse yourself in our Olympic-length lap pool, perfect for your daily aquatic workouts or a refreshing weekend dip under the sun."
+      },
+      {
+        "id": 2,
+        "name": "Gym With Yoga Room",
+        "img": "/images/projects/park-one-amenities/gym_with_yoga_room_parkone.jpg",
+        "description": "Experience ultimate convenience with curated boutique shops and essential services located just steps away from your lobby."
+      },
+      {
+        "id": 3,
+        "name": "Function Rooms",
+        "img": "/images/projects/park-one-amenities/function_rooms_parkone.jpg",
+        "description": "Achieve your fitness goals in our state-of-the-art gym. Fully equipped with modern cardio machines and free weights, it offers everything you need for a high-performance workout."
+      }
+    ],
+    "blueprints": [
+      {
+        "id": "1br",
+        "title": "One Bedroom",
+        "size": "± 28.6 sqm",
+        "image": "/images/projects/park-one-blueprints/one-bedroom-parkone.webp",
+        "description": "A cleverly designed space maximizing efficiency and comfort, perfect for young professionals and dynamic individuals."
+      },
+      {
+        "id": "1brs",
+        "title": "Two Bedroom",
+        "size": "± 37.1 sqm",
+        "image": "/images/projects/park-one-blueprints/two-bedroom-parkone.webp",
+        "description": "An open-concept haven featuring smart storage solutions and a layout that breathes natural light."
+      },
+      {
+        "id": "stdo",
+        "title": "Studio",
+        "size": "± 19 sqm",
+        "image": "/images/projects/park-one-blueprints/studio-parkone.webp",
+        "description": "Spacious and elegant, offering a distinct separation between living and resting areas for ultimate privacy and relaxation."
+      }
+    ]
+  }
+}

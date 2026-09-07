@@ -1,0 +1,137 @@
+{
+  "heroProjects": [
+    {
+      "id": 1,
+      "title": "City Clou",
+      "slug": "cityclou",
+      "location": "Cebu City",
+      "img": "/images/projects/City_Clou_image.png",
+      "headingLine1": "A Thriving Lifestyle",
+      "headingLine2": "Hub in Cebu City",
+      "virtualTourUrl": "/projects/cityclou/virtual-tour"
+    },
+    {
+      "id": 2,
+      "title": "El Sol",
+      "slug": "elsol",
+      "location": "Lapu-Lapu City",
+      "img": "/images/landingpage/el-sol.webp",
+      "headingLine1": "A Modern Sanctuary",
+      "headingLine2": "in the Heart of Mactan",
+      "virtualTourUrl": "/projects/elsol/virtual-tour"
+    },
+    {
+      "id": 3,
+      "title": "La Vida",
+      "slug": "lavida",
+      "location": "Pasay City",
+      "img": "/images/landingpage/la-vida.webp",
+      "headingLine1": "Your More than the",
+      "headingLine2": "Ordinary Address in Pasay",
+      "virtualTourUrl": "/projects/lavida/virtual-tour"
+    },
+    {
+      "id": 4,
+      "title": "Park One",
+      "slug": "parkone",
+      "location": "Las Piñas City",
+      "img": "/images/projects/parkone-homepage.png",
+      "headingLine1": "Your Gateway to Urban",
+      "headingLine2": "Living in the South",
+      "virtualTourUrl": "/projects/parkone/virtual-tour"
+    }
+  ],
+  "awardsData": [
+    {
+      "id": 1,
+      "title": "Best Developer in Cebu",
+      "subtitle1": "Dot Property Philippines",
+      "subtitle2": "Awards 2022"
+    },
+    {
+      "id": 2,
+      "title": "Local Social Welfare Initiative\nof the Year Philippines",
+      "subtitle1": "GovMedia Awards 2023",
+      "subtitle2": ""
+    },
+    {
+      "id": 3,
+      "title": "Best Breakthrough Developer",
+      "subtitle1": "Dot Property Philippines",
+      "subtitle2": "Awards 2024"
+    }
+  ],
+  "developmentAreas": [
+    {
+      "id": "01",
+      "tabTitle": "Real Estate Development",
+      "subtitle": "KEY DEVELOPMENT AREAS",
+      "heading": "Real Estate\nDevelopment",
+      "desc": "With real estate development at our core, we transform dreams into landmarks. Our real estate development arm builds innovative spaces designed to enhance lifestyles, foster community, and redefine urban living across the Philippines.",
+      "img": "/images/landingpage/Real_estate_development.webp"
+    },
+    {
+      "id": "02",
+      "tabTitle": "Construction",
+      "subtitle": "KEY DEVELOPMENT AREAS",
+      "heading": "Construction\nExcellence",
+      "desc": "With its own triple A construction arm, Regent Construction International, Inc., we aim to be a key partner in constructing landmark developments for the Group, public projects, and other private developments.",
+      "img": "/images/landingpage/Construction.webp"
+    },
+    {
+      "id": "03",
+      "tabTitle": "Property Management",
+      "subtitle": "KEY DEVELOPMENT AREAS",
+      "heading": "Property\nManagement",
+      "desc": "Ensuring peace of mind for property owners and tenants alike, Ascent Property Management Inc., specializes in seamless operations, meticulous upkeep, and comprehensive leasing services.",
+      "img": "/images/landingpage/Property_management.png"
+    },
+    {
+      "id": "04",
+      "tabTitle": "Financing",
+      "subtitle": "KEY DEVELOPMENT AREAS",
+      "heading": "Flexible\nFinancing",
+      "desc": "Envisioning better lives for all, our Group consistently works towards making ownership accessible. We are set to offer tailored financial solutions to support buyers in achieving their dream home with ease and confidence.",
+      "img": "/images/landingpage/Financing.webp"
+    },
+    {
+      "id": "05",
+      "tabTitle": "Socialized Housing",
+      "subtitle": "KEY DEVELOPMENT AREAS",
+      "heading": "Socialized\nHousing",
+      "desc": "With Vienda Properties, our housing arm, we aim to empower lives through accessibility. Our socialized housing projects are crafted to provide quality and affordable living spaces for the everyday Filipino.",
+      "img": "/images/landingpage/Socialized_house.webp"
+    }
+  ],
+  "newsData": [
+    {
+      "id": 1,
+      "date": "January 25, 2024",
+      "title": "Golden Topper wins award for Housing Project in Naga, Cebu",
+      "desc": "The Golden Topper Group of Companies received the award for Local Social Welfare Initiative - Philippines 2023 at the Gov Media Awards for its valuable contribution in the Naga Housing Project.",
+      "img": "https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&q=80&w=1200",
+      "featured": true
+    },
+    {
+      "id": 2,
+      "date": "January 25, 2024",
+      "title": "Golden Topper celebrates topping off La Vida",
+      "img": "https://images.unsplash.com/photo-1541888086925-ebde20b08082?auto=format&fit=crop&q=80&w=800",
+      "featured": false
+    },
+    {
+      "id": 3,
+      "date": "January 21, 2024",
+      "title": "Secure Your Investment with Golden Topper's Partner Banks",
+      "img": "https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&q=80&w=800",
+      "featured": false
+    },
+    {
+      "id": 4,
+      "date": "September 20, 2023",
+      "title": "Golden Topper wins awards at Dot Property 2023",
+      "img": "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&q=80&w=800",
+      "featured": false
+    }
+  ]
+}
