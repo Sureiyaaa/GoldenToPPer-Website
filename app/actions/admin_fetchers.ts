@@ -36,12 +36,33 @@ export async function fetchProjectsForDropdown() {
 export async function saveVirtualTourAction(payload: any, editId: number | null) {
   const session = await getCustomSession();
   if (!session) throw new Error("Unauthorized");
+
+  // Sanitize and align specifically to the table columns
+  const cleanData: Record<string, any> = {
+    title: payload.title || payload.unit_name || '',
+    unit_name: payload.unit_name || payload.title || '',
+    project_id: Number(payload.project_id),
+    status: payload.status || 'Active',
+    view_areas: payload.view_areas || payload.rooms || [],
+  };
+
   if (editId) {
-    const { error } = await supabaseAdmin.from('virtual_tours').update(payload).eq('id', editId);
-    if (error) throw error;
+    const { error } = await supabaseAdmin
+      .from('virtual_tours')
+      .update(cleanData)
+      .eq('id', editId);
+    if (error) {
+      console.error("Update Virtual Tour Error:", error);
+      throw new Error(error.message);
+    }
   } else {
-    const { error } = await supabaseAdmin.from('virtual_tours').insert([payload]);
-    if (error) throw error;
+    const { error } = await supabaseAdmin
+      .from('virtual_tours')
+      .insert([cleanData]);
+    if (error) {
+      console.error("Insert Virtual Tour Error:", error);
+      throw new Error(error.message);
+    }
   }
   return { success: true };
 }
