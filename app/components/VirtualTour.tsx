@@ -14,9 +14,9 @@ export default function VirtualTour({ image }: VirtualTourProps) {
       height="100%"
       width="100%"
       littlePlanet={false}
-      defaultZoomLvl={0} // 0 = maximum zoom out, 50 = default middle, 100 = maximum zoom in
-      minFov={30}        // optional: limit how far the user can zoom IN
-      maxFov={90}        // optional: limit how far the user can zoom OUT
+      defaultZoomLvl={0} 
+      minFov={30}        
+      maxFov={90}        
       navbar={['zoom', 'move', 'download', 'fullscreen']}
     />
   );
