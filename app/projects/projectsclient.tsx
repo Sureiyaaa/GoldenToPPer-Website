@@ -12,7 +12,7 @@ import Lenis from 'lenis';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import BackToTop from '../components/backtotop';
-import { ArrowRight, Move3d, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowRight, Move3d, X, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 
 if (typeof window !== 'undefined') {
   gsap.registerPlugin(ScrollTrigger);
@@ -27,7 +27,6 @@ const DynamicProjectMap = dynamic(() => import('@/app/components/projectmap'), {
   ),
 });
 
-// Dynamic import for the 360 viewer to prevent server-side errors
 const DynamicVirtualTour = dynamic(() => import('@/app/components/VirtualTour'), {
   ssr: false,
   loading: () => (
@@ -38,26 +37,50 @@ const DynamicVirtualTour = dynamic(() => import('@/app/components/VirtualTour'),
   ),
 });
 
+function parseViewAreas(tour: any): any[] {
+  if (!tour) return [];
+  // Supports both the new column 'view_areas' and legacy 'rooms'
+  let raw = tour.view_areas || tour.rooms;
+  if (!raw) return [];
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw); } catch { raw = []; }
+  }
+  return Array.isArray(raw) ? raw : [];
+}
+
 export default function ProjectsClient({ initialProjects }: { initialProjects: any[] }) {
   const projectsRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  // === STATE FOR FULLSCREEN VIRTUAL TOUR GALLERY ===
-  const [activeTourRooms, setActiveTourRooms] = useState<any[] | null>(null);
+  // === 3-TIER HIERARCHY STATE ===
+  const [activeTourProject, setActiveTourProject] = useState<any | null>(null);
+  const [activeTourUnit, setActiveTourUnit] = useState<any | null>(null);
   const [activeRoomIndex, setActiveRoomIndex] = useState(0);
 
-  // Lock body scroll when the 360 modal is open
+  const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
+  const [isUnitDropdownOpen, setIsUnitDropdownOpen] = useState(false);
+  
+  // Responsive thumbnail count (3 on mobile, 6 on desktop)
+  const [maxVisible, setMaxVisible] = useState(6);
+
   useEffect(() => {
-    if (activeTourRooms) {
+    const handleResize = () => {
+      setMaxVisible(window.innerWidth < 768 ? 3 : 6);
+    };
+    handleResize(); // set initial value on mount
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (activeTourUnit) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
     }
     return () => { document.body.style.overflow = ''; };
-  }, [activeTourRooms]);
+  }, [activeTourUnit]);
 
-  // ==========================================
-  // BULLETPROOF SCROLL REFRESH & GSAP SYNC
-  // ==========================================
+  // Smooth Scroll Setup
   useEffect(() => {
     window.history.scrollRestoration = 'manual';
 
@@ -83,9 +106,7 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
     };
   }, []);
 
-  // ==========================================
   // GSAP Animation for Project Cards
-  // ==========================================
   useEffect(() => {
     if (!initialProjects || initialProjects.length === 0) return;
 
@@ -136,28 +157,10 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
         {/* Project List Content */}
         <main className="w-full py-24 md:py-32">
           <div className="max-w-[90rem] mx-auto px-6 md:px-12">
-
             {initialProjects && initialProjects.length > 0 ? (
               <div className="flex flex-col gap-24 md:gap-40">
                 {initialProjects.map((project, index) => {
-
-                  // === NEW GALLERY EXTRACTION ===
-                  let tourRooms: any[] | null = null;
-                  let legacyFallbackImage = project.virtual_tour_url || null;
-
-                  if (project.virtual_tours && project.virtual_tours.length > 0) {
-                    let roomsData = project.virtual_tours[0].rooms;
-                    
-                    if (typeof roomsData === 'string') {
-                      try { roomsData = JSON.parse(roomsData); } catch (e) { console.error(e); }
-                    }
-
-                    // If we have an array of rooms with actual images, save the whole array!
-                    if (Array.isArray(roomsData) && roomsData.length > 0 && roomsData[0]?.image) {
-                      tourRooms = roomsData;
-                    }
-                  }
-                  // ===================================
+                  const hasTour = (project.virtual_tours && project.virtual_tours.length > 0) || project.virtual_tour_url;
 
                   return (
                     <div
@@ -198,7 +201,7 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
                           </p>
                         </div>
 
-                        {/* Normalized Units List */}
+                        {/* Units */}
                         <div className="mb-12 flex flex-wrap gap-x-6 gap-y-3 text-sm font-semibold text-gray-600">
                           {project.units?.map((unitTitle: string, i: number) => (
                             <div key={i} className="flex items-center gap-2">
@@ -208,10 +211,9 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
                           ))}
                         </div>
 
-                        {/* --- HIERARCHICAL BUTTON GROUP --- */}
+                        {/* Buttons */}
                         <div className="flex flex-col gap-3 w-full md:w-[90%]">
-
-                          {/* 1. PRIMARY ACTION (Solid & Heavy) */}
+                          {/* 1. Primary Action */}
                           <Link href={'/inquire'} className="group relative flex items-center justify-center gap-4 w-full bg-brand-blue text-white px-8 py-4 rounded-sm shadow-md overflow-hidden transition-all hover:shadow-xl outline-none">
                             <span className="absolute inset-0 w-full h-full bg-brand-gold transform -translate-x-full transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-0"></span>
                             <span className="relative z-10 text-[11px] tracking-[0.25em] font-bold uppercase group-hover:text-brand-blue transition-colors duration-500">Inquire Now</span>
@@ -219,29 +221,33 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
                           </Link>
 
                           <div className="flex flex-col sm:flex-row gap-3 w-full">
-
-                            {/* 2. SECONDARY ACTION (360 Tour Trigger) */}
-                            {(tourRooms || legacyFallbackImage) && (
-                              <button
-                                onClick={() => {
-                                  if (tourRooms) {
-                                    setActiveTourRooms(tourRooms);
+                            {/* 2. SECONDARY ACTION (360 Tour Button) */}
+                              {hasTour && (
+                                <button
+                                  onClick={() => {
+                                    setActiveTourProject(project);
+                                    const tours = project.virtual_tours || [];
+                                    if (tours.length > 0) {
+                                      setActiveTourUnit(tours[0]);
+                                    } else if (project.virtual_tour_url) {
+                                      setActiveTourUnit({
+                                        id: 'legacy',
+                                        unit_name: 'Main Unit',
+                                        view_areas: [{ title: 'Main View', image: project.virtual_tour_url }]
+                                      });
+                                    }
                                     setActiveRoomIndex(0);
-                                  } else if (legacyFallbackImage) {
-                                    setActiveTourRooms([{ title: 'Virtual Tour', image: legacyFallbackImage }]);
-                                    setActiveRoomIndex(0);
-                                  }
-                                }}
-                                className="group flex-1 flex items-center justify-center gap-3 bg-transparent border border-gray-300 px-4 py-3.5 rounded-sm hover:border-brand-gold hover:bg-brand-gold/5 transition-all duration-300 outline-none cursor-pointer"
-                              >
-                                <Move3d size={14} className="text-brand-blue group-hover:text-brand-gold transition-colors" />
-                                <span className="text-[10px] tracking-[0.2em] font-bold text-brand-blue uppercase group-hover:text-brand-gold transition-colors">
-                                  {tourRooms && tourRooms.length > 1 ? '360° Gallery' : '360° Tour'}
-                                </span>
-                              </button>
-                            )}
+                                  }}
+                                  className="group flex-1 flex items-center justify-center gap-3 bg-transparent border border-gray-300 px-4 py-3.5 rounded-sm hover:border-brand-gold hover:bg-brand-gold/5 transition-all duration-300 outline-none cursor-pointer"
+                                >
+                                  <Move3d size={14} className="text-brand-blue group-hover:text-brand-gold transition-colors" />
+                                  <span className="text-[10px] tracking-[0.2em] font-bold text-brand-blue uppercase group-hover:text-brand-gold transition-colors">
+                                    360° Tour
+                                  </span>
+                                </button>
+                              )}
 
-                            {/* 3. TERTIARY ACTION (View Details) */}
+                            {/* 3. Tertiary Action (Details) */}
                             <Link
                               href={`/projects/${project.slug?.replace(/^\//, '')}`}
                               className="group flex-1 flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 px-4 py-3.5 rounded-sm transition-all duration-300 outline-none"
@@ -250,11 +256,10 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
                               <ArrowRight size={14} className="text-gray-400 group-hover:text-brand-blue transform group-hover:translate-x-1 transition-all duration-300" />
                             </Link>
                           </div>
-
                         </div>
                       </div>
                     </div>
-                  )
+                  );
                 })}
               </div>
             ) : (
@@ -266,65 +271,277 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
         <Footer />
         <BackToTop />
 
-        {/* === FULLSCREEN VIRTUAL TOUR GALLERY MODAL === */}
-        {activeTourRooms && (
-          <div className="fixed inset-0 z-[9999] bg-black animate-in fade-in duration-500 flex flex-col">
-            
-            {/* Top Bar / Close Button */}
-            <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-black/80 to-transparent z-50 flex justify-between items-start p-6 md:p-8 pointer-events-none">
-              <div className="pointer-events-auto flex flex-col items-start gap-2">
-                <span className="text-brand-gold text-[10px] font-bold uppercase tracking-[0.2em] bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 shadow-lg">
-                  360° Virtual Tour
-                </span>
-                {/* Dynamic Room Title */}
-                <h3 className="text-white font-serif text-xl md:text-2xl ml-2 drop-shadow-md">
-                  {activeTourRooms[activeRoomIndex]?.title || 'Virtual Tour'}
-                </h3>
-              </div>
+        {/* === 3-TIER FULLSCREEN VIRTUAL TOUR MODAL === */}
+        {activeTourProject && activeTourUnit && (() => {
+          const availableUnits: any[] = activeTourProject.virtual_tours?.length > 0
+            ? activeTourProject.virtual_tours
+            : [activeTourUnit];
 
-              <button
-                onClick={() => { setActiveTourRooms(null); setActiveRoomIndex(0); }}
-                className="pointer-events-auto group flex items-center gap-3 bg-black/40 backdrop-blur-md px-4 py-3 rounded-full border border-white/10 shadow-lg hover:bg-brand-gold transition-all duration-300 cursor-pointer outline-none"
-              >
-                <span className="text-[10px] font-bold uppercase tracking-widest text-white group-hover:text-brand-blue hidden sm:block">Close Tour</span>
-                <X size={16} className="text-white group-hover:text-brand-blue" />
-              </button>
-            </div>
+          const currentAreas = parseViewAreas(activeTourUnit);
+          const activeScene = currentAreas[activeRoomIndex] || currentAreas[0];
 
-            {/* The 360 Viewer */}
-            <div className="flex-1 w-full h-full cursor-grab active:cursor-grabbing">
-              <DynamicVirtualTour 
-                key={activeTourRooms[activeRoomIndex]?.image} 
-                image={activeTourRooms[activeRoomIndex]?.image} 
-              />
-            </div>
+          return (
+            <div className="fixed inset-0 z-[9999] bg-black animate-in fade-in duration-500 flex flex-col overflow-hidden select-none">
+              
+             {/* TOP BAR: RESPONSIVE TWO-ROW HEADER ON MOBILE, SINGLE ROW ON DESKTOP */}
+              <div className="absolute top-0 left-0 w-full bg-gradient-to-b from-black/90 via-black/50 to-transparent z-50 p-3.5 sm:p-4 md:p-6 pointer-events-none flex flex-col gap-2.5">
+                
+                {/* Row 1: Badge + Close Button */}
+                <div className="w-full flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 px-3 py-1 md:px-4 md:py-1.5 bg-black/80 backdrop-blur-md rounded-full border border-[#D4AF37]/30 shadow-lg pointer-events-auto">
+                    <span className="text-[#D4AF37] font-serif text-[9px] sm:text-[10px] md:text-[11px] font-bold tracking-widest uppercase">
+                      360° Virtual Tour
+                    </span>
+                  </div>
 
-            {/* Navigation Controls (Only show if there is more than 1 room) */}
-            {activeTourRooms.length > 1 && (
-              <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-50 flex items-center gap-6 bg-black/60 backdrop-blur-lg px-6 py-3 rounded-full border border-white/10 shadow-2xl pointer-events-auto">
-                <button 
-                  onClick={() => setActiveRoomIndex((prev) => (prev - 1 + activeTourRooms.length) % activeTourRooms.length)} 
-                  className="p-2 text-white hover:text-brand-gold transition-colors outline-none cursor-pointer"
-                >
-                  <ChevronLeft size={24} />
-                </button>
-                <div className="flex flex-col items-center">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Room</span>
-                  <span className="text-brand-gold text-xs font-bold tracking-[0.2em]">
-                    {activeRoomIndex + 1} / {activeTourRooms.length}
-                  </span>
+                  {/* Close Button (Always visible on all screen sizes) */}
+                  <button
+                    onClick={() => {
+                      setActiveTourProject(null);
+                      setActiveTourUnit(null);
+                      setActiveRoomIndex(0);
+                      setIsProjectDropdownOpen(false);
+                      setIsUnitDropdownOpen(false);
+                    }}
+                    className="pointer-events-auto group flex items-center gap-1.5 sm:gap-2 bg-black/70 backdrop-blur-md px-3 py-1.5 sm:px-4 sm:py-2 rounded-full border border-white/15 shadow-lg hover:bg-[#d0b370] transition-all duration-300 cursor-pointer outline-none shrink-0"
+                    aria-label="Close Tour"
+                  >
+                    <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-white group-hover:text-black">
+                      Close
+                    </span>
+                    <X size={13} className="text-white group-hover:text-black" />
+                  </button>
                 </div>
-                <button 
-                  onClick={() => setActiveRoomIndex((prev) => (prev + 1) % activeTourRooms.length)} 
-                  className="p-2 text-white hover:text-brand-gold transition-colors outline-none cursor-pointer"
-                >
-                  <ChevronRight size={24} />
-                </button>
-              </div>
-            )}
 
-          </div>
-        )}
+                {/* Row 2: Responsive Project & Unit Dropdowns */}
+                <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto w-full max-w-sm sm:max-w-md">
+                  
+                  {/* 1. PROJECT DROPDOWN */}
+                  <div className="relative flex-1 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsProjectDropdownOpen(!isProjectDropdownOpen);
+                        setIsUnitDropdownOpen(false);
+                      }}
+                      className="w-full bg-black/60 hover:bg-black/75 backdrop-blur-xl rounded-xl md:rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.37)] px-3 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 border border-white/15 flex flex-col justify-center text-left cursor-pointer transition-all duration-200 active:scale-95 outline-none"
+                    >
+                      <span className="text-[8px] sm:text-[9px] md:text-[10px] font-semibold tracking-[0.14em] text-[#d4b26f] uppercase font-sans">
+                        Project
+                      </span>
+                      <div className="flex items-center justify-between gap-1.5 mt-0.5">
+                        <span className="text-xs sm:text-[13px] md:text-[15px] font-medium text-white font-sans tracking-tight truncate">
+                          {activeTourProject.name || activeTourProject.title}
+                        </span>
+                        <ChevronDown 
+                          size={14} 
+                          strokeWidth={2.2} 
+                          className={`text-white/80 shrink-0 transition-transform duration-300 ${isProjectDropdownOpen ? 'rotate-180' : ''}`} 
+                        />
+                      </div>
+                    </button>
+
+                    {/* Project Options Menu */}
+                    {isProjectDropdownOpen && (
+                      <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[170px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.5)] border border-white/15 py-1 z-[70] animate-in fade-in zoom-in-95 duration-150">
+                        {initialProjects
+                          .filter((p) => (p.virtual_tours && p.virtual_tours.length > 0) || p.virtual_tour_url)
+                          .map((p) => {
+                            const isSelected = p.id === activeTourProject.id;
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => {
+                                  setActiveTourProject(p);
+                                  const units = p.virtual_tours || [];
+                                  if (units.length > 0) {
+                                    setActiveTourUnit(units[0]);
+                                  } else if (p.virtual_tour_url) {
+                                    setActiveTourUnit({
+                                      id: 'legacy',
+                                      unit_name: 'Main Unit',
+                                      view_areas: [{ title: 'Main View', image: p.virtual_tour_url }]
+                                    });
+                                  } else {
+                                    setActiveTourUnit(null);
+                                  }
+                                  setActiveRoomIndex(0);
+                                  setIsProjectDropdownOpen(false);
+                                }}
+                                className={`w-full px-3 py-2 text-left text-xs sm:text-[13px] font-medium font-sans transition-colors flex items-center justify-between cursor-pointer ${
+                                  isSelected 
+                                    ? 'bg-white/15 text-[#d4b26f]' 
+                                    : 'text-white/85 hover:bg-white/10 hover:text-white'
+                                }`}
+                              >
+                                <span className="truncate">{p.name || p.title}</span>
+                                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#d4b26f] shrink-0" />}
+                              </button>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. UNIT DROPDOWN */}
+                  {availableUnits.length > 0 && (
+                    <div className="relative flex-1 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsUnitDropdownOpen(!isUnitDropdownOpen);
+                          setIsProjectDropdownOpen(false);
+                        }}
+                        className="w-full bg-black/60 hover:bg-black/75 backdrop-blur-xl rounded-xl md:rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.37)] px-3 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 border border-white/15 flex flex-col justify-center text-left cursor-pointer transition-all duration-200 active:scale-95 outline-none"
+                      >
+                        <span className="text-[8px] sm:text-[9px] md:text-[10px] font-semibold tracking-[0.14em] text-[#d4b26f] uppercase font-sans">
+                          Unit
+                        </span>
+                        <div className="flex items-center justify-between gap-1.5 mt-0.5">
+                          <span className="text-xs sm:text-[13px] md:text-[15px] font-medium text-white font-sans tracking-tight truncate">
+                            {activeTourUnit?.unit_name || activeTourUnit?.title || 'Standard Unit'}
+                          </span>
+                          <ChevronDown 
+                            size={14} 
+                            strokeWidth={2.2} 
+                            className={`text-white/80 shrink-0 transition-transform duration-300 ${isUnitDropdownOpen ? 'rotate-180' : ''}`} 
+                          />
+                        </div>
+                      </button>
+
+                      {/* Unit Options Menu */}
+                      {isUnitDropdownOpen && (
+                        <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[170px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.5)] border border-white/15 py-1 z-[70] animate-in fade-in zoom-in-95 duration-150">
+                          {availableUnits.map((u: any) => {
+                            const isSelected = String(u.id) === String(activeTourUnit?.id);
+                            return (
+                              <button
+                                key={u.id}
+                                type="button"
+                                onClick={() => {
+                                  setActiveTourUnit(u);
+                                  setActiveRoomIndex(0);
+                                  setIsUnitDropdownOpen(false);
+                                }}
+                                className={`w-full px-3 py-2 text-left text-xs sm:text-[13px] font-medium font-sans transition-colors flex items-center justify-between cursor-pointer ${
+                                  isSelected 
+                                    ? 'bg-white/15 text-[#d4b26f]' 
+                                    : 'text-white/85 hover:bg-white/10 hover:text-white'
+                                }`}
+                              >
+                                <span className="truncate">{u.unit_name || u.title || 'Standard Unit'}</span>
+                                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#d4b26f] shrink-0" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                </div>
+              </div>
+  
+            {/* 360 VIEWER */}
+              <div className="flex-1 w-full h-full cursor-grab active:cursor-grabbing">
+                {activeScene?.image ? (
+                  <DynamicVirtualTour
+                    key={activeScene.image}
+                    image={activeScene.image}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-white/50 text-sm font-sans uppercase tracking-widest">
+                    No panorama available for this area
+                  </div>
+                )}
+              </div>
+              
+              {/* 3. BOTTOM THUMBNAIL STRIP: POSITIONED ABOVE PANNELLUM CONTROLS */}
+              {currentAreas.length > 1 && (() => {
+                const startIndex = currentAreas.length <= maxVisible 
+                  ? 0 
+                  : Math.max(0, Math.min(activeRoomIndex - (maxVisible - 1), currentAreas.length - maxVisible));
+                
+                const visibleAreas = currentAreas.slice(startIndex, startIndex + maxVisible);
+
+                return (
+                  // Uses bottom-16 on mobile (64px) to clear Pannellum's control bar comfortably, and bottom-8 on desktop
+                  <div className="absolute bottom-16 md:bottom-8 left-1/2 -translate-x-1/2 z-40 pointer-events-auto flex items-center gap-1 sm:gap-2 bg-black/65 hover:bg-black/75 backdrop-blur-2xl px-2.5 py-2 sm:px-4 sm:py-3 rounded-[22px] md:rounded-[28px] border border-white/15 shadow-[0_12px_40px_rgba(0,0,0,0.6)] max-w-[96vw]">
+                    
+                    {/* Left Arrow */}
+                    <button
+                      type="button"
+                      onClick={() => setActiveRoomIndex((prev) => (prev - 1 + currentAreas.length) % currentAreas.length)}
+                      className="p-1 sm:p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer shrink-0"
+                      aria-label="Previous view area"
+                    >
+                      <ChevronLeft size={18} className="md:w-[22px] md:h-[22px]" strokeWidth={2.5} />
+                    </button>
+
+                    {/* Sliding Thumbnails: 3 on mobile, 6 on desktop */}
+                    <div className="flex items-end gap-2 sm:gap-3 md:gap-4 py-0.5 px-0.5 sm:px-1">
+                      {visibleAreas.map((area: any, offsetIdx: number) => {
+                        const originalIndex = startIndex + offsetIdx;
+                        const isSelected = activeRoomIndex === originalIndex;
+
+                        return (
+                          <button
+                            key={originalIndex}
+                            type="button"
+                            onClick={() => setActiveRoomIndex(originalIndex)}
+                            className="flex flex-col items-center gap-1 shrink-0 cursor-pointer group outline-none transition-transform duration-200"
+                          >
+                            {/* Area Title */}
+                            <span
+                              className={`text-center font-sans tracking-tight transition-all duration-200 max-w-[62px] sm:max-w-[72px] md:max-w-[85px] truncate ${
+                                isSelected
+                                  ? 'text-white text-[11px] sm:text-[13px] md:text-[15px] font-semibold scale-105'
+                                  : 'text-white/65 text-[9px] sm:text-[11px] md:text-[12px] font-normal group-hover:text-white'
+                              }`}
+                            >
+                              {area.title || `Area ${originalIndex + 1}`}
+                            </span>
+
+                            {/* Thumbnail */}
+                            <div
+                              className={`relative w-14 h-10 sm:w-16 sm:h-12 md:w-20 md:h-14 rounded-lg md:rounded-xl overflow-hidden transition-all duration-200 ${
+                                isSelected
+                                  ? 'border-2 border-[#d4b26f] shadow-[0_0_12px_rgba(212,178,111,0.5)] scale-105'
+                                  : 'border border-white/20 opacity-70 group-hover:opacity-100 group-hover:border-white/50'
+                              }`}
+                            >
+                              <img
+                                src={area.image}
+                                alt={area.title || `Area ${originalIndex + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                              {!isSelected && (
+                                <div className="absolute inset-0 bg-black/25 group-hover:bg-transparent transition-colors" />
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Right Arrow */}
+                    <button
+                      type="button"
+                      onClick={() => setActiveRoomIndex((prev) => (prev + 1) % currentAreas.length)}
+                      className="p-1 sm:p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer shrink-0"
+                      aria-label="Next view area"
+                    >
+                      <ChevronRight size={18} className="md:w-[22px] md:h-[22px]" strokeWidth={2.5} />
+                    </button>
+
+                </div>
+                );
+              })()}
+
+            </div>
+          );
+        })()}
 
       </div>
     </PageTransition>

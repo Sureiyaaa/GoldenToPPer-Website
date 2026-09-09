@@ -14,6 +14,9 @@ export default function VirtualTour({ image }: VirtualTourProps) {
       height="100%"
       width="100%"
       littlePlanet={false}
+      defaultZoomLvl={0} 
+      minFov={30}        
+      maxFov={90}        
       navbar={['zoom', 'move', 'download', 'fullscreen']}
     />
   );

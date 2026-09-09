@@ -39,7 +39,7 @@ export default async function ProjectsPage() {
       *,
       unit_layout (title),
       project_tag (tags (tag_name)),
-      virtual_tours (rooms, status) 
+      virtual_tours (*) 
     `)
     .is('deleted_at', null)
     .eq('is_active', true)
