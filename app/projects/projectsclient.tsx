@@ -58,6 +58,18 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
 
   const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
   const [isUnitDropdownOpen, setIsUnitDropdownOpen] = useState(false);
+  
+  // Responsive thumbnail count (3 on mobile, 6 on desktop)
+  const [maxVisible, setMaxVisible] = useState(6);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setMaxVisible(window.innerWidth < 768 ? 3 : 6);
+    };
+    handleResize(); // set initial value on mount
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (activeTourUnit) {
@@ -271,166 +283,167 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
           return (
             <div className="fixed inset-0 z-[9999] bg-black animate-in fade-in duration-500 flex flex-col overflow-hidden select-none">
               
-             {/* TOP BAR */}
-              <div className="absolute top-0 left-0 w-full h-28 bg-gradient-to-b from-black/85 via-black/40 to-transparent z-50 flex items-start justify-between p-6 pointer-events-none">
-                <div className="pointer-events-auto flex flex-col items-start gap-2.5">
-                  
-                  {/* Badge */}
-                  <div className="flex items-center gap-1.5 px-4 py-1.5 bg-black/80 backdrop-blur-md rounded-full border border-[#D4AF37]/30 shadow-lg">
-                    <span className="text-[#D4AF37] font-serif text-[11px] font-bold tracking-widest uppercase">
+             {/* TOP BAR: RESPONSIVE TWO-ROW HEADER ON MOBILE, SINGLE ROW ON DESKTOP */}
+              <div className="absolute top-0 left-0 w-full bg-gradient-to-b from-black/90 via-black/50 to-transparent z-50 p-3.5 sm:p-4 md:p-6 pointer-events-none flex flex-col gap-2.5">
+                
+                {/* Row 1: Badge + Close Button */}
+                <div className="w-full flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 px-3 py-1 md:px-4 md:py-1.5 bg-black/80 backdrop-blur-md rounded-full border border-[#D4AF37]/30 shadow-lg pointer-events-auto">
+                    <span className="text-[#D4AF37] font-serif text-[9px] sm:text-[10px] md:text-[11px] font-bold tracking-widest uppercase">
                       360° Virtual Tour
                     </span>
                   </div>
 
-                  {/* Dropdown Selectors */}
-                  <div className="flex items-center gap-3 relative">
-                    
-                    {/* 1. CUSTOM PROJECT DROPDOWN */}
-                    <div className="relative">
+                  {/* Close Button (Always visible on all screen sizes) */}
+                  <button
+                    onClick={() => {
+                      setActiveTourProject(null);
+                      setActiveTourUnit(null);
+                      setActiveRoomIndex(0);
+                      setIsProjectDropdownOpen(false);
+                      setIsUnitDropdownOpen(false);
+                    }}
+                    className="pointer-events-auto group flex items-center gap-1.5 sm:gap-2 bg-black/70 backdrop-blur-md px-3 py-1.5 sm:px-4 sm:py-2 rounded-full border border-white/15 shadow-lg hover:bg-[#d0b370] transition-all duration-300 cursor-pointer outline-none shrink-0"
+                    aria-label="Close Tour"
+                  >
+                    <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-white group-hover:text-black">
+                      Close
+                    </span>
+                    <X size={13} className="text-white group-hover:text-black" />
+                  </button>
+                </div>
+
+                {/* Row 2: Responsive Project & Unit Dropdowns */}
+                <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto w-full max-w-sm sm:max-w-md">
+                  
+                  {/* 1. PROJECT DROPDOWN */}
+                  <div className="relative flex-1 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsProjectDropdownOpen(!isProjectDropdownOpen);
+                        setIsUnitDropdownOpen(false);
+                      }}
+                      className="w-full bg-black/60 hover:bg-black/75 backdrop-blur-xl rounded-xl md:rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.37)] px-3 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 border border-white/15 flex flex-col justify-center text-left cursor-pointer transition-all duration-200 active:scale-95 outline-none"
+                    >
+                      <span className="text-[8px] sm:text-[9px] md:text-[10px] font-semibold tracking-[0.14em] text-[#d4b26f] uppercase font-sans">
+                        Project
+                      </span>
+                      <div className="flex items-center justify-between gap-1.5 mt-0.5">
+                        <span className="text-xs sm:text-[13px] md:text-[15px] font-medium text-white font-sans tracking-tight truncate">
+                          {activeTourProject.name || activeTourProject.title}
+                        </span>
+                        <ChevronDown 
+                          size={14} 
+                          strokeWidth={2.2} 
+                          className={`text-white/80 shrink-0 transition-transform duration-300 ${isProjectDropdownOpen ? 'rotate-180' : ''}`} 
+                        />
+                      </div>
+                    </button>
+
+                    {/* Project Options Menu */}
+                    {isProjectDropdownOpen && (
+                      <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[170px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.5)] border border-white/15 py-1 z-[70] animate-in fade-in zoom-in-95 duration-150">
+                        {initialProjects
+                          .filter((p) => (p.virtual_tours && p.virtual_tours.length > 0) || p.virtual_tour_url)
+                          .map((p) => {
+                            const isSelected = p.id === activeTourProject.id;
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => {
+                                  setActiveTourProject(p);
+                                  const units = p.virtual_tours || [];
+                                  if (units.length > 0) {
+                                    setActiveTourUnit(units[0]);
+                                  } else if (p.virtual_tour_url) {
+                                    setActiveTourUnit({
+                                      id: 'legacy',
+                                      unit_name: 'Main Unit',
+                                      view_areas: [{ title: 'Main View', image: p.virtual_tour_url }]
+                                    });
+                                  } else {
+                                    setActiveTourUnit(null);
+                                  }
+                                  setActiveRoomIndex(0);
+                                  setIsProjectDropdownOpen(false);
+                                }}
+                                className={`w-full px-3 py-2 text-left text-xs sm:text-[13px] font-medium font-sans transition-colors flex items-center justify-between cursor-pointer ${
+                                  isSelected 
+                                    ? 'bg-white/15 text-[#d4b26f]' 
+                                    : 'text-white/85 hover:bg-white/10 hover:text-white'
+                                }`}
+                              >
+                                <span className="truncate">{p.name || p.title}</span>
+                                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#d4b26f] shrink-0" />}
+                              </button>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. UNIT DROPDOWN */}
+                  {availableUnits.length > 0 && (
+                    <div className="relative flex-1 min-w-0">
                       <button
                         type="button"
                         onClick={() => {
-                          setIsProjectDropdownOpen(!isProjectDropdownOpen);
-                          setIsUnitDropdownOpen(false);
+                          setIsUnitDropdownOpen(!isUnitDropdownOpen);
+                          setIsProjectDropdownOpen(false);
                         }}
-                        className="bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_10px_25px_rgba(0,0,0,0.25)] px-4 py-2 border border-white/80 flex flex-col justify-center min-w-[160px] text-left cursor-pointer transition-all duration-200 hover:bg-white active:scale-95 outline-none"
+                        className="w-full bg-black/60 hover:bg-black/75 backdrop-blur-xl rounded-xl md:rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.37)] px-3 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 border border-white/15 flex flex-col justify-center text-left cursor-pointer transition-all duration-200 active:scale-95 outline-none"
                       >
-                        <span className="text-[9px] font-extrabold tracking-[0.15em] text-[#D4AF37] uppercase font-sans">
-                          Project
+                        <span className="text-[8px] sm:text-[9px] md:text-[10px] font-semibold tracking-[0.14em] text-[#d4b26f] uppercase font-sans">
+                          Unit
                         </span>
-                        <div className="flex items-center justify-between gap-3 mt-0.5">
-                          <span className="text-[15px] font-bold text-[#142f72] font-sans tracking-tight truncate">
-                            {activeTourProject.name || activeTourProject.title}
+                        <div className="flex items-center justify-between gap-1.5 mt-0.5">
+                          <span className="text-xs sm:text-[13px] md:text-[15px] font-medium text-white font-sans tracking-tight truncate">
+                            {activeTourUnit?.unit_name || activeTourUnit?.title || 'Standard Unit'}
                           </span>
                           <ChevronDown 
-                            size={17} 
-                            strokeWidth={2.5} 
-                            className={`text-[#142f72] shrink-0 transition-transform duration-300 ${isProjectDropdownOpen ? 'rotate-180' : ''}`} 
+                            size={14} 
+                            strokeWidth={2.2} 
+                            className={`text-white/80 shrink-0 transition-transform duration-300 ${isUnitDropdownOpen ? 'rotate-180' : ''}`} 
                           />
                         </div>
                       </button>
 
-                      {/* Project Options Menu */}
-                      {isProjectDropdownOpen && (
-                        <div className="absolute top-[calc(100%+8px)] left-0 w-full min-w-[180px] bg-white/95 backdrop-blur-xl rounded-2xl shadow-[0_15px_35px_rgba(0,0,0,0.3)] border border-white/80 py-1.5 z-[70] animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
-                          {initialProjects
-                            .filter((p) => (p.virtual_tours && p.virtual_tours.length > 0) || p.virtual_tour_url)
-                            .map((p) => {
-                              const isSelected = p.id === activeTourProject.id;
-                              return (
-                                <button
-                                  key={p.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setActiveTourProject(p);
-                                    const units = p.virtual_tours || [];
-                                    if (units.length > 0) {
-                                      setActiveTourUnit(units[0]);
-                                    } else if (p.virtual_tour_url) {
-                                      setActiveTourUnit({
-                                        id: 'legacy',
-                                        unit_name: 'Main Unit',
-                                        view_areas: [{ title: 'Main View', image: p.virtual_tour_url }]
-                                      });
-                                    } else {
-                                      setActiveTourUnit(null);
-                                    }
-                                    setActiveRoomIndex(0);
-                                    setIsProjectDropdownOpen(false);
-                                  }}
-                                  className={`w-full px-4 py-2.5 text-left text-[14px] font-bold font-sans transition-colors flex items-center justify-between cursor-pointer ${
-                                    isSelected 
-                                      ? 'bg-[#142f72]/10 text-[#142f72]' 
-                                      : 'text-gray-700 hover:bg-[#142f72]/5 hover:text-[#142f72]'
-                                  }`}
-                                >
-                                  <span>{p.name || p.title}</span>
-                                  {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37]" />}
-                                </button>
-                              );
-                            })}
+                      {/* Unit Options Menu */}
+                      {isUnitDropdownOpen && (
+                        <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[170px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.5)] border border-white/15 py-1 z-[70] animate-in fade-in zoom-in-95 duration-150">
+                          {availableUnits.map((u: any) => {
+                            const isSelected = String(u.id) === String(activeTourUnit?.id);
+                            return (
+                              <button
+                                key={u.id}
+                                type="button"
+                                onClick={() => {
+                                  setActiveTourUnit(u);
+                                  setActiveRoomIndex(0);
+                                  setIsUnitDropdownOpen(false);
+                                }}
+                                className={`w-full px-3 py-2 text-left text-xs sm:text-[13px] font-medium font-sans transition-colors flex items-center justify-between cursor-pointer ${
+                                  isSelected 
+                                    ? 'bg-white/15 text-[#d4b26f]' 
+                                    : 'text-white/85 hover:bg-white/10 hover:text-white'
+                                }`}
+                              >
+                                <span className="truncate">{u.unit_name || u.title || 'Standard Unit'}</span>
+                                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#d4b26f] shrink-0" />}
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
+                  )}
 
-                    {/* 2. CUSTOM UNIT DROPDOWN */}
-                    {availableUnits.length > 0 && (
-                      <div className="relative">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsUnitDropdownOpen(!isUnitDropdownOpen);
-                            setIsProjectDropdownOpen(false);
-                          }}
-                          className="bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_10px_25px_rgba(0,0,0,0.25)] px-4 py-2 border border-white/80 flex flex-col justify-center min-w-[160px] text-left cursor-pointer transition-all duration-200 hover:bg-white active:scale-95 outline-none"
-                        >
-                          <span className="text-[9px] font-extrabold tracking-[0.15em] text-[#D4AF37] uppercase font-sans">
-                            Unit
-                          </span>
-                          <div className="flex items-center justify-between gap-3 mt-0.5">
-                            <span className="text-[15px] font-bold text-[#142f72] font-sans tracking-tight truncate">
-                              {activeTourUnit?.unit_name || activeTourUnit?.title || 'Standard Unit'}
-                            </span>
-                            <ChevronDown 
-                              size={17} 
-                              strokeWidth={2.5} 
-                              className={`text-[#142f72] shrink-0 transition-transform duration-300 ${isUnitDropdownOpen ? 'rotate-180' : ''}`} 
-                            />
-                          </div>
-                        </button>
-
-                        {/* Unit Options Menu */}
-                        {isUnitDropdownOpen && (
-                          <div className="absolute top-[calc(100%+8px)] left-0 w-full min-w-[180px] bg-white/95 backdrop-blur-xl rounded-2xl shadow-[0_15px_35px_rgba(0,0,0,0.3)] border border-white/80 py-1.5 z-[70] animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
-                            {availableUnits.map((u: any) => {
-                              const isSelected = String(u.id) === String(activeTourUnit?.id);
-                              return (
-                                <button
-                                  key={u.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setActiveTourUnit(u);
-                                    setActiveRoomIndex(0);
-                                    setIsUnitDropdownOpen(false);
-                                  }}
-                                  className={`w-full px-4 py-2.5 text-left text-[14px] font-bold font-sans transition-colors flex items-center justify-between cursor-pointer ${
-                                    isSelected 
-                                      ? 'bg-[#142f72]/10 text-[#142f72]' 
-                                      : 'text-gray-700 hover:bg-[#142f72]/5 hover:text-[#142f72]'
-                                  }`}
-                                >
-                                  <span>{u.unit_name || u.title || 'Standard Unit'}</span>
-                                  {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37]" />}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                  </div>
                 </div>
-
-                {/* Close Button */}
-                <button
-                  onClick={() => {
-                    setActiveTourProject(null);
-                    setActiveTourUnit(null);
-                    setActiveRoomIndex(0);
-                    setIsProjectDropdownOpen(false);
-                    setIsUnitDropdownOpen(false);
-                  }}
-                  className="pointer-events-auto group flex items-center gap-2 bg-black/60 backdrop-blur-md px-4 py-2.5 rounded-full border border-white/10 shadow-lg hover:bg-[#d0b370] transition-all duration-300 cursor-pointer outline-none"
-                >
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-white group-hover:text-black">
-                    Close Tour
-                  </span>
-                  <X size={14} className="text-white group-hover:text-black" />
-                </button>
               </div>
-
-              {/* 360 VIEWER */}
+  
+            {/* 360 VIEWER */}
               <div className="flex-1 w-full h-full cursor-grab active:cursor-grabbing">
                 {activeScene?.image ? (
                   <DynamicVirtualTour
@@ -443,52 +456,93 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
                   </div>
                 )}
               </div>
+              
+              {/* 3. BOTTOM THUMBNAIL STRIP: POSITIONED ABOVE PANNELLUM CONTROLS */}
+              {currentAreas.length > 1 && (() => {
+                const startIndex = currentAreas.length <= maxVisible 
+                  ? 0 
+                  : Math.max(0, Math.min(activeRoomIndex - (maxVisible - 1), currentAreas.length - maxVisible));
+                
+                const visibleAreas = currentAreas.slice(startIndex, startIndex + maxVisible);
 
-              {/* 3. BOTTOM THUMBNAIL STRIP: VIEW AREAS (Kitchen, CR, Balcony) */}
-              {currentAreas.length > 1 && (
-                <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-50 pointer-events-auto flex flex-col items-center">
-                  <div className="mb-2 px-3.5 py-1 bg-black/75 backdrop-blur-md rounded-md text-[11px] font-semibold text-white tracking-wide border border-white/10 shadow-md">
-                    {activeScene?.title || `Area ${activeRoomIndex + 1}`}
-                  </div>
-
-                  <div className="flex items-center gap-2 bg-black/60 backdrop-blur-xl px-4 py-2 rounded-2xl border border-white/15 shadow-2xl">
+                return (
+                  // Uses bottom-16 on mobile (64px) to clear Pannellum's control bar comfortably, and bottom-8 on desktop
+                  <div className="absolute bottom-16 md:bottom-8 left-1/2 -translate-x-1/2 z-40 pointer-events-auto flex items-center gap-1 sm:gap-2 bg-black/65 hover:bg-black/75 backdrop-blur-2xl px-2.5 py-2 sm:px-4 sm:py-3 rounded-[22px] md:rounded-[28px] border border-white/15 shadow-[0_12px_40px_rgba(0,0,0,0.6)] max-w-[96vw]">
+                    
+                    {/* Left Arrow */}
                     <button
+                      type="button"
                       onClick={() => setActiveRoomIndex((prev) => (prev - 1 + currentAreas.length) % currentAreas.length)}
-                      className="p-1 text-white/70 hover:text-white transition-colors"
+                      className="p-1 sm:p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer shrink-0"
+                      aria-label="Previous view area"
                     >
-                      <ChevronLeft size={18} />
+                      <ChevronLeft size={18} className="md:w-[22px] md:h-[22px]" strokeWidth={2.5} />
                     </button>
 
-                    <div className="flex items-center gap-2.5 max-w-[70vw] overflow-x-auto py-1 px-1">
-                      {currentAreas.map((area: any, idx: number) => (
-                        <button
-                          key={idx}
-                          onClick={() => setActiveRoomIndex(idx)}
-                          className={`relative w-14 h-11 rounded-lg overflow-hidden shrink-0 border-2 transition-all duration-300 group cursor-pointer ${
-                            activeRoomIndex === idx
-                              ? 'border-[#D4AF37] scale-105 shadow-[0_0_12px_rgba(212,175,55,0.6)]'
-                              : 'border-white/20 opacity-60 hover:opacity-100 hover:border-white/60'
-                          }`}
-                        >
-                          <img src={area.image} alt={area.title} className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-black/25 group-hover:bg-transparent transition-colors" />
-                        </button>
-                      ))}
+                    {/* Sliding Thumbnails: 3 on mobile, 6 on desktop */}
+                    <div className="flex items-end gap-2 sm:gap-3 md:gap-4 py-0.5 px-0.5 sm:px-1">
+                      {visibleAreas.map((area: any, offsetIdx: number) => {
+                        const originalIndex = startIndex + offsetIdx;
+                        const isSelected = activeRoomIndex === originalIndex;
+
+                        return (
+                          <button
+                            key={originalIndex}
+                            type="button"
+                            onClick={() => setActiveRoomIndex(originalIndex)}
+                            className="flex flex-col items-center gap-1 shrink-0 cursor-pointer group outline-none transition-transform duration-200"
+                          >
+                            {/* Area Title */}
+                            <span
+                              className={`text-center font-sans tracking-tight transition-all duration-200 max-w-[62px] sm:max-w-[72px] md:max-w-[85px] truncate ${
+                                isSelected
+                                  ? 'text-white text-[11px] sm:text-[13px] md:text-[15px] font-semibold scale-105'
+                                  : 'text-white/65 text-[9px] sm:text-[11px] md:text-[12px] font-normal group-hover:text-white'
+                              }`}
+                            >
+                              {area.title || `Area ${originalIndex + 1}`}
+                            </span>
+
+                            {/* Thumbnail */}
+                            <div
+                              className={`relative w-14 h-10 sm:w-16 sm:h-12 md:w-20 md:h-14 rounded-lg md:rounded-xl overflow-hidden transition-all duration-200 ${
+                                isSelected
+                                  ? 'border-2 border-[#d4b26f] shadow-[0_0_12px_rgba(212,178,111,0.5)] scale-105'
+                                  : 'border border-white/20 opacity-70 group-hover:opacity-100 group-hover:border-white/50'
+                              }`}
+                            >
+                              <img
+                                src={area.image}
+                                alt={area.title || `Area ${originalIndex + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                              {!isSelected && (
+                                <div className="absolute inset-0 bg-black/25 group-hover:bg-transparent transition-colors" />
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
 
+                    {/* Right Arrow */}
                     <button
+                      type="button"
                       onClick={() => setActiveRoomIndex((prev) => (prev + 1) % currentAreas.length)}
-                      className="p-1 text-white/70 hover:text-white transition-colors"
+                      className="p-1 sm:p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer shrink-0"
+                      aria-label="Next view area"
                     >
-                      <ChevronRight size={18} />
+                      <ChevronRight size={18} className="md:w-[22px] md:h-[22px]" strokeWidth={2.5} />
                     </button>
-                  </div>
+
                 </div>
-              )}
+                );
+              })()}
 
             </div>
           );
         })()}
+
       </div>
     </PageTransition>
   );
