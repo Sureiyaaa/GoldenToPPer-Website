@@ -354,11 +354,17 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
 
               <div className="flex flex-col gap-8 items-start">
                 <motion.h2 
-                  initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, delay: 0.2 }}
-                  className='font-serif text-5xl md:text-6xl leading-tight'
+                  initial={{ opacity: 0, y: 30 }} 
+                  whileInView={{ opacity: 1, y: 0 }} 
+                  transition={{ duration: 0.45, delay: 0.2 }}
+                  className="font-serif font-medium text-3xl sm:text-4xl lg:text-[40px] xl:text-[48px] leading-[1.18]"
                   style={{ color: initialProjectData.extended_description[0].editorial_title_color || '#132243' }}
                 >
-                  {initialProjectData.extended_description[0].editorial_title}
+                  {(initialProjectData.extended_description[0].editorial_title || '').split('\n').map((line, idx) => (
+                    <span key={idx} className="block whitespace-nowrap">
+                      {line}
+                    </span>
+                  ))}
                 </motion.h2>
                 
                 <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, delay: 0.4 }} className="space-y-6">
@@ -398,7 +404,10 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
                     Amenities &amp; Facilities
                   </div>
                   <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif leading-tight">
-                    {initialProjectData.extended_description?.[0]?.amenities_title || 'Experience A Fresh'} <br />
+                    <span className="inline-block whitespace-nowrap">
+                      {initialProjectData.extended_description?.[0]?.amenities_title || 'Experience A Fresh'}
+                    </span>
+                    <br />
                     <span className="text-brand-gold">
                       {initialProjectData.extended_description?.[0]?.amenities_title_gold || `Way Of Living in ${initialProjectData.title}.`}
                     </span>
