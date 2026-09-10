@@ -394,8 +394,8 @@ export default function UnifiedProjectMap({ projectSlug }: UnifiedMapProps) {
 
       <MapContainer center={defaultCoords} zoom={15} minZoom={5} scrollWheelZoom={false} zoomControl={false} style={{ height: '100%', width: '100%', zIndex: 0 }} maxBounds={phBounds} maxBoundsViscosity={1.0} attributionControl={false}>
         <LayersControl>
-          <LayersControl.BaseLayer name="Street View"><TileLayer url="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" maxZoom={20} subdomains={['mt0','mt1','mt2','mt3']} /></LayersControl.BaseLayer>
-          <LayersControl.BaseLayer checked name="Satellite"><TileLayer url="https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}" maxZoom={20} subdomains={['mt0','mt1','mt2','mt3']} /></LayersControl.BaseLayer>
+          <LayersControl.BaseLayer checked name="Street View"><TileLayer url="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" maxZoom={20} subdomains={['mt0','mt1','mt2','mt3']} /></LayersControl.BaseLayer>
+          <LayersControl.BaseLayer name="Satellite"><TileLayer url="https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}" maxZoom={20} subdomains={['mt0','mt1','mt2','mt3']} /></LayersControl.BaseLayer>
         </LayersControl>
 
         {/* DEFAULT CONTROLLER (Only runs when there is NO route) */}
