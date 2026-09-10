@@ -465,9 +465,13 @@ function ProjectManager() {
             </div>
 
             <label className={labelStyles}>Headline</label>
-            <input {...register("editorial_title")} className={inputStyles} />
+            <textarea 
+              {...register("editorial_title")} 
+              rows={2} 
+              className={`${inputStyles} resize-none`} 
+            />
             {errors.editorial_title && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.editorial_title.message}</p>}
-            
+                        
             <label className={labelStyles}>Long Description</label>
             <textarea {...register("editorial_long")} rows={4} className={`${inputStyles} resize-none`} />
             {errors.editorial_long && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.editorial_long.message}</p>}

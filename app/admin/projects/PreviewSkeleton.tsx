@@ -209,11 +209,16 @@ export default function PreviewSkeleton({ data }: { data: any }) {
 
             {/* TEXT CONTAINER: Added h-full and justify-center to stay vertically centered within the locked box */}
             <div className="flex flex-col gap-8 items-start justify-center h-full overflow-hidden">
+              
               <h2 
-                className='font-serif text-5xl md:text-6xl leading-tight transition-colors duration-300 shrink-0'
+                className="font-serif text-2xl sm:text-3xl lg:text-[36px] xl:text-[44px] leading-[1.18] transition-colors duration-300 shrink-0"
                 style={{ color: data.extended_description[0]?.editorial_title_color || '#132243' }}
               >
-                {data.extended_description[0]?.editorial_title || 'Editorial Headline'}
+                {(data.extended_description[0]?.editorial_title || 'Editorial Headline').split('\n').map((line: string, idx: number) => (
+                  <span key={idx} className="block whitespace-nowrap">
+                    {line}
+                  </span>
+                ))}
               </h2>
               <div className="space-y-6 overflow-y-auto w-full pr-2" style={{ scrollbarWidth: 'thin' }}>
                 <p 
