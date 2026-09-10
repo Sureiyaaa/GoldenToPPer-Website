@@ -2,7 +2,7 @@
 
 import Navbar from "@/app/components/navbar";
 import Image from "next/image";
-import { Layers, Building2, Target, Key, MapPin, ArrowRight, AlertCircle } from 'lucide-react';
+import { Layers, Building2, Target, Key, MapPin, ArrowRight, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import Footer from '@/app/components/footer';
 import { useEffect, useRef, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation'; 
@@ -84,7 +84,7 @@ function ModernMapSection({ projectSlug }: { projectSlug: string }) {
           <motion.h2 variants={{ hidden: { opacity: 0, y: 40, filter: "blur(10px)" }, visible: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 1.2, ease: [0.22, 1, 0.36, 1] } } }} className="text-5xl md:text-6xl lg:text-7xl font-serif font-light leading-tight mb-4 text-white">
             Points of <motion.span className="text-brand-gold">Interest</motion.span>
           </motion.h2>
-          <motion.p variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.22, 1, 0.36, 1] } } }} className="text-center font-light leading-relaxed text-white/70 text-lg md:text-xl max-w-2xl mx-auto">
+          <motion.p variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.22, 1, 0.36, 1] } } }} className="text-center font-light leading-relaxed text-white/70 text-base md:text-lg lg:text-xl max-w-4xl md:whitespace-nowrap mx-auto">
             Everything you need, strategically positioned right around your sanctuary.
           </motion.p>
         </motion.div>
@@ -224,6 +224,19 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
   const onDragEnd = () => {
     isDragging.current = false;
     setIsGrabbing(false);
+  };
+
+  const scrollPrev = () => {
+    if (!scrollContainerRef.current) return;
+    const step = scrollContainerRef.current.clientWidth * 0.75; // Skips 75% of the visible container
+    targetScroll.current = Math.max(0, targetScroll.current - step);
+  };
+
+  const scrollNext = () => {
+    if (!scrollContainerRef.current) return;
+    const step = scrollContainerRef.current.clientWidth * 0.75;
+    const maxScroll = scrollContainerRef.current.scrollWidth - scrollContainerRef.current.clientWidth;
+    targetScroll.current = Math.min(maxScroll, targetScroll.current + step);
   };
 
   const dbTags = initialProjectData.project_tag?.map((pt) => ({
@@ -373,62 +386,95 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
         )}
 
         {/* --- AMENITIES DRAGGABLE SCROLL SECTION --- */}
+        {/* --- AMENITIES DRAGGABLE CAROUSEL SECTION --- */}
         {initialProjectData.amenities?.length > 0 && (
-          <section className="relative w-full bg-[#132243] flex flex-col justify-center py-24 md:py-32 overflow-hidden">
-            <div className="max-w-[90rem] px-6 md:px-12 w-full mx-auto mb-10 md:mb-16 shrink-0">
+          <section className="relative w-full bg-[#132243] flex flex-col justify-center py-24 md:py-32 overflow-hidden group/amenities">
+            
+            {/* SECTION HEADER */}
+            <div className="max-w-[90rem] px-6 md:px-12 w-full mx-auto mb-10 md:mb-14 shrink-0">
               <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 w-full text-white">
                 <div>
-                  <div className="text-xs tracking-widest uppercase text-brand-gold font-bold mb-2 md:mb-4 flex items-center gap-4">
-                    Resort-Style Amenities
+                  <div className="text-xs tracking-[0.25em] uppercase text-brand-gold font-bold mb-2 md:mb-4 flex items-center gap-3">
+                    Amenities &amp; Facilities
                   </div>
                   <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif leading-tight">
                     {initialProjectData.extended_description?.[0]?.amenities_title || 'Experience A Fresh'} <br />
-                    <span className="text-brand-gold">{initialProjectData.extended_description?.[0]?.amenities_title_gold || `Way Of Living in ${initialProjectData.title}.`}</span>
+                    <span className="text-brand-gold">
+                      {initialProjectData.extended_description?.[0]?.amenities_title_gold || `Way Of Living in ${initialProjectData.title}.`}
+                    </span>
                   </h2>
                 </div>
                 <p className="text-white/70 font-light leading-relaxed max-w-sm text-justify md:text-right text-sm md:text-base hidden sm:block">
-                  Swipe or drag to explore our expansive leisure amenities designed for your wellness.
+                  Swipe, drag, or use the arrows to explore our expansive leisure amenities designed for your wellness.
                 </p>
               </div>
             </div>
 
-            {/* SMOOTH DRAG CONTAINER */}
-            <div 
-              ref={scrollContainerRef}
-              onMouseDown={onDragStart}
-              onMouseLeave={onDragEnd}
-              onMouseUp={onDragEnd}
-              onMouseMove={onDragMove}
-              onTouchStart={onDragStart}
-              onTouchEnd={onDragEnd}
-              onTouchMove={onDragMove}
-              className={`flex gap-8 md:gap-10 px-6 md:px-12 2xl:pl-[calc((100vw-90rem)/2+3rem)] overflow-x-hidden w-full items-start pb-8 ${isGrabbing ? 'cursor-grabbing' : 'cursor-grab'}`}
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', touchAction: 'pan-y' }}
-            >
-              <style dangerouslySetInnerHTML={{ __html: `div::-webkit-scrollbar { display: none; }` }} />
+            {/* CAROUSEL WRAPPER WITH END ARROWS */}
+            <div className="relative w-full">
               
-              {initialProjectData.amenities.map((item, index) => (
-                <div key={item.id} className="shrink-0 w-[85vw] md:w-[45vw] lg:w-[32vw] flex flex-col group pointer-events-none select-none">
-                  <div className="relative h-[40vh] min-h-[250px] max-h-[400px] w-full overflow-hidden rounded-xl bg-gray-800 shadow-2xl pointer-events-auto">
-                    <Image
-                      src={item.thumbnail} alt={item.title} fill draggable="false"
-                      sizes="(max-width: 768px) 85vw, (max-width: 1024px) 45vw, 32vw"
-                      className="object-cover group-hover:scale-105 transition-transform duration-[1.5s] ease-out pointer-events-none select-none"
-                    />
-                    <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors duration-500 pointer-events-none"></div>
-                  </div>
-                  <div className="mt-6 flex flex-col gap-2 pr-4">
-                    <div className="flex items-center gap-3">
-                      <span className="text-brand-gold font-mono text-sm">0{index + 1}</span>
-                      <h3 className="text-xl md:text-2xl font-serif text-white">{item.title}</h3>
+             {/* PREVIOUS BUTTON (Left Side) */}
+              <button
+                type="button"
+                onClick={scrollPrev}
+                aria-label="Previous Amenities"
+                className="absolute left-4 md:left-8 top-[36%] -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-[#132243]/80 hover:bg-brand-gold border border-brand-gold/100 hover:border-[#132243]/100 text-brand-gold hover:text-[#132243] backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer outline-none group active:scale-95"
+              >
+                <ChevronLeft size={24} strokeWidth={2.5} className="transition-transform duration-300 group-hover:-translate-x-0.5" />
+              </button>
+
+              {/* NEXT BUTTON (Right Side) */}
+              <button
+                type="button"
+                onClick={scrollNext}
+                aria-label="Next Amenities"
+                className="absolute right-4 md:right-8 top-[36%] -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-[#132243]/80 hover:bg-brand-gold border border-brand-gold/100 hover:border-[#132243]/100 text-brand-gold hover:text-[#132243] backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer outline-none group active:scale-95"
+              >
+                <ChevronRight size={24} strokeWidth={2.5} className="transition-transform duration-300 group-hover:translate-x-0.5" />
+              </button>
+
+              {/* SMOOTH DRAG/CAROUSEL CONTAINER */}
+              <div 
+                ref={scrollContainerRef}
+                onMouseDown={onDragStart}
+                onMouseLeave={onDragEnd}
+                onMouseUp={onDragEnd}
+                onMouseMove={onDragMove}
+                onTouchStart={onDragStart}
+                onTouchEnd={onDragEnd}
+                onTouchMove={onDragMove}
+                className={`flex gap-6 md:gap-8 px-6 md:px-12 2xl:pl-[calc((100vw-90rem)/2+3rem)] overflow-x-hidden w-full items-start pb-8 ${isGrabbing ? 'cursor-grabbing' : 'cursor-grab'}`}
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', touchAction: 'pan-y' }}
+              >
+                <style dangerouslySetInnerHTML={{ __html: `div::-webkit-scrollbar { display: none; }` }} />
+                
+                {initialProjectData.amenities.map((item, index) => (
+                  <div key={item.id} className="shrink-0 w-[82vw] sm:w-[50vw] md:w-[40vw] lg:w-[30vw] flex flex-col group pointer-events-none select-none">
+                    <div className="relative h-[38vh] min-h-[240px] max-h-[380px] w-full overflow-hidden rounded-xl bg-gray-800 shadow-2xl pointer-events-auto">
+                      <Image
+                        src={item.thumbnail} 
+                        alt={item.title} 
+                        fill 
+                        draggable="false"
+                        sizes="(max-width: 768px) 82vw, (max-width: 1024px) 40vw, 30vw"
+                        className="object-cover group-hover:scale-105 transition-transform duration-[1.5s] ease-out pointer-events-none select-none"
+                      />
+                      <div className="absolute inset-0 bg-black/15 group-hover:bg-transparent transition-colors duration-500 pointer-events-none"></div>
                     </div>
-                    <p className="text-white/60 text-sm leading-relaxed pl-7 border-l border-white/10 line-clamp-3">
-                      {item.description}
-                    </p>
+                    <div className="mt-5 flex flex-col gap-2 pr-4">
+                      <div className="flex items-center gap-3">
+                        <span className="text-brand-gold font-mono text-sm">0{index + 1}</span>
+                        <h3 className="text-xl md:text-2xl font-serif text-white">{item.title}</h3>
+                      </div>
+                      <p className="text-white/60 text-sm leading-relaxed pl-7 border-l border-white/10 line-clamp-3">
+                        {item.description}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
-              <div className="w-[5vw] md:w-[10vw] shrink-0 pointer-events-none"></div>
+                ))}
+                <div className="w-[5vw] md:w-[10vw] shrink-0 pointer-events-none"></div>
+              </div>
+
             </div>
           </section>
         )}
