@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Facebook, Instagram, Youtube } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client'; // Ensure this matches your project's path
+import { TikTok_Sans } from 'next/font/google';
 
 export default function Footer() {
 
@@ -73,7 +74,23 @@ export default function Footer() {
               <Link href="https://www.youtube.com/@livewithgoldentopper" className="w-12 h-12 rounded-full border border-white/20 flex items-center justify-center hover:bg-brand-gold hover:text-[#132243] hover:border-brand-gold transition-all duration-300 outline-none cursor-pointer">
                 <Youtube size={20} strokeWidth={1.5} />
               </Link>
+              <Link 
+                href="https://www.tiktok.com/@goldentopperofficial" 
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Golden Topper on TikTok"
+                className="w-12 h-12 rounded-full border border-white/20 flex items-center justify-center text-white hover:bg-brand-gold hover:text-[#132243] hover:border-brand-gold transition-all duration-300 outline-none cursor-pointer"
+              >
+                <svg
+                  className="w-5 h-5 fill-current"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 3 15.68 6.34 6.34 0 0 0 9.35 22a6.33 6.33 0 0 0 6.34-6.32V8.71a8.28 8.28 0 0 0 3.9 1V6.69z" />
+                </svg>
+              </Link>
             </div>
+            
             
             {/* Contact Us Link - Centered Below */}
             <Link 
@@ -97,7 +114,7 @@ export default function Footer() {
                 27F High Street South Corporate Plaza,<br />
                 Bonifacio Global City 1630
               </p>
-              <a href="tel:+63288167616" className="text-sm font-medium text-white underline underline-offset-4 hover:text-brand-gold transition-colors">(+63) 02 8816 7616</a>
+              <a href="tel:+630288918190" className="text-sm font-medium text-white underline underline-offset-4 hover:text-brand-gold transition-colors">(+63) 02 8891 8190</a>
             </div>
 
             <div className="flex flex-col gap-2">
@@ -105,7 +122,7 @@ export default function Footer() {
               <p className="text-sm text-gray-100 font-light leading-relaxed">
                 0549, Dionisio Jakosalem St. Cebu City
               </p>
-              <a href="tel:+63323848888" className="text-sm font-medium text-white underline underline-offset-4 hover:text-brand-gold transition-colors">(+63) 032 384 8888</a>
+              <a href="" className="text-sm font-medium text-white underline underline-offset-4 hover:text-brand-gold transition-colors"></a>
             </div>
 
           </div>
