@@ -64,6 +64,10 @@ export default async function PromotionsPage() {
   // Format promotions
   const formattedPromotions = (promotions || []).map((promo) => ({
     id: promo.id,
+
+    // This was the missing part
+    project_id: promo.project_id,
+
     title: promo.title,
 
     slug: promo.title

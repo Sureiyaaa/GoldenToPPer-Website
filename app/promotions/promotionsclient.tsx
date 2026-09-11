@@ -27,6 +27,7 @@ interface Promotion {
   validUntil: string;
   image: string;
   excerpt: string;
+  project_id: number | null;
 }
 
 export default function PromotionsClient({ initialPromotions, projectImages = [] }: { initialPromotions: Promotion[]; projectImages?: string[] }) {
@@ -214,9 +215,8 @@ export default function PromotionsClient({ initialPromotions, projectImages = []
                     ref={(el: HTMLDivElement | null) => { if (el) listItemsRef.current[index] = el; }}
                     className="group relative border-b border-brand-blue/10 hover:border-brand-blue/40 transition-colors duration-500"
                   >
-
-                    <Link href={`/inquire?promo=${promo.slug}`} className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between py-12 md:py-16 px-4 gap-8 outline-none">
-
+                    <Link href={`/inquire?project=${promo.project_id}`} className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between py-12 md:py-16 px-4 gap-8 outline-none">
+                      
                       {/* Mobile Image */}
                       <div className="block lg:hidden relative w-full aspect-video rounded-md overflow-hidden mb-4">
                         <img src={promo.image} alt={promo.title} className="absolute inset-0 w-full h-full object-cover" />
