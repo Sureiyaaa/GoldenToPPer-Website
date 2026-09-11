@@ -262,12 +262,28 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
     { label: initialProjectData.unit_total, icon: <Key size={16} /> },
   ].filter(tag => tag.label);
 
-  const groupedLayouts = useMemo(() => {
-    if (!initialProjectData?.unit_layout) return {};
-    return initialProjectData.unit_layout.reduce((acc: Record<string, UnitLayout[]>, item) => {
-      const tower = item.tower_name || 'Tower A - Residential';
-      if (!acc[tower]) acc[tower] = [];
-      acc[tower].push(item);
+  const groupedLayouts = useMemo<Record<string, UnitLayout[]>>(() => {
+    if (!initialProjectData?.unit_layout || !Array.isArray(initialProjectData.unit_layout)) return {};
+
+    const cleanName = (val: string) =>
+      val
+        .replace(/[\u2013\u2014]/g, '-')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    return initialProjectData.unit_layout.reduce((acc: Record<string, UnitLayout[]>, item: UnitLayout) => {
+      const rawTower = item?.tower_name ? cleanName(item.tower_name) : 'Tower A - Residential';
+      const fallbackTower = rawTower || 'Tower A - Residential';
+
+      const matchKey = Object.keys(acc).find(
+        (key) => cleanName(key).toLowerCase() === fallbackTower.toLowerCase()
+      );
+
+      const resolvedKey = matchKey || fallbackTower;
+      if (!acc[resolvedKey]) {
+        acc[resolvedKey] = [];
+      }
+      acc[resolvedKey].push(item);
       return acc;
     }, {});
   }, [initialProjectData?.unit_layout]);

@@ -124,14 +124,31 @@ export default function PreviewSkeleton({ data }: { data: any }) {
   ].filter(tag => tag.label && tag.label !== '0-0 SQM' && tag.label !== '0 Units');
 
    const groupedLayouts = useMemo<Record<string, any[]>>(() => {
-    if (!data.unit_layout) return {};
+    if (!data?.unit_layout || !Array.isArray(data.unit_layout)) return {};
+
+    const cleanName = (val: string) =>
+      val
+        .replace(/[\u2013\u2014]/g, '-') // Normalize em/en dashes to hyphen
+        .replace(/\s+/g, ' ')            // Collapse multiple spaces/tabs/newlines
+        .trim();
+
     return data.unit_layout.reduce((acc: Record<string, any[]>, item: any) => {
-      const tower = item.tower_name || 'Tower A - Residential';
-      if (!acc[tower]) acc[tower] = [];
-      acc[tower].push(item);
+      const rawTower = item?.tower_name ? cleanName(String(item.tower_name)) : 'Tower A - Residential';
+      const fallbackTower = rawTower || 'Tower A - Residential';
+
+      // Find existing group ignoring casing & dash spacing
+      const matchKey = Object.keys(acc).find(
+        (key) => cleanName(key).toLowerCase() === fallbackTower.toLowerCase()
+      );
+
+      const resolvedKey = matchKey || fallbackTower;
+      if (!acc[resolvedKey]) {
+        acc[resolvedKey] = [];
+      }
+      acc[resolvedKey].push(item);
       return acc;
     }, {});
-  }, [data.unit_layout]);
+  }, [data?.unit_layout]);
 
   return (
     <div className="relative font-sans text-gray-900 bg-[#E7E7E7] overflow-x-hidden">
