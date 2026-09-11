@@ -59,7 +59,8 @@ export async function saveProjectAction(payload: any) {
       editorial_desc_color: finalData.editorial_desc_color,
       editorial_bg_color: finalData.editorial_bg_color,
       amenities_title: finalData.amenities_title,
-      amenities_title_gold: finalData.amenities_title_gold
+      amenities_title_gold: finalData.amenities_title_gold,
+      map_subtitle: finalData.map_subtitle || null
     }, { onConflict: 'project_id' });
 
     // 4. Tags

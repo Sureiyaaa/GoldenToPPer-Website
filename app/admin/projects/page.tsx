@@ -46,6 +46,7 @@ const projectSchema = z.object({
   map_latitude: z.string().min(1, "Required"),
   map_longitude: z.string().min(1, "Required"),
   map_icon: z.string().optional(), // NEW: Main project map pin
+   map_subtitle: z.string().optional(),
   child_markers: z.array(z.object({
     interest_name: z.string().min(1, "Name required"), address: z.string(), phrase: z.string(), 
     distance_km: z.string().min(1, "Required"), 
@@ -53,6 +54,7 @@ const projectSchema = z.object({
     distance_walk: z.string().min(1, "Required"), 
     latitude: z.string().min(1, "Required"), 
     longitude: z.string().min(1, "Required"), 
+   
     thumbnail: z.string(), marker_icon: z.string(), marker_type: z.string() // marker_icon is now a string URL
   })),
 });
@@ -138,7 +140,7 @@ function ProjectManager() {
       editorial_title: "", editorial_long: "", editorial_img: "",
       editorial_title_color: "#132243", editorial_desc_color: "#4B5563", editorial_bg_color: "transparent",
       amenities_title: "Experience A Fresh", amenities_title_gold: "Way Of Living in this project.",
-      tags: [], unit_layouts: [], amenities: [], map_latitude: "", map_longitude: "", map_icon: "", child_markers: []
+      tags: [], unit_layouts: [], amenities: [], map_latitude: "", map_longitude: "", map_icon: "", child_markers: [], map_subtitle: "Everything you need, strategically positioned right around your sanctuary."
     }
   });
 
@@ -168,7 +170,7 @@ function ProjectManager() {
           unit_total: data.projData.unit_total ? String(data.projData.unit_total) : "",
           map_latitude: data.parentData?.latitude ? String(data.parentData.latitude) : "",
           map_longitude: data.parentData?.longitude ? String(data.parentData.longitude) : "",
-          map_icon: data.projData.map_icon || "", 
+          map_icon: data.projData.map_icon || "", map_subtitle: data.extData?.map_subtitle || "Everything you need, strategically positioned right around your sanctuary.",
           
           // ✅ PREVENTS "EXPECTED STRING, RECEIVED NULL" ERRORS
           image: data.projData.image || "",
@@ -565,6 +567,15 @@ function ProjectManager() {
                 </div>
               </div>
             ))}
+          </div>
+
+          <div className="mt-4">
+            <label className={labelStyles}>Points of Interest Subtitle</label>
+            <input 
+              {...register("map_subtitle")} 
+              placeholder="Everything you need, strategically positioned right around your sanctuary." 
+              className={inputStyles} 
+            />
           </div>
 
           {/* Section 6: Map Markers */}
