@@ -543,10 +543,6 @@ function ProjectManager() {
               <div key={field.id} className="p-4 mt-4 bg-gray-50 border border-gray-100 rounded-lg relative group">
                 <button type="button" onClick={() => removeLayout(index)} className="absolute top-4 right-4 text-gray-300 hover:text-red-500"><Trash2 size={16}/></button>
                 
-                <label className={labelStyles}>Layout Title</label>
-                <input {...register(`unit_layouts.${index}.title`)} className={inputStyles} />
-                {errors?.unit_layouts?.[index]?.title && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.unit_layouts[index]?.title?.message}</p>}
-                
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className={labelStyles}>Tower Name</label>
@@ -555,12 +551,23 @@ function ProjectManager() {
                       placeholder="e.g. Tower A - Residential" 
                       className={inputStyles} 
                     />
+                    {errors?.unit_layouts?.[index]?.tower_name && (
+                      <p className="text-red-500 text-[10px] font-bold mt-1">{errors.unit_layouts[index]?.tower_name?.message}</p>
+                    )}
                   </div>
                   <div>
                     <label className={labelStyles}>Layout Title</label>
-                    <input {...register(`unit_layouts.${index}.title`)} placeholder="e.g. Studio Unit" className={inputStyles} />
+                    <input 
+                      {...register(`unit_layouts.${index}.title`)} 
+                      placeholder="e.g. Studio Unit" 
+                      className={inputStyles} 
+                    />
+                    {errors?.unit_layouts?.[index]?.title && (
+                      <p className="text-red-500 text-[10px] font-bold mt-1">{errors.unit_layouts[index]?.title?.message}</p>
+                    )}
                   </div>
                 </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className={labelStyles}>Min SQM</label>
