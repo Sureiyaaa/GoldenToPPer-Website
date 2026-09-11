@@ -35,11 +35,13 @@ const projectSchema = z.object({
   amenities_title_gold: z.string().optional(),
   tags: z.array(z.object({ tag_name: z.string().min(1, "Tag cannot be empty") })),
   unit_layouts: z.array(z.object({
-    title: z.string().min(1, "Title required"), description: z.string(), 
-    min_sqm: z.string().min(1, "Required"), 
-    max_sqm: z.string().min(1, "Required"), 
-    thumbnail: z.string()
-  })),
+  title: z.string().min(1, "Title required"), 
+  tower_name: z.string().min(1, "Tower required"), // Add this
+  description: z.string(), 
+  min_sqm: z.string().min(1, "Required"), 
+  max_sqm: z.string().min(1, "Required"), 
+  thumbnail: z.string()
+})),
   amenities: z.array(z.object({
     title: z.string().min(1, "Title required"), description: z.string(), thumbnail: z.string()
   })),
@@ -140,7 +142,8 @@ function ProjectManager() {
       editorial_title: "", editorial_long: "", editorial_img: "",
       editorial_title_color: "#132243", editorial_desc_color: "#4B5563", editorial_bg_color: "transparent",
       amenities_title: "Experience A Fresh", amenities_title_gold: "Way Of Living in this project.",
-      tags: [], unit_layouts: [], amenities: [], map_latitude: "", map_longitude: "", map_icon: "", child_markers: [], map_subtitle: "Everything you need, strategically positioned right around your sanctuary."
+      tags: [], unit_layouts: [], amenities: [], map_latitude: "", map_longitude: "", map_icon: "", child_markers: [], map_subtitle: "Everything you need, strategically positioned right around your sanctuary.", 
+     
     }
   });
 
@@ -187,6 +190,7 @@ function ProjectManager() {
           tags: currentTags,
           unit_layouts: data.layoutData.map((l: any) => ({ 
             ...l, 
+            tower_name: l.tower_name || "Tower A - Residential",
             min_sqm: l.min_sqm ? String(l.min_sqm) : "", 
             max_sqm: l.max_sqm ? String(l.max_sqm) : "" 
           })),
@@ -320,7 +324,7 @@ function ProjectManager() {
       thumbnail: previews[`amenities.${i}.thumbnail`] || a.thumbnail || BLANK_IMAGE
     })) : [],
     unit_layout: formData.unit_layouts?.length > 0 ? formData.unit_layouts.map((l, i) => ({
-      id: i + 1, title: l.title || `Layout ${i + 1}`, description: l.description || 'Description...', 
+      id: i + 1, title: l.title || `Layout ${i + 1}`, tower_name: l.tower_name || "Tower A - Residential", description: l.description || 'Description...', 
       min_sqm: l.min_sqm || '0', max_sqm: l.max_sqm || '0', 
       thumbnail: previews[`unit_layouts.${i}.thumbnail`] || l.thumbnail || BLANK_IMAGE
     })) : []
@@ -531,17 +535,39 @@ function ProjectManager() {
           <div>
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="text-xs font-bold text-brand-gold uppercase tracking-widest">Unit Layouts</h3>
-              <button type="button" onClick={() => appendLayout({ title: "", description: "", min_sqm: "", max_sqm: "", thumbnail: "" })} className="text-[10px] text-brand-blue font-bold uppercase flex items-center gap-1"><PlusCircle size={12}/> Add Layout</button>
+              <button type="button" onClick={() => appendLayout({ title: "", description: "", min_sqm: "", max_sqm: "", thumbnail: "", tower_name: "Tower A - Residential" })} className="text-[10px] text-brand-blue font-bold uppercase flex items-center gap-1"><PlusCircle size={12}/> Add Layout</button>
             </div>
+            
             
             {layoutFields.map((field, index) => (
               <div key={field.id} className="p-4 mt-4 bg-gray-50 border border-gray-100 rounded-lg relative group">
                 <button type="button" onClick={() => removeLayout(index)} className="absolute top-4 right-4 text-gray-300 hover:text-red-500"><Trash2 size={16}/></button>
                 
-                <label className={labelStyles}>Layout Title</label>
-                <input {...register(`unit_layouts.${index}.title`)} className={inputStyles} />
-                {errors?.unit_layouts?.[index]?.title && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.unit_layouts[index]?.title?.message}</p>}
-                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelStyles}>Tower Name</label>
+                    <input 
+                      {...register(`unit_layouts.${index}.tower_name`)} 
+                      placeholder="e.g. Tower A - Residential" 
+                      className={inputStyles} 
+                    />
+                    {errors?.unit_layouts?.[index]?.tower_name && (
+                      <p className="text-red-500 text-[10px] font-bold mt-1">{errors.unit_layouts[index]?.tower_name?.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className={labelStyles}>Layout Title</label>
+                    <input 
+                      {...register(`unit_layouts.${index}.title`)} 
+                      placeholder="e.g. Studio Unit" 
+                      className={inputStyles} 
+                    />
+                    {errors?.unit_layouts?.[index]?.title && (
+                      <p className="text-red-500 text-[10px] font-bold mt-1">{errors.unit_layouts[index]?.title?.message}</p>
+                    )}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className={labelStyles}>Min SQM</label>

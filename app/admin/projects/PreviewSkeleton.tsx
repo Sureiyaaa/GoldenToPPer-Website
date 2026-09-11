@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import Image from "next/image";
 import { Layers, Target, Key, MapPin, ArrowRight } from 'lucide-react';
 import gsap from 'gsap';
@@ -122,6 +122,33 @@ export default function PreviewSkeleton({ data }: { data: any }) {
     { label: data.sqm, icon: <Target size={16} /> },
     { label: data.unit_total, icon: <Key size={16} /> },
   ].filter(tag => tag.label && tag.label !== '0-0 SQM' && tag.label !== '0 Units');
+
+   const groupedLayouts = useMemo<Record<string, any[]>>(() => {
+    if (!data?.unit_layout || !Array.isArray(data.unit_layout)) return {};
+
+    const cleanName = (val: string) =>
+      val
+        .replace(/[\u2013\u2014]/g, '-') // Normalize em/en dashes to hyphen
+        .replace(/\s+/g, ' ')            // Collapse multiple spaces/tabs/newlines
+        .trim();
+
+    return data.unit_layout.reduce((acc: Record<string, any[]>, item: any) => {
+      const rawTower = item?.tower_name ? cleanName(String(item.tower_name)) : 'Tower A - Residential';
+      const fallbackTower = rawTower || 'Tower A - Residential';
+
+      // Find existing group ignoring casing & dash spacing
+      const matchKey = Object.keys(acc).find(
+        (key) => cleanName(key).toLowerCase() === fallbackTower.toLowerCase()
+      );
+
+      const resolvedKey = matchKey || fallbackTower;
+      if (!acc[resolvedKey]) {
+        acc[resolvedKey] = [];
+      }
+      acc[resolvedKey].push(item);
+      return acc;
+    }, {});
+  }, [data?.unit_layout]);
 
   return (
     <div className="relative font-sans text-gray-900 bg-[#E7E7E7] overflow-x-hidden">
@@ -282,7 +309,7 @@ export default function PreviewSkeleton({ data }: { data: any }) {
       {data.unit_layout?.length > 0 && (
         <section id="blueprints" ref={blueprintSectionRef} className="relative w-full py-32 bg-transparent z-10 pointer-events-none">
           <div className="max-w-[75rem] mx-auto px-6 md:px-12 relative">
-            <div className="mb-24 text-center">
+            <div className="mb-20 text-center">
               <div className="text-xs tracking-widest uppercase text-brand-blue font-bold mb-4 flex items-center justify-center gap-4">
                 Room Blueprints
               </div>
@@ -291,27 +318,49 @@ export default function PreviewSkeleton({ data }: { data: any }) {
               </h2>
             </div>
 
-            <div className="relative pb-[10vh]">
-              {data.unit_layout.map((plan: any, index: number) => (
-                <div key={plan.id || index} className="blueprint-card sticky top-[15vh] w-full min-h-[60vh] lg:h-[65vh] bg-white rounded-xl shadow-[0_-10px_40px_rgba(0,0,0,0.08)] border border-gray-100 overflow-hidden flex flex-col lg:flex-row mb-12 origin-top" style={{ zIndex: index + 1 }}>
-                  <div className="w-full lg:w-2/5 bg-[#F9F9FA] p-8 md:p-12 lg:p-16 flex flex-col justify-center border-b lg:border-b-0 lg:border-r border-gray-200">
-                    <div className="text-brand-gold font-mono text-sm mb-4">0{index + 1}</div>
-                    <h3 className="text-3xl md:text-4xl lg:text-5xl font-serif text-brand-blue mb-4">{plan.title || 'Layout Title'}</h3>
-                    <p className="font-sans tracking-widest text-white/70 font-bold text-xs uppercase mb-4">
-                      {Number(plan.min_sqm) === Number(plan.max_sqm) || !plan.max_sqm
-                        ? `± ${plan.min_sqm || 0} SQM`
-                        : `± ${plan.min_sqm || 0} - ± ${plan.max_sqm || 0} SQM`}
-                    </p>
-                    <p className="text-gray-600 leading-relaxed text-sm md:text-base">{plan.description || 'Description...'}</p>
-                  </div>
-                  <div className="w-full lg:w-3/5 relative p-8 md:p-12 bg-white flex items-center justify-center border-l border-gray-100">
-                    <div className="relative w-full h-full min-h-[350px] lg:min-h-full">
-                      <Image src={plan.thumbnail || BLANK_IMAGE} alt={plan.title} fill className="object-contain drop-shadow-2xl" />
-                    </div>
+            {/* Grouped by Tower */}
+            {Object.entries(groupedLayouts).map(([towerName, plans]) => (
+  <div key={towerName} className="tower-group relative mb-24 last:mb-0">
+                
+                {/* Sticky Tower Header Pill */}
+                <div className="sticky top-4 z-20 pb-6 pt-2 flex justify-center">
+                  <div className="inline-flex items-center gap-3 px-6 py-2 rounded-full bg-brand-blue/90 backdrop-blur-md border border-brand-gold/40 shadow-xl">
+                    <span className="w-2 h-2 rounded-full bg-brand-gold animate-pulse" />
+                    <span className="text-xs uppercase tracking-[0.25em] font-serif text-white font-medium">
+                      {towerName}
+                    </span>
                   </div>
                 </div>
-              ))}
-            </div>
+
+                {/* Stacking Cards for this Tower */}
+                <div className="relative">
+                  {plans.map((plan: any, index: number) => (
+                    <div
+                      key={plan.id || index}
+                      className="blueprint-card sticky top-[15vh] w-full min-h-[60vh] lg:h-[65vh] bg-white rounded-xl shadow-[0_-10px_40px_rgba(0,0,0,0.08)] border border-gray-100 overflow-hidden flex flex-col lg:flex-row mb-12 origin-top"
+                      style={{ zIndex: index + 1 }}
+                    >
+                      <div className="w-full lg:w-2/5 bg-[#F9F9FA] p-8 md:p-12 lg:p-16 flex flex-col justify-center border-b lg:border-b-0 lg:border-r border-gray-200">
+                        <div className="text-brand-gold font-mono text-sm mb-4">0{index + 1}</div>
+                        <h3 className="text-3xl md:text-4xl lg:text-5xl font-serif text-brand-blue mb-4">{plan.title || 'Layout Title'}</h3>
+                        <p className="font-sans tracking-widest text-brand-blue/70 font-bold text-xs uppercase mb-4">
+                          {Number(plan.min_sqm) === Number(plan.max_sqm) || !plan.max_sqm
+                            ? `± ${plan.min_sqm || 0} SQM`
+                            : `± ${plan.min_sqm || 0} - ± ${plan.max_sqm || 0} SQM`}
+                        </p>
+                        <p className="text-gray-600 leading-relaxed text-sm md:text-base">{plan.description || 'Description...'}</p>
+                      </div>
+                      <div className="w-full lg:w-3/5 relative p-8 md:p-12 bg-white flex items-center justify-center border-l border-gray-100">
+                        <div className="relative w-full h-full min-h-[350px] lg:min-h-full">
+                          <Image src={plan.thumbnail || BLANK_IMAGE} alt={plan.title} fill className="object-contain drop-shadow-2xl" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+              </div>
+            ))}
           </div>
         </section>
       )}

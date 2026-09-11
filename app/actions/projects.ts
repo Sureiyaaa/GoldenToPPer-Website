@@ -38,6 +38,16 @@ export async function saveProjectAction(payload: any) {
 
     let { targetProjectId, cleanProjectData, finalData } = payload;
 
+    console.log('[saveProjectAction] payload insights', {
+      hasTargetProjectId: Boolean(targetProjectId),
+      hasCleanProjectData: !!cleanProjectData,
+      hasFinalData: !!finalData,
+      unitLayoutsType: Array.isArray(finalData?.unit_layouts) ? 'array' : typeof finalData?.unit_layouts,
+      amenitiesType: Array.isArray(finalData?.amenities) ? 'array' : typeof finalData?.amenities,
+      childMarkersType: Array.isArray(finalData?.child_markers) ? 'array' : typeof finalData?.child_markers,
+      tagsType: Array.isArray(finalData?.tags) ? 'array' : typeof finalData?.tags,
+    });
+
     // 2. Base Project Table
     if (targetProjectId) {
       const { error } = await supabaseAdmin.from('project_table').update(cleanProjectData).eq('id', targetProjectId);
@@ -87,13 +97,22 @@ export async function saveProjectAction(payload: any) {
       }
     }
     await supabaseAdmin.from('unit_layout').delete().eq('project_id', targetProjectId);
-    if (finalData.unit_layouts.length > 0) {
-      const cleanedLayouts = finalData.unit_layouts.map((l: any) => {
-        const { id, ...rest } = l; 
-        return { ...rest, project_id: targetProjectId, min_sqm: l.min_sqm || null, max_sqm: l.max_sqm || null };
-      });
-      const { error: layoutErr } = await supabaseAdmin.from('unit_layout').insert(cleanedLayouts);
-      if (layoutErr) throw layoutErr; 
+    if (finalData.unit_layouts && Array.isArray(finalData.unit_layouts)) {
+      const layoutRows = finalData.unit_layouts.map((item: any) => ({
+        project_id: targetProjectId,
+        tower_name: item.tower_name || 'Tower A - Residential',
+        title: item.title,
+        description: item.description || '',
+        thumbnail: item.thumbnail || '',
+        min_sqm: item.min_sqm ? parseFloat(item.min_sqm) : null,
+        max_sqm: item.max_sqm ? parseFloat(item.max_sqm) : null,
+      }));
+
+      const { error: layoutError } = await supabaseAdmin
+        .from('unit_layout')
+        .insert(layoutRows);
+
+      if (layoutError) throw new Error(`Layout error: ${layoutError.message}`);
     }
 
     // 6. Amenities (Handle Storage Cleanup server-side)
