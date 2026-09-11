@@ -505,16 +505,16 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
               {/* Stack Container */}
               <div className="relative pb-[10vh]">
                 {initialProjectData.unit_layout.map((plan, index) => (
-                  <div 
+                  <div
                     key={plan.id} id={`blueprint-${plan.id}`}
                     className="blueprint-card sticky top-[15vh] w-full min-h-[60vh] lg:h-[65vh] bg-white rounded-xl shadow-[0_-10px_40px_rgba(0,0,0,0.08)] border border-gray-100 overflow-hidden flex flex-col lg:flex-row mb-12 origin-top"
                     style={{ zIndex: index + 1 }}
                   >
-                    <div className="w-full lg:w-2/5 bg-[#F9F9FA] p-8 md:p-12 lg:p-16 flex flex-col justify-center border-b lg:border-b-0 lg:border-r border-gray-200">
+                    <div className="w-full lg:w-2/5 bg-gradient-to-br from-[#051431] via-[#0A1F49] to-[#123062] text-white p-8 md:p-12 lg:p-16 flex flex-col justify-center border-b lg:border-b-0 lg:border-r border-white/10">
                       <div className="text-brand-gold font-mono text-sm mb-4">0{index + 1}</div>
-                      <h3 className="text-3xl md:text-4xl lg:text-5xl font-serif text-brand-blue mb-4">{plan.title}</h3>
-                      <p className="font-sans tracking-widest text-brand-blue/80 font-bold text-sm md:text-base mb-8 uppercase">{plan.min_sqm} - {plan.max_sqm} SQM</p>
-                      <p className="text-gray-600 leading-relaxed text-sm md:text-base">{plan.description}</p>
+                      <h3 className="text-3xl md:text-4xl lg:text-5xl font-serif text-white mb-4">{plan.title}</h3>
+                      <p className="font-sans tracking-widest text-white/70 font-bold text-sm md:text-base mb-8 uppercase">{plan.min_sqm} - {plan.max_sqm} SQM</p>
+                      <p className="text-white/80 leading-relaxed text-sm md:text-base">{plan.description}</p>
                     </div>
                     
                     <div className="w-full lg:w-3/5 relative p-8 md:p-12 bg-white flex items-center justify-center group">
