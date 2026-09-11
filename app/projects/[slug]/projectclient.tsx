@@ -4,7 +4,7 @@ import Navbar from "@/app/components/navbar";
 import Image from "next/image";
 import { Layers, Building2, Target, Key, MapPin, ArrowRight, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import Footer from '@/app/components/footer';
-import { useEffect, useRef, useState, Suspense } from 'react';
+import { useEffect, useRef, useState, useMemo, Suspense } from 'react';;
 import { useSearchParams } from 'next/navigation'; 
 import Lenis from 'lenis';
 import gsap from 'gsap';
@@ -26,6 +26,7 @@ interface Amenity {
 interface UnitLayout {
   id: number;
   project_id: number;
+  tower_name?: string;
   title: string;
   description: string;
   thumbnail: string;
@@ -44,6 +45,7 @@ interface ExtendedDescription {
   editorial_bg_color?: string;
   amenities_title?: string;
   amenities_title_gold?: string;
+  map_subtitle?: string; // Add this
 }
 
 interface ProjectTag {
@@ -73,20 +75,21 @@ const UnifiedProjectMap = dynamic(() => import('@/app/components/unifiedprojectm
   ssr: false 
 });
 
-function ModernMapSection({ projectSlug }: { projectSlug: string }) {
+function ModernMapSection({ projectSlug, subtitle }: { projectSlug: string; subtitle?: string }) {
   return (
     <section className="relative py-24 bg-[#0A1128] overflow-hidden flex items-center min-h-[900px]">
-      <div className="absolute inset-0 z-0 opacity-20" style={{ backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
-      <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-brand-gold/10 rounded-full blur-[120px] pointer-events-none z-0" />
-      <div className="absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] bg-brand-blue/30 rounded-full blur-[150px] pointer-events-none z-0" />
+      {/* ... gradients ... */}
       <div className="max-w-[90rem] mx-auto px-6 md:px-12 relative z-20 flex flex-col items-center w-full">
         <motion.div className="mb-12 text-center" initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }} variants={{ hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.2 } } }}>
           <motion.h2 variants={{ hidden: { opacity: 0, y: 40, filter: "blur(10px)" }, visible: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 1.2, ease: [0.22, 1, 0.36, 1] } } }} className="text-5xl md:text-6xl lg:text-7xl font-serif font-light leading-tight mb-4 text-white">
             Points of <motion.span className="text-brand-gold">Interest</motion.span>
           </motion.h2>
-          <motion.p variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.22, 1, 0.36, 1] } } }} className="text-center font-light leading-relaxed text-white/70 text-base md:text-lg lg:text-xl max-w-4xl md:whitespace-nowrap mx-auto">
-            Everything you need, strategically positioned right around your sanctuary.
-          </motion.p>
+          <motion.p 
+          variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.22, 1, 0.36, 1] } } }} 
+          className="text-center font-light leading-relaxed text-white/70 text-base md:text-lg max-w-2xl lg:max-w-3xl mx-auto"
+        >
+          {subtitle || "Everything you need, strategically positioned right around your sanctuary."}
+        </motion.p>
         </motion.div>
         <div className="w-full p-2 md:p-4 rounded-sm bg-white/5 border border-white/10 backdrop-blur-md shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
          <UnifiedProjectMap projectSlug={projectSlug} />
@@ -95,7 +98,6 @@ function ModernMapSection({ projectSlug }: { projectSlug: string }) {
     </section>
   );
 }
-
 if (typeof window !== 'undefined') {    
   gsap.registerPlugin(ScrollTrigger);
 }
@@ -116,6 +118,7 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
   const rafId = useRef<number | null>(null);
   const [isGrabbing, setIsGrabbing] = useState(false);
 
+  
   // 1. LERP ANIMATION LOOP (The magic that makes it smooth)
   useEffect(() => {
     const smoothDrag = () => {
@@ -175,16 +178,26 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
     gsap.ticker.add((time) => lenis.raf(time * 1000));
 
     let ctx = gsap.context(() => {
-      const blueprintCards = gsap.utils.toArray('.blueprint-card');
-      blueprintCards.forEach((card: any, i) => {
-        if (i !== blueprintCards.length - 1) {
-          gsap.to(card, {
-            scale: 0.92, opacity: 0.4, filter: "blur(4px)",
-            scrollTrigger: { trigger: blueprintCards[i + 1] as HTMLElement, start: "top 85%", end: "top 20%", scrub: true }
-          });
-        }
-      });
+  const towerGroups = gsap.utils.toArray('.tower-group');
+  towerGroups.forEach((group: any) => {
+    const cards = group.querySelectorAll('.blueprint-card');
+    cards.forEach((card: any, i: number) => {
+      if (i !== cards.length - 1) {
+        gsap.to(card, {
+          scale: 0.92,
+          opacity: 0.4,
+          filter: "blur(4px)",
+          scrollTrigger: {
+            trigger: cards[i + 1] as HTMLElement,
+            start: "top 85%",
+            end: "top 20%",
+            scrub: true,
+          }
+        });
+      }
     });
+  });
+});
 
     return () => {
       lenis.destroy();
@@ -248,6 +261,16 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
     { label: initialProjectData.sqm, icon: <Target size={16} /> },
     { label: initialProjectData.unit_total, icon: <Key size={16} /> },
   ].filter(tag => tag.label);
+
+  const groupedLayouts = useMemo(() => {
+    if (!initialProjectData?.unit_layout) return {};
+    return initialProjectData.unit_layout.reduce((acc: Record<string, UnitLayout[]>, item) => {
+      const tower = item.tower_name || 'Tower A - Residential';
+      if (!acc[tower]) acc[tower] = [];
+      acc[tower].push(item);
+      return acc;
+    }, {});
+  }, [initialProjectData?.unit_layout]);
 
   return (
     <PageTransition> 
@@ -391,7 +414,6 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
           </section>
         )}
 
-        {/* --- AMENITIES DRAGGABLE SCROLL SECTION --- */}
         {/* --- AMENITIES DRAGGABLE CAROUSEL SECTION --- */}
         {initialProjectData.amenities?.length > 0 && (
           <section className="relative w-full bg-[#132243] flex flex-col justify-center py-24 md:py-32 overflow-hidden group/amenities">
@@ -490,47 +512,73 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
 
         {/* --- ROOM BLUEPRINTS SECTION (STACKED CARDS) --- */}
         {initialProjectData.unit_layout?.length > 0 && (
-          <section id="blueprints" ref={blueprintSectionRef} className="relative w-full py-32 bg-transparent z-10">
-            <div className="max-w-[75rem] mx-auto px-6 md:px-12 relative">
-              
-              <div className="mb-24 text-center">
-                <div className="text-xs tracking-widest uppercase text-brand-blue font-bold mb-4 flex items-center justify-center gap-4">
-                  Room Blueprints
+            <section id="blueprints" ref={blueprintSectionRef} className="relative w-full py-32 bg-transparent z-10">
+              <div className="max-w-[75rem] mx-auto px-6 md:px-12 relative">
+                
+                {/* Section Header */}
+                <div className="mb-20 text-center">
+                  <div className="text-xs tracking-widest uppercase text-brand-blue font-bold mb-4 flex items-center justify-center gap-4">
+                    Room Blueprints
+                  </div>
+                  <h2 className="text-4xl md:text-5xl lg:text-7xl font-serif text-brand-blue leading-tight">
+                    Design Your <span className="text-brand-gold">Sanctuary</span>
+                  </h2>
                 </div>
-                <h2 className="text-4xl md:text-5xl lg:text-7xl font-serif text-brand-blue leading-tight">
-                  Design Your <span className=" text-brand-gold">Sanctuary</span>
-                </h2>
-              </div>
 
-              {/* Stack Container */}
-              <div className="relative pb-[10vh]">
-                {initialProjectData.unit_layout.map((plan, index) => (
-                  <div 
-                    key={plan.id} id={`blueprint-${plan.id}`}
-                    className="blueprint-card sticky top-[15vh] w-full min-h-[60vh] lg:h-[65vh] bg-white rounded-xl shadow-[0_-10px_40px_rgba(0,0,0,0.08)] border border-gray-100 overflow-hidden flex flex-col lg:flex-row mb-12 origin-top"
-                    style={{ zIndex: index + 1 }}
-                  >
-                    <div className="w-full lg:w-2/5 bg-[#F9F9FA] p-8 md:p-12 lg:p-16 flex flex-col justify-center border-b lg:border-b-0 lg:border-r border-gray-200">
-                      <div className="text-brand-gold font-mono text-sm mb-4">0{index + 1}</div>
-                      <h3 className="text-3xl md:text-4xl lg:text-5xl font-serif text-brand-blue mb-4">{plan.title}</h3>
-                      <p className="font-sans tracking-widest text-brand-blue/80 font-bold text-sm md:text-base mb-8 uppercase">{plan.min_sqm} - {plan.max_sqm} SQM</p>
-                      <p className="text-gray-600 leading-relaxed text-sm md:text-base">{plan.description}</p>
-                    </div>
+                {/* Render Each Tower Group */}
+                {Object.entries(groupedLayouts).map(([towerName, plans]) => (
+                  <div key={towerName} className="tower-group relative mb-32 last:mb-0">
                     
-                    <div className="w-full lg:w-3/5 relative p-8 md:p-12 bg-white flex items-center justify-center group">
-                      <div className="relative w-full h-full min-h-[350px] lg:min-h-full transition-transform duration-700 ease-out group-hover:scale-105">
-                        <Image src={plan.thumbnail} alt={plan.title} fill sizes="(max-width: 1024px) 100vw, 60vw" className="object-contain drop-shadow-2xl" />
+                    {/* STICKY TOWER HEADER: Sticks while scrolling this tower, moves up when tower ends */}
+                    <div className="sticky top-20 md:top-24 z-20 pb-8 pt-2 flex justify-center pointer-events-none">
+                      <div className="inline-flex items-center gap-3 px-6 py-2.5 rounded-full bg-brand-blue backdrop-blur-md border border-brand-gold/40 shadow-xl pointer-events-auto">
+                        <span className="w-2 h-2 rounded-full bg-brand-gold animate-pulse" />
+                        <span className="text-xs md:text-sm uppercase tracking-[0.25em] font-serif text-white font-medium">
+                          {towerName}
+                        </span>
                       </div>
                     </div>
+
+                    {/* Stacking Cards for this Tower */}
+                    <div className="relative">
+                      {plans.map((plan, index) => (
+                        <div
+                          key={plan.id}
+                          id={`blueprint-${plan.id}`}
+                          className="blueprint-card sticky top-[22vh] w-full min-h-[60vh] lg:h-[65vh] bg-white rounded-xl shadow-[0_-10px_40px_rgba(0,0,0,0.08)] border border-gray-100 overflow-hidden flex flex-col lg:flex-row mb-12 origin-top"
+                          style={{ zIndex: index + 1 }}
+                        >
+                          <div className="w-full lg:w-2/5 bg-gradient-to-br from-[#051431] via-[#0A1F49] to-[#123062] text-white p-8 md:p-12 lg:p-16 flex flex-col justify-center border-b lg:border-b-0 lg:border-r border-white/10">
+                            <div className="text-brand-gold font-mono text-sm mb-4">0{index + 1}</div>
+                            <h3 className="text-3xl md:text-4xl lg:text-5xl font-serif text-white mb-4">{plan.title}</h3>
+                            <p className="font-sans tracking-widest text-white/70 font-bold text-sm md:text-base mb-8 uppercase">
+                              {Number(plan.min_sqm) === Number(plan.max_sqm) || !plan.max_sqm
+                                ? `± ${plan.min_sqm} SQM`
+                                : `± ${plan.min_sqm} - ± ${plan.max_sqm} SQM`}
+                            </p>
+                            <p className="text-white/80 leading-relaxed text-sm md:text-base">{plan.description}</p>
+                          </div>
+                          
+                          <div className="w-full lg:w-3/5 relative p-8 md:p-12 bg-white flex items-center justify-center group">
+                            <div className="relative w-full h-full min-h-[350px] lg:min-h-full transition-transform duration-700 ease-out group-hover:scale-105">
+                              <Image src={plan.thumbnail} alt={plan.title} fill sizes="(max-width: 1024px) 100vw, 60vw" className="object-contain drop-shadow-2xl" />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
                   </div>
                 ))}
+
               </div>
+            </section>
+          )}
 
-            </div>
-          </section>
-        )}
-
-        <ModernMapSection projectSlug={currentSlug} />
+        <ModernMapSection 
+          projectSlug={currentSlug} 
+          subtitle={initialProjectData.extended_description?.[0]?.map_subtitle} 
+        />
       </main>
       <Footer />
       <BackToTop />
