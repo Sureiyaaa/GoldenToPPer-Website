@@ -44,6 +44,7 @@ interface ExtendedDescription {
   editorial_bg_color?: string;
   amenities_title?: string;
   amenities_title_gold?: string;
+  map_subtitle?: string; // Add this
 }
 
 interface ProjectTag {
@@ -73,20 +74,21 @@ const UnifiedProjectMap = dynamic(() => import('@/app/components/unifiedprojectm
   ssr: false 
 });
 
-function ModernMapSection({ projectSlug }: { projectSlug: string }) {
+function ModernMapSection({ projectSlug, subtitle }: { projectSlug: string; subtitle?: string }) {
   return (
     <section className="relative py-24 bg-[#0A1128] overflow-hidden flex items-center min-h-[900px]">
-      <div className="absolute inset-0 z-0 opacity-20" style={{ backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
-      <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-brand-gold/10 rounded-full blur-[120px] pointer-events-none z-0" />
-      <div className="absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] bg-brand-blue/30 rounded-full blur-[150px] pointer-events-none z-0" />
+      {/* ... gradients ... */}
       <div className="max-w-[90rem] mx-auto px-6 md:px-12 relative z-20 flex flex-col items-center w-full">
         <motion.div className="mb-12 text-center" initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }} variants={{ hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.2 } } }}>
           <motion.h2 variants={{ hidden: { opacity: 0, y: 40, filter: "blur(10px)" }, visible: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 1.2, ease: [0.22, 1, 0.36, 1] } } }} className="text-5xl md:text-6xl lg:text-7xl font-serif font-light leading-tight mb-4 text-white">
             Points of <motion.span className="text-brand-gold">Interest</motion.span>
           </motion.h2>
-          <motion.p variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.22, 1, 0.36, 1] } } }} className="text-center font-light leading-relaxed text-white/70 text-base md:text-lg lg:text-xl max-w-4xl md:whitespace-nowrap mx-auto">
-            Everything you need, strategically positioned right around your sanctuary.
-          </motion.p>
+          <motion.p 
+          variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.22, 1, 0.36, 1] } } }} 
+          className="text-center font-light leading-relaxed text-white/70 text-base md:text-lg max-w-2xl lg:max-w-3xl mx-auto"
+        >
+          {subtitle || "Everything you need, strategically positioned right around your sanctuary."}
+        </motion.p>
         </motion.div>
         <div className="w-full p-2 md:p-4 rounded-sm bg-white/5 border border-white/10 backdrop-blur-md shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
          <UnifiedProjectMap projectSlug={projectSlug} />
@@ -95,7 +97,6 @@ function ModernMapSection({ projectSlug }: { projectSlug: string }) {
     </section>
   );
 }
-
 if (typeof window !== 'undefined') {    
   gsap.registerPlugin(ScrollTrigger);
 }
@@ -391,7 +392,6 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
           </section>
         )}
 
-        {/* --- AMENITIES DRAGGABLE SCROLL SECTION --- */}
         {/* --- AMENITIES DRAGGABLE CAROUSEL SECTION --- */}
         {initialProjectData.amenities?.length > 0 && (
           <section className="relative w-full bg-[#132243] flex flex-col justify-center py-24 md:py-32 overflow-hidden group/amenities">
@@ -513,7 +513,11 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
                     <div className="w-full lg:w-2/5 bg-gradient-to-br from-[#051431] via-[#0A1F49] to-[#123062] text-white p-8 md:p-12 lg:p-16 flex flex-col justify-center border-b lg:border-b-0 lg:border-r border-white/10">
                       <div className="text-brand-gold font-mono text-sm mb-4">0{index + 1}</div>
                       <h3 className="text-3xl md:text-4xl lg:text-5xl font-serif text-white mb-4">{plan.title}</h3>
-                      <p className="font-sans tracking-widest text-white/70 font-bold text-sm md:text-base mb-8 uppercase">{plan.min_sqm} - {plan.max_sqm} SQM</p>
+                      <p className="font-sans tracking-widest text-white/70 font-bold text-sm md:text-base mb-8 uppercase">
+                        {Number(plan.min_sqm) === Number(plan.max_sqm) || !plan.max_sqm
+                          ? `± ${plan.min_sqm} SQM`
+                          : `± ${plan.min_sqm} - ± ${plan.max_sqm} SQM`}
+                      </p>
                       <p className="text-white/80 leading-relaxed text-sm md:text-base">{plan.description}</p>
                     </div>
                     
@@ -530,7 +534,10 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
           </section>
         )}
 
-        <ModernMapSection projectSlug={currentSlug} />
+        <ModernMapSection 
+          projectSlug={currentSlug} 
+          subtitle={initialProjectData.extended_description?.[0]?.map_subtitle} 
+        />
       </main>
       <Footer />
       <BackToTop />

@@ -297,8 +297,10 @@ export default function PreviewSkeleton({ data }: { data: any }) {
                   <div className="w-full lg:w-2/5 bg-[#F9F9FA] p-8 md:p-12 lg:p-16 flex flex-col justify-center border-b lg:border-b-0 lg:border-r border-gray-200">
                     <div className="text-brand-gold font-mono text-sm mb-4">0{index + 1}</div>
                     <h3 className="text-3xl md:text-4xl lg:text-5xl font-serif text-brand-blue mb-4">{plan.title || 'Layout Title'}</h3>
-                    <p className="font-sans tracking-widest text-brand-blue/80 font-bold text-sm md:text-base mb-8 uppercase">
-                      {plan.min_sqm || '0'} - {plan.max_sqm || '0'} SQM
+                    <p className="font-sans tracking-widest text-white/70 font-bold text-xs uppercase mb-4">
+                      {Number(plan.min_sqm) === Number(plan.max_sqm) || !plan.max_sqm
+                        ? `± ${plan.min_sqm || 0} SQM`
+                        : `± ${plan.min_sqm || 0} - ± ${plan.max_sqm || 0} SQM`}
                     </p>
                     <p className="text-gray-600 leading-relaxed text-sm md:text-base">{plan.description || 'Description...'}</p>
                   </div>
