@@ -27,6 +27,7 @@ interface UnitLayout {
   id: number;
   project_id: number;
   tower_name?: string;
+  bg_color?: string; 
   title: string;
   description: string;
   thumbnail: string;
@@ -45,7 +46,7 @@ interface ExtendedDescription {
   editorial_bg_color?: string;
   amenities_title?: string;
   amenities_title_gold?: string;
-  map_subtitle?: string; // Add this
+  map_subtitle?: string; 
 }
 
 interface ProjectTag {
@@ -564,7 +565,10 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
                           className="blueprint-card sticky top-[22vh] w-full min-h-[60vh] lg:h-[65vh] bg-white rounded-xl shadow-[0_-10px_40px_rgba(0,0,0,0.08)] border border-gray-100 overflow-hidden flex flex-col lg:flex-row mb-12 origin-top"
                           style={{ zIndex: index + 1 }}
                         >
-                          <div className="w-full lg:w-2/5 bg-gradient-to-br from-[#051431] via-[#0A1F49] to-[#123062] text-white p-8 md:p-12 lg:p-16 flex flex-col justify-center border-b lg:border-b-0 lg:border-r border-white/10">
+                          <div 
+                              className="w-full lg:w-2/5 text-white p-8 md:p-12 lg:p-16 flex flex-col justify-center border-b lg:border-b-0 lg:border-r border-white/10 transition-colors"
+                              style={{ backgroundColor: plan.bg_color || '#051431' }}
+                            >
                             <div className="text-brand-gold font-mono text-sm mb-4">0{index + 1}</div>
                             <h3 className="text-3xl md:text-4xl lg:text-5xl font-serif text-white mb-4">{plan.title}</h3>
                             <p className="font-sans tracking-widest text-white/70 font-bold text-sm md:text-base mb-8 uppercase">

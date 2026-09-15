@@ -35,13 +35,14 @@ const projectSchema = z.object({
   amenities_title_gold: z.string().optional(),
   tags: z.array(z.object({ tag_name: z.string().min(1, "Tag cannot be empty") })),
   unit_layouts: z.array(z.object({
-  title: z.string().min(1, "Title required"), 
-  tower_name: z.string().min(1, "Tower required"), // Add this
-  description: z.string(), 
-  min_sqm: z.string().min(1, "Required"), 
-  max_sqm: z.string().min(1, "Required"), 
-  thumbnail: z.string()
-})),
+    title: z.string().min(1, "Title required"), 
+    tower_name: z.string().min(1, "Tower required"),
+    bg_color: z.string().optional(), // Add this
+    description: z.string(), 
+    min_sqm: z.string().min(1, "Required"), 
+    max_sqm: z.string().min(1, "Required"), 
+    thumbnail: z.string()
+  })),
   amenities: z.array(z.object({
     title: z.string().min(1, "Title required"), description: z.string(), thumbnail: z.string()
   })),
@@ -130,6 +131,46 @@ function ProjectManager() {
   const [pendingFiles, setPendingFiles] = useState<Record<string, File>>({});
   const [previews, setPreviews] = useState<Record<string, string>>({});
 
+  // Helper to remove an item from previews and pendingFiles, shifting higher indices down
+  const removeNestedFieldFiles = (fieldPrefix: string, removeIndex: number) => {
+    const shiftDictionary = (prevDict: Record<string, any>) => {
+      const updated: Record<string, any> = {};
+
+      Object.entries(prevDict).forEach(([key, val]) => {
+        // Only target keys matching the field prefix (e.g., "amenities.", "unit_layouts.")
+        if (key.startsWith(`${fieldPrefix}.`)) {
+          const rest = key.slice(fieldPrefix.length + 1); // e.g., "0.thumbnail"
+          const dotPos = rest.indexOf('.');
+          const idxStr = dotPos !== -1 ? rest.substring(0, dotPos) : rest;
+          const subKey = dotPos !== -1 ? rest.substring(dotPos) : '';
+          const idx = parseInt(idxStr, 10);
+
+          if (!isNaN(idx)) {
+            if (idx === removeIndex) {
+              // Clean up Object URLs to prevent memory leaks
+              if (typeof val === 'string' && val.startsWith('blob:')) {
+                URL.revokeObjectURL(val);
+              }
+              return; // Drop the deleted item's preview/file
+            }
+            if (idx > removeIndex) {
+              // Shift the index down by 1
+              updated[`${fieldPrefix}.${idx - 1}${subKey}`] = val;
+              return;
+            }
+          }
+        }
+        // Retain any other unrelated keys unchanged
+        updated[key] = val;
+      });
+
+      return updated;
+    };
+
+    setPreviews(shiftDictionary);
+    setPendingFiles(shiftDictionary);
+  };
+
   useEffect(() => {
     return () => Object.values(previews).forEach(url => URL.revokeObjectURL(url));
   }, [previews]);
@@ -191,6 +232,7 @@ function ProjectManager() {
           unit_layouts: data.layoutData.map((l: any) => ({ 
             ...l, 
             tower_name: l.tower_name || "Tower A - Residential",
+            bg_color: l.bg_color || "#051431",
             min_sqm: l.min_sqm ? String(l.min_sqm) : "", 
             max_sqm: l.max_sqm ? String(l.max_sqm) : "" 
           })),
@@ -320,14 +362,21 @@ function ProjectManager() {
       amenities_title_gold: formData.amenities_title_gold || `Way Of Living in ${formData.title || 'this project'}.`
     }],
     amenities: formData.amenities?.length > 0 ? formData.amenities.map((a, i) => ({
-      id: i + 1, title: a.title || `Amenity ${i + 1}`, description: a.description || 'Description...', 
+      id: i + 1, 
+      title: a.title || `Amenity ${i + 1}`, 
+      description: a.description || 'Description...', 
       thumbnail: previews[`amenities.${i}.thumbnail`] || a.thumbnail || BLANK_IMAGE
     })) : [],
     unit_layout: formData.unit_layouts?.length > 0 ? formData.unit_layouts.map((l, i) => ({
-      id: i + 1, title: l.title || `Layout ${i + 1}`, tower_name: l.tower_name || "Tower A - Residential", description: l.description || 'Description...', 
-      min_sqm: l.min_sqm || '0', max_sqm: l.max_sqm || '0', 
-      thumbnail: previews[`unit_layouts.${i}.thumbnail`] || l.thumbnail || BLANK_IMAGE
-    })) : []
+    id: i + 1, 
+    title: l.title || `Layout ${i + 1}`, 
+    tower_name: l.tower_name || "Tower A - Residential",
+    bg_color: l.bg_color || "#051431",
+    description: l.description || 'Description...', 
+    min_sqm: l.min_sqm || '0', 
+    max_sqm: l.max_sqm || '0', 
+    thumbnail: previews[`unit_layouts.${i}.thumbnail`] || l.thumbnail || BLANK_IMAGE
+  })) : []
   };
 
   const labelStyles = "text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1 mt-4";
@@ -511,7 +560,16 @@ function ProjectManager() {
             
             {amenityFields.map((field, index) => (
               <div key={field.id} className="p-4 mt-4 bg-gray-50 border border-gray-100 rounded-lg relative group">
-                <button type="button" onClick={() => removeAmenity(index)} className="absolute top-4 right-4 text-gray-300 hover:text-red-500"><Trash2 size={16}/></button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    removeNestedFieldFiles("amenities", index);
+                    removeAmenity(index);
+                  }} 
+                  className="absolute top-4 right-4 text-gray-300 hover:text-red-500"
+                >
+                  <Trash2 size={16} />
+                </button>
                 
                 <label className={labelStyles}>Amenity Name</label>
                 <input {...register(`amenities.${index}.title`)} className={inputStyles} />
@@ -535,13 +593,30 @@ function ProjectManager() {
           <div>
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="text-xs font-bold text-brand-gold uppercase tracking-widest">Unit Layouts</h3>
-              <button type="button" onClick={() => appendLayout({ title: "", description: "", min_sqm: "", max_sqm: "", thumbnail: "", tower_name: "Tower A - Residential" })} className="text-[10px] text-brand-blue font-bold uppercase flex items-center gap-1"><PlusCircle size={12}/> Add Layout</button>
-            </div>
+              <button type="button" onClick={() => appendLayout({ 
+                title: "", 
+                tower_name: "Tower A - Residential", 
+                bg_color: "#051431", // Add this
+                description: "", 
+                min_sqm: "", 
+                max_sqm: "", 
+                thumbnail: "" 
+              })} className="text-[10px] text-brand-blue font-bold uppercase flex items-center gap-1"><PlusCircle size={12}/> Add Layout</button>
+                          </div>
             
             
             {layoutFields.map((field, index) => (
               <div key={field.id} className="p-4 mt-4 bg-gray-50 border border-gray-100 rounded-lg relative group">
-                <button type="button" onClick={() => removeLayout(index)} className="absolute top-4 right-4 text-gray-300 hover:text-red-500"><Trash2 size={16}/></button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    removeNestedFieldFiles("unit_layouts", index);
+                    removeLayout(index);
+                  }} 
+                  className="absolute top-4 right-4 text-gray-300 hover:text-red-500"
+                >
+                  <Trash2 size={16} />
+                </button>
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -566,6 +641,18 @@ function ProjectManager() {
                       <p className="text-red-500 text-[10px] font-bold mt-1">{errors.unit_layouts[index]?.title?.message}</p>
                     )}
                   </div>
+                </div>
+
+                <div className="mt-4 mb-2">
+                  <ColorInputSync 
+                    label="Card Left Background Color" 
+                    fieldName={`unit_layouts.${index}.bg_color`} 
+                    register={register} 
+                    watch={watch} 
+                    setValue={setValue} 
+                    inputStyles={inputStyles} 
+                    labelStyles={labelStyles} 
+                  />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -643,7 +730,16 @@ function ProjectManager() {
 
             {markerFields.map((field, index) => (
               <div key={field.id} className="p-4 mt-4 bg-gray-50 border border-gray-100 rounded-lg relative group">
-                <button type="button" onClick={() => removeMarker(index)} className="absolute top-4 right-4 text-gray-300 hover:text-red-500"><Trash2 size={16}/></button>
+                <button 
+                type="button" 
+                onClick={() => {
+                  removeNestedFieldFiles("child_markers", index);
+                  removeMarker(index);
+                }} 
+                className="absolute top-4 right-4 text-gray-300 hover:text-red-500"
+              >
+                <Trash2 size={16} />
+              </button>
                 
                 <label className={labelStyles}>Landmark Name</label>
                 <input {...register(`child_markers.${index}.interest_name`)} className={inputStyles} />
