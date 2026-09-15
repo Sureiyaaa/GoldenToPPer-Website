@@ -223,12 +223,14 @@ export default function StoryClient({ milestones }: { milestones: any[] }) {
                   transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
                   className="inline-block text-transparent bg-clip-text bg-gradient-to-r from-brand-gold via-[#fff2cd] to-brand-gold bg-[length:200%_auto] drop-shadow-[0_0_20px_rgba(208,179,112,0.4)] px-4 py-2 overflow-visible"
                 >
-                  Better Cities, Better Lives.
+                  Better Cities, Better Lives
                 </motion.span>
               </h1>
               
               <p className="text-sm sm:text-base md:text-lg lg:text-xl text-white/90 font-normal leading-relaxed max-w-3xl mx-auto drop-shadow-md mb-10 md:mb-12">
-                We don't just build structures; we curate lifestyles. Elevating the standard of living, one iconic project at a time.
+                We don't just build structures; we curate lifestyles.
+                <br />
+                Elevating the standard of living, one iconic project at a time.
               </p>
 
             </div>
@@ -291,7 +293,7 @@ export default function StoryClient({ milestones }: { milestones: any[] }) {
                   {/* Main Background Image */}
                   <div className="absolute top-0 left-0 w-[75%] h-[80%] bg-gray-200 rounded-[2rem] overflow-hidden shadow-lg">
                     <img 
-                      src="/images/story/mission-1.jpg" 
+                      src="/images/story/mission-2.jpg" 
                       alt="Golden Topper Architecture" 
                       className="w-full h-full object-cover" 
                     />
@@ -299,7 +301,7 @@ export default function StoryClient({ milestones }: { milestones: any[] }) {
                   {/* Overlapping Foreground Image */}
                   <div className="absolute bottom-0 right-0 w-[65%] h-[65%] bg-gray-300 rounded-[2rem] overflow-hidden shadow-2xl border-[8px] lg:border-[12px] border-[#F9F9F7] z-10">
                     <img 
-                      src="/images/story/mission-2.jpg" 
+                      src="/images/story/mission-1.jpg" 
                       alt="Golden Topper Engineers" 
                       className="w-full h-full object-cover" 
                     />
@@ -311,8 +313,8 @@ export default function StoryClient({ milestones }: { milestones: any[] }) {
                   <h2 className="text-brand-gold text-4xl lg:text-5xl font-serif mb-6 leading-tight">
                     Our Mission
                   </h2>
-                  <p className="text-gray-900 text-sm md:text-base lg:text-lg font-light leading-relaxed mb-8">
-                    To redefine city skylines across the Philippines and innovate the real estate landscape by delivering world-class residences, sustainable developments, and high-value properties that elevate the standard of living for every homeowner.
+                  <p className="text-gray-900 text-sm md:text-base lg:text-lg font-light leading-relaxed mb-8 text-justify"> 
+                    To redefine city skylines across the Philippines and innovate the real estate landscape by delivering world-class residences, sustainable developments, and high-value properties that elevate the standard of living for every homeowner. 
                   </p>
                   
                   {/* Checkmark Bullets */}
@@ -343,7 +345,7 @@ export default function StoryClient({ milestones }: { milestones: any[] }) {
                   {/* Main Background Image */}
                   <div className="absolute bottom-0 right-0 w-[75%] h-[80%] bg-gray-200 rounded-[2rem] overflow-hidden shadow-lg">
                     <img 
-                      src="/images/story/vision-1.jpg" 
+                      src="/images/story/vision-2.jpg" 
                       alt="Golden Topper Community" 
                       className="w-full h-full object-cover" 
                     />
@@ -351,7 +353,7 @@ export default function StoryClient({ milestones }: { milestones: any[] }) {
                   {/* Overlapping Foreground Image */}
                   <div className="absolute top-0 left-0 w-[65%] h-[65%] bg-gray-300 rounded-[2rem] overflow-hidden shadow-2xl border-[8px] lg:border-[12px] border-[#F9F9F7] z-10">
                     <img 
-                      src="/images/story/vision-2.jpg" 
+                      src="/images/story/vision-1.jpg" 
                       alt="Golden Topper Development" 
                       className="w-full h-full object-cover" 
                     />
