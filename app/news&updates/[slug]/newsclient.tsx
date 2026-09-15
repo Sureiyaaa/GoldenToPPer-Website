@@ -184,17 +184,27 @@ export default function SingleNewsClient({
               </h1>
             </motion.header>
 
-            <motion.article 
-              initial={{ opacity: 0 }}
-              whileInView={{ opacity: 1 }}
-              viewport={{ once: true }}
-              transition={{ duration: 1, delay: 0.2 }}
-              className="prose prose-lg md:prose-xl max-w-[80rem]" /* ALIGNMENT FIX: Keeps reading width clean */
-            >
-              <div className="whitespace-pre-wrap text-base md:text-lg text-gray-600 leading-relaxed font-light">
-                {initialArticle.excerpt}
-              </div>
-            </motion.article>
+            <motion.article
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 1, delay: 0.2 }}
+            className="mt-12 w-full"
+          >
+            <div className="text-base md:text-[17px] text-gray-700 leading-[1.85]">
+              {initialArticle.excerpt
+                .split(/\n+/)
+                .filter(Boolean)
+                .map((paragraph, index) => (
+                  <p
+                    key={index}
+                    className="mb-6 text-left md:text-justify [text-align-last:left]"
+                  >
+                    {paragraph.trim()}
+                  </p>
+                ))}
+            </div>
+          </motion.article>
 
           </div>
         </main>
