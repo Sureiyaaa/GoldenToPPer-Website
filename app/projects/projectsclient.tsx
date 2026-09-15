@@ -221,41 +221,75 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
                           </Link>
 
                           <div className="flex flex-col sm:flex-row gap-3 w-full">
-                            {/* 2. SECONDARY ACTION (360 Tour Button) */}
-                              {hasTour && (
-                                <button
-                                  onClick={() => {
-                                    setActiveTourProject(project);
-                                    const tours = project.virtual_tours || [];
-                                    if (tours.length > 0) {
-                                      setActiveTourUnit(tours[0]);
-                                    } else if (project.virtual_tour_url) {
-                                      setActiveTourUnit({
-                                        id: 'legacy',
-                                        unit_name: 'Main Unit',
-                                        view_areas: [{ title: 'Main View', image: project.virtual_tour_url }]
-                                      });
-                                    }
-                                    setActiveRoomIndex(0);
-                                  }}
-                                  className="group flex-1 flex items-center justify-center gap-3 bg-transparent border border-gray-300 px-4 py-3.5 rounded-sm hover:border-brand-gold hover:bg-brand-gold/5 transition-all duration-300 outline-none cursor-pointer"
-                                >
-                                  <Move3d size={14} className="text-brand-blue group-hover:text-brand-gold transition-colors" />
-                                  <span className="text-[10px] tracking-[0.2em] font-bold text-brand-blue uppercase group-hover:text-brand-gold transition-colors">
-                                    360° Tour
-                                  </span>
-                                </button>
-                              )}
 
-                            {/* 3. Tertiary Action (Details) */}
-                            <Link
-                              href={`/projects/${project.slug?.replace(/^\//, '')}`}
-                              className="group flex-1 flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 px-4 py-3.5 rounded-sm transition-all duration-300 outline-none"
-                            >
-                              <span className="text-[10px] tracking-[0.2em] font-bold text-gray-500 uppercase group-hover:text-brand-blue transition-colors">Details</span>
-                              <ArrowRight size={14} className="text-gray-400 group-hover:text-brand-blue transform group-hover:translate-x-1 transition-all duration-300" />
-                            </Link>
+                        {/* 2. SECONDARY ACTION (360 Tour / Coming Soon) */}
+                        {hasTour ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTourProject(project);
+
+                              const tours = project.virtual_tours || [];
+
+                              if (tours.length > 0) {
+                                setActiveTourUnit(tours[0]);
+                              } else if (project.virtual_tour_url) {
+                                setActiveTourUnit({
+                                  id: 'legacy',
+                                  unit_name: 'Main Unit',
+                                  view_areas: [
+                                    {
+                                      title: 'Main View',
+                                      image: project.virtual_tour_url,
+                                    },
+                                  ],
+                                });
+                              }
+
+                              setActiveRoomIndex(0);
+                            }}
+                            className="group flex-1 flex items-center justify-center gap-3 bg-transparent border border-gray-300 px-4 py-3.5 rounded-sm hover:border-brand-gold hover:bg-brand-gold/5 transition-all duration-300 outline-none cursor-pointer"
+                            aria-label="Open 360 degree virtual tour"
+                          >
+                            <Move3d
+                              size={14}
+                              className="text-brand-blue group-hover:text-brand-gold transition-colors"
+                            />
+
+                            <span className="text-[10px] tracking-[0.2em] font-bold text-brand-blue uppercase group-hover:text-brand-gold transition-colors">
+                              360° Tour
+                            </span>
+                          </button>
+                        ) : (
+                          <div className="w-full sm:flex-1 flex items-center justify-center gap-2.5 py-3.5">
+                            <Move3d
+                              size={14}
+                              strokeWidth={1.8}
+                              className="text-gray-400"
+                            />
+
+                            <span className="text-[10px] tracking-[0.2em] font-bold text-gray-400 uppercase">
+                              Coming Soon
+                            </span>
                           </div>
+                        )}
+
+                        {/* 3. Tertiary Action (Details) */}
+                        <Link
+                          href={`/projects/${project.slug?.replace(/^\//, '')}`}
+                          className="group flex-1 flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 px-4 py-3.5 rounded-sm transition-all duration-300 outline-none"
+                        >
+                          <span className="text-[10px] tracking-[0.2em] font-bold text-gray-500 uppercase group-hover:text-brand-blue transition-colors">
+                            Details
+                          </span>
+
+                          <ArrowRight
+                            size={14}
+                            className="text-gray-400 group-hover:text-brand-blue transform group-hover:translate-x-1 transition-all duration-300"
+                          />
+                        </Link>
+
+                      </div>
                         </div>
                       </div>
                     </div>
