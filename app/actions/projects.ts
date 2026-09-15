@@ -101,6 +101,7 @@ export async function saveProjectAction(payload: any) {
       const layoutRows = finalData.unit_layouts.map((item: any) => ({
         project_id: targetProjectId,
         tower_name: item.tower_name || 'Tower A - Residential',
+        bg_color: item.bg_color || '#051431',
         title: item.title,
         description: item.description || '',
         thumbnail: item.thumbnail || '',
