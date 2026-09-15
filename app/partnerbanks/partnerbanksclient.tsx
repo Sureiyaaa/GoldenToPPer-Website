@@ -58,7 +58,7 @@ function PartnerBanksContent({ initialProjects, initialBanks, initialMappings }:
   const searchParams = useSearchParams();
   const lenisRef = useRef<any>(null); 
   
-  const [activeTab, setActiveTab] = useState("All Projects");
+  const [activeTab, setActiveTab] = useState("City Clou");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formTab, setFormTab] = useState("Pre-Application");
 
@@ -206,34 +206,42 @@ function PartnerBanksContent({ initialProjects, initialBanks, initialMappings }:
         </section>
 
         {/* MAIN CONTENT */}
-        <main className="max-w-[90rem] mx-auto px-6 md:px-12 py-12 -mt-16 relative z-20">
+        <main className="max-w-[90rem] mx-auto px-6 md:px-12 pt-10 pb-12 relative z-20">
           <div className="flex flex-wrap justify-center gap-3 mb-16 bg-white/80 backdrop-blur-md p-3 rounded-sm shadow-sm border border-slate-100 max-w-fit mx-auto">
-            <button
+            {/* <button
               onClick={() => setActiveTab("All Projects")}
               className={`px-6 py-2.5 rounded-sm text-sm font-semibold transition-all duration-300 uppercase tracking-widest text-[12px] ${activeTab === "All Projects" ? "bg-brand-blue text-white shadow-md" : "bg-transparent text-slate-500 hover:text-brand-blue hover:bg-slate-100"}`}
             >
               All Projects
-            </button>
+            </button> */}
 
             {initialProjects.map((project) => {
-            const isUnavailable = project.status?.toLowerCase() === 'sold out';
+              const hasPartnerBanks = initialMappings.some(
+                (mapping) => mapping.project_id === project.id
+              );
+
+              const isUnavailable =
+                project.status?.toLowerCase() === 'sold out' ||
+                !hasPartnerBanks;
+
               return (
                 <button
                   key={project.id}
                   disabled={isUnavailable}
                   onClick={() => setActiveTab(project.title)}
-                  className={`px-6 py-2.5 rounded-sm text-sm font-semibold transition-all duration-300 uppercase tracking-widest text-[12px] ${isUnavailable
-                      ? "bg-slate-100 text-slate-400 cursor-not-allowed opacity-60"
+                  className={`px-6 py-2.5 rounded-sm text-sm font-semibold transition-all duration-300 uppercase tracking-widest text-[12px] ${
+                    isUnavailable
+                      ? "bg-transparent text-slate-300 cursor-not-allowed opacity-60 shadow-none"
                       : activeTab === project.title
                         ? "bg-brand-blue text-white shadow-md"
                         : "bg-transparent text-slate-500 hover:text-brand-blue hover:bg-slate-100"
-                    }`}
+                  }`}
                 >
                   {project.title}
                 </button>
               );
             })}
-          </div>
+            </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
             {filteredBanks.map((bank) => (
