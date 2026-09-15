@@ -183,7 +183,7 @@ export default function PromotionsClient({ initialPromotions, projectImages = []
               {/* Hero Description */}
               <div className="hero-desc lg:col-span-4 lg:pb-6 flex flex-col items-start gap-8">
 
-                <p className="text-lg text-white/90 font-medium leading-relaxed drop-shadow-[0_1px_4px_rgba(0,0,0,0.35)]">
+                <p className="text-[12px] sm:text-base md:text-lg lg:text-xl text-white/90 font-light leading-relaxed max-w-3xl mx-auto drop-shadow-[0_1px_4px_rgba(0,0,0,0.35)] mb-10 md:mb-12">
                   Strategic investments designed for the discerning buyer. Unlock exclusive promotional terms, priority selections, and unmatched value across our premium portfolio.
                 </p>
 
