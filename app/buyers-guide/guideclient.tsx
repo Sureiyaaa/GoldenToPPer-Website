@@ -8,303 +8,369 @@ import PageTransition from '@/app/components/page-transitions';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import Lenis from 'lenis';
-import { ChevronDown, AlertCircle } from 'lucide-react';
+import { ChevronDown, AlertCircle, Phone, Mail } from 'lucide-react';
 
 // ==========================================
-// TABS CONFIGURATION
+// TABS CONFIGURATION (PDF SECTIONS I TO XI)
 // ==========================================
 const TABS = [
-  { id: 'unit-purchase', label: 'UNIT PURCHASE', disabled: false },
-  { id: 'account-updates', label: 'ACCOUNT & PROJECT UPDATES', disabled: false },
-  { id: 'financing-process', label: 'FINANCING PROCESS', disabled: true },
-  { id: 'turnover-movein', label: 'TURN OVER & MOVE IN', disabled: true },
+  { id: 'reservation', label: 'I. RESERVATION & UNIT HOLDING' },
+  { id: 'documentary', label: 'II. DOCUMENTARY REQUIREMENTS' },
+  { id: 'updates', label: 'III. BUYER INFORMATION UPDATES' },
+  { id: 'soa', label: 'IV. STATEMENT OF ACCOUNT (SOA)' },
+  { id: 'receipts', label: 'V. OFFICIAL RECEIPTS & POSTING' },
+  { id: 'account-status', label: 'VI. ACCOUNT STATUS & MONITORING' },
+  { id: 'cancellation', label: 'VII. CANCELLATION & REFUND' },
+  { id: 'payment-methods', label: 'VIII. PAYMENT METHODS' },
+  { id: 'missed-payments', label: 'IX. MISSED OR DELAYED PAYMENTS' },
+  { id: 'financing', label: 'X. FINANCING' },
+  { id: 'transfer-rights', label: 'XI. TRANSFER OF RIGHTS & CONTACT' },
 ];
 
 // ==========================================
-// BUYER'S GUIDE DATA STRUCTURE
+// BUYER'S GUIDE FAQ DATA STRUCTURE (FROM PDF)
 // ==========================================
 const guideData = [
   {
-    id: 'unit-purchase',
+    id: 'reservation',
+    title: 'Reservation and Unit Holding',
     sections: [
       {
         step: '01',
-        title: 'Unit Selection',
+        title: 'How do I reserve a unit?',
         content: (
           <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
-            <p>The journey to owning your dream home starts with selecting the right project and unit. Golden Topper offers a diverse portfolio of projects in various locations, each designed to suit different needs and lifestyles.</p>
-            <p>Have a unit in mind already? You may book a visit to our project showrooms. Our accredited salespersons and Sales Officers shall assist you to confirm the availability of your preferred unit.</p>
-            <p>The total contract price of the unit, your preferred payment terms, and the reservation requirements shall also be discussed.</p>
-            <div className="bg-brand-gold/10 p-5 my-6 rounded-r-sm">
-              <h5 className="text-brand-blue font-bold text-[10px] tracking-widest uppercase mb-2">Helpful Tip</h5>
-              <p className="text-sm text-brand-blue">Visiting our project showroom allows you to experience the project location, and quality of our units firsthand, giving you a clearer vision of your future home. Want to consult with an accredited Golden Topper salesperson? Send us a message on Messenger!</p>
-            </div>
+            <p>A unit may be reserved upon submission of the required reservation documents and payment of the applicable reservation fee, subject to unit availability and Company approval.</p>
           </div>
         )
       },
       {
         step: '02',
-        title: 'Reservation Requirements',
+        title: 'Is the reservation fee refundable?',
         content: (
-          <div className="space-y-6 text-slate-600 font-light leading-relaxed text-sm md:text-base">
-            <p>Once you've selected your project, the next step is securing your unit. This ensures your preferred unit is held for you while completing the documentary requirements and the settlement of the reservation fee.</p>
-            
-            <h5 className="text-brand-blue font-bold text-base mt-6">Document Requirements</h5>
-            <div className="grid md:grid-cols-2 gap-6 mt-2">
-              <div className="bg-white p-6 rounded-sm shadow-sm border border-brand-blue/10">
-                <h6 className="text-brand-blue font-bold text-sm mb-4 tracking-wide">For Individual Buyers</h6>
-                <ul className="list-disc pl-5 space-y-2 text-sm text-slate-500">
-                  <li>Accomplished and Signed Reservation Agreement (RA)</li>
-                  <li>1 Valid Government I.D. w/ 3 Specimen Signatures</li>
-                  <li>Payment Schedule signed by the Buyer</li>
-                </ul>
-              </div>
-              <div className="bg-white p-6 rounded-sm shadow-sm border border-brand-blue/10">
-                <h6 className="text-brand-blue font-bold text-sm mb-4 tracking-wide">For Corporate Clients</h6>
-                <ul className="list-disc pl-5 space-y-2 text-sm text-slate-500">
-                  <li>Accomplished and Signed Reservation Agreement (RA)</li>
-                  <li>1 Valid Government I.D. w/ 3 Specimen Signatures</li>
-                  <li>Payment Schedule signed by the Buyer</li>
-                  <li>Tax Identification Number of All Buyers</li>
-                </ul>
-              </div>
-            </div>
-
-            <div className="bg-slate-50 p-6 rounded-sm border border-slate-100 mt-6">
-              <h5 className="text-brand-blue font-bold text-sm mb-3">Unit Reservation / Reservation Fee</h5>
-              <p className="text-sm mb-4">After the Sales Officer confirms that the documentary requirements are complete, you may proceed to settle the reservation fee, which is non-transferable and non-refundable. The reservation fee may be paid in cash, bank transfer, or through our online payment gateway.</p>
-              <p className="text-sm font-medium text-brand-blue">Please remember to always secure all Official Receipts issued and copies of your reservation documents.</p>
-            </div>
+          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>The reservation fee is generally non-refundable. The specific terms governing the reservation fee shall be as set forth in the applicable reservation agreement, promotional terms (if any), and other signed transaction documents.</p>
           </div>
         )
       },
       {
         step: '03',
-        title: 'Post-Reservation Requirements',
-        content: (
-          <div className="space-y-8 text-slate-600 font-light leading-relaxed text-sm md:text-base">
-            <p>After you have successfully reserved your unit, you will be asked to accomplish requirements to facilitate the sales documentation process, which shall be in two phases: the Booking Phase, and the Contract to Sell Phase.</p>
-            
-            <div className="relative pl-6 border-l border-slate-200">
-              <div className="absolute w-3 h-3 bg-brand-gold rounded-full -left-[6.5px] top-1.5 ring-4 ring-white"></div>
-              <h5 className="text-brand-blue font-bold text-base mb-1">Booking Phase</h5>
-              <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase mb-4">Due Twenty (20) Days from Reservation Date</p>
-              <ul className="list-disc pl-5 space-y-2 text-sm">
-                <li>Accomplished and Signed Reservation Agreement (RA)</li>
-                <li>For check payments: At least first twelve (12) post-dated checks</li>
-                <li>For credit card payments: Fully accomplished and signed Auto Debit Account (ADA) form</li>
-                <li>For cash payments: Payment must be cleared</li>
-                <li>Contract to Sell (CTS) accomplished and signed by the Buyer</li>
-                <li>Payment Schedule signed by the Buyer</li>
-                <li>Taxpayer Identification Number (TIN) of all buyers</li>
-              </ul>
-            </div>
-
-            <div className="relative pl-6 border-l border-slate-200">
-              <div className="absolute w-3 h-3 bg-brand-blue rounded-full -left-[6.5px] top-1.5 ring-4 ring-white"></div>
-              <h5 className="text-brand-blue font-bold text-base mb-1">Contract to Sell (CTS Phase)</h5>
-              <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase mb-4">Due Thirty (30) Days from Reservation Date</p>
-              <p className="text-sm mb-6">Shortly after unit reservation, our Sales Documentation and Control team shall send a cover letter and copies of the CTS for the Buyer's signature. The cover letter shall iterate that the signed CTS must be submitted within thirty (30) days.</p>
-              
-              <div className="grid md:grid-cols-2 gap-6 mb-6">
-                <div className="bg-white p-6 rounded-sm shadow-sm border border-brand-blue/10">
-                  <h6 className="text-brand-blue font-bold text-sm mb-3">For Individual Buyers</h6>
-                  <ul className="list-disc pl-5 space-y-2 text-sm text-slate-500">
-                    <li>CTS signed by the Buyer</li>
-                    <li>Proof of Mailing Address</li>
-                    <li>If married: Copy of Marriage Contract</li>
-                    <li>If annulled: Court Order of Finality</li>
-                    <li>If children below 18 years old are included: Copy of Birth Certificate</li>
-                    <li>If with Attorney-in-Fact: Notarized Special Power of Attorney & Clear copy of valid ID with three (3) specimen signatures</li>
-                  </ul>
-                </div>
-                <div className="bg-white p-6 rounded-sm shadow-sm border border-brand-blue/10">
-                  <h6 className="text-brand-blue font-bold text-sm mb-3">For Corporate Clients</h6>
-                  <ul className="list-disc pl-5 space-y-2 text-sm text-slate-500">
-                    <li>CTS signed by the Buyer & Proof of Mailing Address</li>
-                    <li>Certified true copy of SEC registration, By-Laws, Articles of Incorporation</li>
-                    <li>Copy of Latest General Info Sheet (GIS) & BIR Certificate of Registration (COR)</li>
-                    <li>Notarized Board Resolution & Secretary's Certificate</li>
-                    <li>Valid ID with picture of the corporate secretary and the authorized representative with three (3) specimen signatures</li>
-                  </ul>
-                </div>
-              </div>
-
-              <p className="text-sm mb-4">If the Buyer fails to submit the signed CTS within thirty (30) days, it is presumed they have read the provisions and shall be construed for all legal intents and purposes as his/her acceptance and conformity of all the terms and conditions stipulated in the CTS.</p>
-              <p className="text-sm">For Buyers living outside of the Philippines, consularized copies of CTS should be submitted within 90 days. Upon completion of CTS requirements, notarized copies of CTS shall be provided to the Buyer.</p>
-            </div>
-
-            <div className="bg-red-50/50 p-5 rounded-r-sm mt-6 flex items-start gap-3">
-              <AlertCircle size={18} className="text-red-600 mt-0.5 shrink-0" />
-              <div>
-                <h5 className="text-red-700 font-bold text-[10px] tracking-widest uppercase mb-1">Important Reminder</h5>
-                <p className="text-sm text-red-600/80">Please make sure to complete the requirements within the given time period. Otherwise, your unit reservation will be forfeited and cancelled.</p>
-              </div>
-            </div>
-          </div>
-        )
-      },
-      {
-        step: '04',
-        title: 'General Guidelines',
+        title: 'When will I receive my Contract to Sell (CTS)?',
         content: (
           <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
-            <ul className="list-disc pl-5 space-y-2 text-sm">
-              <li>Documents from abroad must be consularized.</li>
-              <li>Buyers may request for changes or amendments on their records/documents, subject for approval and fee if any.</li>
-              <li>Buyers who are allowed to change mode of payments through Direct Deposit and Bank Fund Transfer must submit their proof of payments to the following:</li>
-            </ul>
-            <div className="grid sm:grid-cols-2 gap-4 mt-6 bg-slate-50 p-6 rounded-sm border border-slate-100 text-sm">
-              <div><strong className="text-brand-blue font-semibold block mb-1">La Vida</strong><a href="mailto:lavidasales@goldentopper.com" className="text-brand-gold hover:underline transition-all">lavidasales@goldentopper.com</a></div>
-              <div><strong className="text-brand-blue font-semibold block mb-1">City Clou</strong><a href="mailto:cityclousales@goldentopper.com" className="text-brand-gold hover:underline transition-all">cityclousales@goldentopper.com</a></div>
-              <div><strong className="text-brand-blue font-semibold block mb-1">Park One</strong><a href="mailto:parkonesales@goldentopper.com" className="text-brand-gold hover:underline transition-all">parkonesales@goldentopper.com</a></div>
-              <div><strong className="text-brand-blue font-semibold block mb-1">El Sol</strong><a href="mailto:elsolsales@goldentopper.com" className="text-brand-gold hover:underline transition-all">elsolsales@goldentopper.com</a></div>
-            </div>
+            <p>The preparation and release of the Contract to Sell (CTS) generally commence after the Welcome Letter has been sent. Under normal processing, the CTS is expected to be available within seven (7) working days, subject to document verification, completion of requirements, and other internal processing procedures.</p>
           </div>
         )
       }
     ]
   },
   {
-    id: 'account-updates',
+    id: 'documentary',
+    title: 'Documentary Requirements',
     sections: [
       {
-        step: '01',
-        title: 'Statement Of Account (SOA)',
-        content: (
-          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
-            <p>Your Statement of Account (SOA) provides a detailed summary of your payments, outstanding balances, and due dates. Keeping track of this ensures you are always updated on the status of your account.</p>
-            <p>Your Accounts Officer will issue SOAs periodically or upon request, ensuring that you're aware of your account's standing at all times.</p>
-            <p className="mt-4">If you have any concerns regarding your SOA, you may reach out to our Customer Service through <a href="mailto:customercare@goldentopper.com" className="text-brand-gold font-semibold hover:underline transition-all">customercare@goldentopper.com</a>.</p>
-            
-            <div className="bg-slate-50 p-6 rounded-sm border border-brand-blue/10 mt-6">
-              <p className="text-sm font-medium text-brand-blue mb-4 uppercase tracking-widest">Email Format Request:</p>
-              <div className="text-sm font-mono text-slate-600 space-y-2 bg-white p-4 border border-brand-blue/10 rounded-sm">
-                <p><strong className="text-brand-blue font-sans">Email Subject:</strong> Request for SOA and Billing Statement</p>
-                <p><strong className="text-brand-blue font-sans">Buyers' Name:</strong> [Your Name]</p>
-                <p><strong className="text-brand-blue font-sans">Project:</strong> [Project Name]</p>
-                <p><strong className="text-brand-blue font-sans">Unit:</strong> [Unit Details]</p>
-              </div>
-            </div>
-          </div>
-        )
-      },
-      {
-        step: '02',
-        title: 'Missed Payments',
-        content: (
-          <div className="space-y-6 text-slate-600 font-light leading-relaxed text-sm md:text-base">
-            <p>Staying up to date with your payment schedule is crucial to maintaining your reservation and ensuring the smooth completion of your home purchase. In the event of a missed payment, we provide support to help you get back on track.</p>
-            <p>To settle missed payments, you may reach out to our Customer Service through <a href="mailto:customercare@goldentopper.com" className="text-brand-gold font-bold hover:underline transition-all">customercare@goldentopper.com</a>.</p>
-
-            <h5 className="text-brand-blue font-bold text-sm mt-10 mb-4 tracking-widest uppercase border-b border-slate-200 pb-2">What Happens When You Miss A Payment?</h5>
-            <ul className="space-y-6 text-sm">
-              <li className="flex gap-4">
-                <div className="mt-1 w-2 h-2 rounded-full bg-brand-gold shrink-0"></div>
-                <p><strong className="text-brand-blue font-semibold block mb-1">Initial Notification</strong> If a payment is missed, you will be promptly notified via email, SMS, or phone call. Our team will send a friendly reminder about the missed payment along with the amount due and the new payment deadline.</p>
-              </li>
-              <li className="flex gap-4">
-                <div className="mt-1 w-2 h-2 rounded-full bg-brand-gold shrink-0"></div>
-                <p><strong className="text-brand-blue font-semibold block mb-1">Late Payment Fees</strong> If the grace period lapses and the payment remains unsettled, late fees or penalties may apply. These penalties typically compound the longer the payment remains outstanding.</p>
-              </li>
-              <li className="flex gap-4">
-                <div className="mt-1 w-2 h-2 rounded-full bg-brand-gold shrink-0"></div>
-                <p><strong className="text-brand-blue font-semibold block mb-1">Payment Extensions</strong> If you anticipate difficulties in meeting an upcoming payment, you can reach out to our Customer Service team to request an extension. While extensions are granted on a case-by-case basis, early communication significantly increases the chances of approval.</p>
-              </li>
-              <li className="flex gap-4">
-                <div className="mt-1 w-2 h-2 rounded-full bg-brand-gold shrink-0"></div>
-                <p><strong className="text-brand-blue font-semibold block mb-1">Revised Payment Terms</strong> If financial difficulties are long-term, we may be able to help you by restructuring your payment terms. This could involve extending the duration of payment terms to reduce monthly payments or temporarily pausing payments until your financial situation stabilizes.</p>
-              </li>
-            </ul>
-
-            <div className="bg-brand-gold/10 border-l-2 border-brand-gold p-5 mt-8 rounded-r-sm">
-              <h5 className="text-brand-blue font-bold text-[10px] tracking-widest uppercase mb-2">Helpful Tip</h5>
-              <p className="text-sm text-brand-blue">You can securely settle your monthly dues from anywhere, at any time, through our online payment gateway, helping you stay on track with your payments effortlessly.</p>
-            </div>
-          </div>
-        )
-      },
-      {
-        step: '03',
-        title: 'Changes To Account',
-        content: (
-          <div className="space-y-6 text-slate-600 font-light leading-relaxed text-sm md:text-base">
-            <p>In the case of changes to your account such as payment terms or personal information, we provide a streamlined process to accommodate these changes, ensuring that your account remains accurate and up-to-date.</p>
-            <p>To process changes to your account, you may reach out to our Customer Service through <a href="mailto:customercare@goldentopper.com" className="text-brand-gold font-bold hover:underline transition-all">customercare@goldentopper.com</a>.</p>
-
-            <ul className="space-y-6 text-sm mt-8">
-              <li className="flex gap-4">
-                <div className="mt-1 w-2 h-2 rounded-full bg-brand-blue shrink-0"></div>
-                <p><strong className="text-brand-blue font-semibold block mb-1">Payment Terms</strong> If you need to adjust your payment terms —such as extending the payment schedule or shifting to a different financing option—our team will work with you to revise your terms in line with your financial situation.</p>
-              </li>
-              <li className="flex gap-4">
-                <div className="mt-1 w-2 h-2 rounded-full bg-brand-blue shrink-0"></div>
-                <p><strong className="text-brand-blue font-semibold block mb-1">Buyer's Information</strong> Should there be any updates to your personal details, such as changes in your contact information, marital status, or legal name, it's important to notify us promptly. This ensures that all future communications and documentation reflect your most current information.</p>
-              </li>
-              <li className="flex gap-4">
-                <div className="mt-1 w-2 h-2 rounded-full bg-brand-blue shrink-0"></div>
-                <p><strong className="text-brand-blue font-semibold block mb-1">Transfer of Information</strong> In certain cases, you may wish to transfer the unit's ownership to a family member or a third party. This requires the submission of formal documents and approvals to finalize the transfer.</p>
-              </li>
-              <li className="flex gap-4">
-                <div className="mt-1 w-2 h-2 rounded-full bg-brand-blue shrink-0"></div>
-                <p><strong className="text-brand-blue font-semibold block mb-1">Amendments of Financing Arrangements</strong> If you're switching from one financing option (e.g., in-house to bank financing) or changing your lender, notify us so we can assist with the necessary steps to update your payment and financing arrangements.</p>
-              </li>
-            </ul>
-          </div>
-        )
-      },
-      {
         step: '04',
-        title: 'Project Updates',
+        title: 'What are the reservation requirements?',
         content: (
           <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
-            <p>Keeping you informed about the progress of your future home is a top priority. Throughout the development, we provide regular project updates to ensure that you are always aware of key milestones, expected timelines, and any potential adjustments.</p>
-            <p>To request for the most recent project updates, you may reach out to our Customer Service through <a href="mailto:customercare@goldentopper.com" className="text-brand-gold font-bold hover:underline">customercare@goldentopper.com</a>.</p>
-            
-            <div className="bg-slate-50 p-6 rounded-sm border border-brand-blue/10 mt-6">
-              <p className="text-sm font-medium text-brand-blue mb-4 uppercase tracking-widest">Email Format Request:</p>
-              <div className="text-sm font-mono text-slate-600 space-y-2 bg-white p-4 border border-brand-blue/10 rounded-sm">
-                <p><strong className="text-brand-blue font-sans">Email Subject:</strong> Request for Project Updates</p>
-                <p><strong className="text-brand-blue font-sans">Buyers' Name:</strong> [Your Name]</p>
-                <p><strong className="text-brand-blue font-sans">Project:</strong> [Project Name]</p>
-                <p><strong className="text-brand-blue font-sans">Unit:</strong> [Unit Details]</p>
-              </div>
+            <p>The following are the standard reservation requirements. Requirements may vary depending on the buyer profile, transaction structure, payment arrangement, and applicable approvals:</p>
+            <ul className="list-disc pl-5 space-y-2 text-sm text-slate-600">
+              <li>Completely accomplished Reservation Agreement, signed by the buyer(s)</li>
+              <li>Clear copy of at least one (1) valid primary government-issued ID with three (3) specimen signatures, subject to original presentation for verification if required</li>
+              <li>Verified and cleared payment of the applicable Reservation Fee</li>
+              <li>Computation Sheet generated from the Company&apos;s official sales system, duly acknowledged and signed by the buyer(s)</li>
+              <li>Written company approval for any duly authorized exception to standard terms or company policies, where applicable</li>
+              <li>Complete Post-Dated Checks (PDCs), where applicable, covering the required down payment obligations</li>
+              <li>Notarized/Consularized/Apostilled Special Power of Attorney (SPA), if transacting through an authorized attorney-in-fact (AIF)</li>
+              <li>Complete and verified contact details of the buyer(s)</li>
+              <li>Proof of Billing for the past 6 months based on the address provided in the Reservation Agreement.</li>
+            </ul>
+            <div className="bg-amber-50/70 border border-brand-gold/30 p-4 rounded-sm mt-4 text-xs md:text-sm text-brand-blue">
+              <strong>Note:</strong> Additional documents may be required as part of the Company&apos;s compliance obligations, including but not limited to requirements under applicable laws such as the Anti-Money Laundering Act (AMLA) and its implementing rules.
             </div>
           </div>
         )
       },
       {
         step: '05',
-        title: 'Cancellations',
+        title: 'What are the requirements for non-individual buyers (e.g., corporations, partnerships, or other juridical entities)?',
+        content: (
+          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>In addition to the standard reservation requirements, the following documents may be required for Corporate or Business Buyers, including corporations, partnerships, sole proprietorships, and similar entities:</p>
+            <ul className="list-disc pl-5 space-y-2 text-sm text-slate-600">
+              <li>Certified true copy of the applicable constitutive documents (e.g., Articles of Incorporation, Articles of Partnership, and/or By-Laws, as applicable)</li>
+              <li>Copy of the latest General Information Sheet (GIS), where applicable</li>
+              <li>Copy of the BIR Certificate of Registration (COR)</li>
+              <li>Notarized Board Resolution, Partner Resolution, Secretary&apos;s Certificate, or equivalent authorization document, indicating the date and place of meeting, authority to purchase the property, and the designated authorized representative</li>
+              <li>Clear copy of valid government-issued ID (bearing photo and signature) of the authorized representative and relevant signatories, including the corporate secretary where applicable, each with three (3) specimen signatures</li>
+              <li>Such other documents as may be required for verification, processing, or compliance with applicable laws and company policies</li>
+            </ul>
+          </div>
+        )
+      },
+      {
+        step: '06',
+        title: 'What happens if I fail to submit required documents on time?',
+        content: (
+          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>Failure to submit the required documents may delay the processing of your purchase and financing application, or other rights and obligations under the applicable transaction documents and Company policies. Buyers are encouraged to comply within the prescribed period.</p>
+          </div>
+        )
+      }
+    ]
+  },
+  {
+    id: 'updates',
+    title: 'Buyer Information Updates',
+    sections: [
+      {
+        step: '07',
+        title: 'What should I do if my personal information changes?',
+        content: (
+          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>Buyers are required to promptly notify the Company of any changes to their personal information (e.g., civil status, address, contact details) and submit the corresponding supporting documents for record updating, subject to applicable Company policies and procedures.</p>
+          </div>
+        )
+      }
+    ]
+  },
+  {
+    id: 'soa',
+    title: 'Statement of Account (SOA)',
+    sections: [
+      {
+        step: '08',
+        title: 'How can I obtain my Statement of Account?',
+        content: (
+          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>Statements of Account may be requested through the Company&apos;s designated channels or Customer Service. The availability of the Statement of Account shall be subject to applicable Company procedures.</p>
+          </div>
+        )
+      },
+      {
+        step: '09',
+        title: 'What should I do if I notice discrepancies in my SOA?',
+        content: (
+          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>If you notice any discrepancies, please contact Customer Service immediately or reach out to the Credit and Collection Department for review, verification, and appropriate action.</p>
+          </div>
+        )
+      }
+    ]
+  },
+  {
+    id: 'receipts',
+    title: 'Official Receipts and Payment Posting',
+    sections: [
+      {
+        step: '10',
+        title: 'When will my payment be posted?',
+        content: (
+          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>Payments are posted after payment verification and reconciliation. Processing timelines may vary depending on the payment channel used.</p>
+          </div>
+        )
+      },
+      {
+        step: '11',
+        title: 'Will I receive an Official Receipt or Sales Invoice or proof of payment?',
+        content: (
+          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>Official Receipts or Sales Invoices will be issued in accordance with applicable tax regulations.</p>
+          </div>
+        )
+      }
+    ]
+  },
+  {
+    id: 'account-status',
+    title: 'Account Status and Monitoring',
+    sections: [
+      {
+        step: '12',
+        title: 'How can I check my account status?',
+        content: (
+          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>Buyers may contact Customer Service through the Company&apos;s designated channels to inquire about payment history, outstanding balances, and through Customer Service or the Buyer Portal (if available).</p>
+          </div>
+        )
+      }
+    ]
+  },
+  {
+    id: 'cancellation',
+    title: 'Cancellation and Refund',
+    sections: [
+      {
+        step: '13',
+        title: 'What happens in the event of cancellation?',
+        content: (
+          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>Any applicable rights, remedies, and refund entitlements shall be determined based on the specific circumstances of the account, the provisions of the Contract to Sell, other applicable signed transaction documents, and applicable laws including, where applicable, Republic Act No. 6552 (Maceda Law). Buyers are encouraged to review their contract and consult the Company for guidance specific to their account.</p>
+          </div>
+        )
+      }
+    ]
+  },
+  {
+    id: 'payment-methods',
+    title: 'Payment Methods',
+    sections: [
+      {
+        step: '14',
+        title: 'What payment channels are accepted?',
         content: (
           <div className="space-y-6 text-slate-600 font-light leading-relaxed text-sm md:text-base">
-            <p>We understand that unforeseen circumstances can arise, and sometimes buyers may need to cancel their home purchase. Our cancellation process is designed to be transparent, efficient, and supportive, ensuring that you are well-informed about your options and obligations.</p>
-            <p>To process your request for cancellation, you may reach out to our Customer Service through <a href="mailto:customercare@goldentopper.com" className="text-brand-gold font-bold hover:underline transition-all">customercare@goldentopper.com</a>.</p>
+            <p>Payments must be made only through the Company&apos;s designated and authorized payment channels, as communicated by the Company from time to time. Buyers are encouraged to transact only through official company payment instructions and should not remit payments through unauthorized persons or channels.</p>
             
-            <ul className="space-y-6 text-sm mt-8">
-              <li className="flex gap-4">
-                <div className="mt-1 w-2 h-2 rounded-full bg-brand-blue shrink-0"></div>
-                <p><strong className="text-brand-blue font-semibold block mb-1">Reservation Fee</strong> The reservation fee paid at the time of your unit reservation is generally non-refundable, as it secures the unit for you and prevents others from reserving it.</p>
-              </li>
-              <li className="flex gap-4">
-                <div className="mt-1 w-2 h-2 rounded-full bg-brand-blue shrink-0"></div>
-                <p><strong className="text-brand-blue font-semibold block mb-1">Other-Refundable Payments (Maceda Law)</strong> Refunds for monthly payments for cancelled units shall be processed in accordance with the Maceda Law. If you have paid at least two years of installments, the law entitles you to a refund equivalent to 50% of your total payments, with additional percentages applicable for longer payment terms. Whereas, if you have paid less than two years of installments, no refund shall be issued.</p>
-              </li>
-            </ul>
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="bg-white p-5 rounded-sm border border-slate-200">
+                <h6 className="text-brand-blue font-bold text-sm mb-3 uppercase tracking-wide">Available Payment Channels:</h6>
+                <ul className="list-disc pl-5 space-y-1 text-sm text-slate-600">
+                  <li>Over-the-counter Bills Payment via partner banks</li>
+                  <li>Online banking Bills Payment</li>
+                  <li>Auto-Debit Arrangement (ADA)</li>
+                  <li>Telegraphic Transfer for bulk payment (ideal for clients abroad)</li>
+                  <li>Dated checks</li>
+                  <li>Post-dated Checks</li>
+                  <li>Cash (allowed only for payments made directly to the company&apos;s authorized cashier)</li>
+                  <li>QR Pay</li>
+                </ul>
+              </div>
 
-            <div className="bg-slate-50 border border-slate-200 p-8 mt-8 rounded-sm">
-              <h5 className="text-brand-blue font-bold text-sm mb-6 tracking-widest uppercase">Alternatives to Cancellation</h5>
-              <ul className="space-y-6 text-sm">
-                <li className="flex gap-4">
-                  <div className="mt-1 w-2 h-2 rounded-full bg-brand-gold shrink-0"></div>
-                  <p><strong className="text-brand-blue font-semibold block mb-1">Revised Payment Plans</strong> If financial difficulties are the cause of the cancellation, consider reaching out to us about adjusting your payment plan. Extending payment terms or deferring payments can help ease financial pressures and keep your account on track.</p>
-                </li>
-                <li className="flex gap-4">
-                  <div className="mt-1 w-2 h-2 rounded-full bg-brand-gold shrink-0"></div>
-                  <p><strong className="text-brand-blue font-semibold block mb-1">Unit Transfer or Reassignment</strong> In some cases, we offer the option to transfer your reservation to another unit or reassign it to a family member or third party. This allows you to retain your investment in a way that suits your changing circumstances.</p>
-                </li>
-              </ul>
+              <div className="bg-white p-5 rounded-sm border border-slate-200">
+                <h6 className="text-brand-blue font-bold text-sm mb-3 uppercase tracking-wide">Accredited Payment Partners:</h6>
+                <ul className="list-disc pl-5 space-y-1 text-sm text-slate-600">
+                  <li>Paynamics (via Golden Topper website)</li>
+                  <li>E-wallets (GCash and Maya)</li>
+                  <li>Aqwire (ideal for remittances from overseas into the Philippines)</li>
+                </ul>
+              </div>
             </div>
+
+            <p className="text-xs md:text-sm text-slate-500 italic">Buyers are encouraged to verify the applicable authorized channels with the Company prior to making any payment.</p>
+          </div>
+        )
+      }
+    ]
+  },
+  {
+    id: 'missed-payments',
+    title: 'Missed or Delayed Payments',
+    sections: [
+      {
+        step: '15',
+        title: 'What happens if I miss a payment?',
+        content: (
+          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>Missed payments may result in consequences under the applicable transaction documents (reservation agreement, Contract to Sell, etc.) and Company policies, including the accrual of penalties. Buyers are encouraged to please coordinate with Customer Service as soon as possible to discuss your available options.</p>
+          </div>
+        )
+      },
+      {
+        step: '16',
+        title: 'What happens if I continuously fail to meet my payment obligations?',
+        content: (
+          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>Continued non-payment may result in penalties, cancellation of the contract, or other consequences in accordance with the Contract to Sell, other related transaction documents, and applicable laws, including Republic Act No. 6552 (Maceda Law) where applicable.</p>
+          </div>
+        )
+      }
+    ]
+  },
+  {
+    id: 'financing',
+    title: 'Financing',
+    sections: [
+      {
+        step: '17',
+        title: 'What financing options may be available?',
+        content: (
+          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>Buyers may explore financing options through banks or other financing institutions acceptable to the Company, subject to qualification, lender approval, and applicable Company requirements. The availability of specific financing channels is subject to change and should be confirmed with the Company.</p>
+          </div>
+        )
+      },
+      {
+        step: '18',
+        title: 'What happens if my bank loan is not approved?',
+        content: (
+          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>If a buyer&apos;s financing application is not approved, the buyer may coordinate with the Company to discuss available payment alternatives, if any, subject to Company approval and applicable policies.</p>
+          </div>
+        )
+      },
+      {
+        step: '19',
+        title: 'How much financing can I obtain?',
+        content: (
+          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>The amount of financing that may be granted is determined solely by the financing institution based on its credit evaluation, policies, and final approval. As a general reference, some financing institutions may offer financing equivalent to a portion of the Total Contract Price, but this is not guaranteed and will vary depending on the lender and the buyer&apos;s qualifications.</p>
+          </div>
+        )
+      },
+      {
+        step: '20',
+        title: 'When should I begin processing my financing?',
+        content: (
+          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>Buyers are generally encouraged to coordinate with their financing application in accordance with the payment schedule and obligations set out in the Contract to Sell. Buyers are generally encouraged to begin this process sufficiently in advance or at least three months prior to the due date, to allow adequate time for lender processing and approval. Delayed application may result in consequences under the CTS.</p>
+          </div>
+        )
+      },
+      {
+        step: '21',
+        title: 'Are interest rates fixed?',
+        content: (
+          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>Interest rates are set by the applicable bank or financing institution and are subject to change based on the institution&apos;s prevailing policies. The Company has no control over, and makes no representations regarding, the interest rates offered by third-party lenders.</p>
+          </div>
+        )
+      }
+    ]
+  },
+  {
+    id: 'transfer-rights',
+    title: 'Transfer of Rights and Customer Service',
+    sections: [
+      {
+        step: '22',
+        title: 'Can I request to transfer my rights over the unit?',
+        content: (
+          <div className="space-y-4 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>Requests for transfer of rights are subject to the provisions of the Contract to Sell, applicable Company policies and requirements, submission of required documents, payment of applicable fees, and Company approval. Submission of a request does not automatically result in approval. The Company reserves the right to evaluate and act on transfer requests in accordance with its policies and the terms of the applicable transaction documents.</p>
+          </div>
+        )
+      },
+      {
+        step: '23',
+        title: 'How do I contact Customer Service?',
+        content: (
+          <div className="space-y-6 text-slate-600 font-light leading-relaxed text-sm md:text-base">
+            <p>For inquiries or concerns, please contact our Customer Care team:</p>
+            <div className="grid sm:grid-cols-2 gap-4 bg-white p-6 rounded-sm border border-slate-200">
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 text-brand-blue">
+                  <Mail size={18} className="text-brand-gold shrink-0" />
+                  <a href="mailto:customercare@goldentopper.com" className="font-semibold text-sm hover:underline hover:text-brand-gold transition-colors">
+                    customercare@goldentopper.com
+                  </a>
+                </div>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-3 text-slate-700">
+                  <Phone size={16} className="text-brand-gold shrink-0" />
+                  <span><strong>Manila:</strong> 0917-309-0594</span>
+                </div>
+                <div className="flex items-center gap-3 text-slate-700">
+                  <Phone size={16} className="text-brand-gold shrink-0" />
+                  <span><strong>Cebu:</strong> 0917-557-0610</span>
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-slate-400 italic">
+              These FAQs are subject to revision without prior notice. For specific account inquiries, please contact the Company&apos;s Customer Service through official channels.
+            </p>
           </div>
         )
       }
@@ -317,14 +383,17 @@ const guideData = [
 // ==========================================
 export default function BuyersGuideClient() {
   const [activeTab, setActiveTab] = useState(TABS[0].id);
-  const [openAccordion, setOpenAccordion] = useState<string | null>('01');
+  const [openAccordion, setOpenAccordion] = useState<string | null>(null);
 
-  // Automatically open the first accordion when switching tabs
+  // Automatically open the first question of the active topic
   useEffect(() => {
-    setOpenAccordion('01');
+    const current = guideData.find(g => g.id === activeTab);
+    if (current && current.sections.length > 0) {
+      setOpenAccordion(current.sections[0].step);
+    }
   }, [activeTab]);
 
-  // --- Lenis Smooth Scroll Setup & Bulletproof Refresh ---
+  // Lenis smooth scroll setup
   useEffect(() => {
     window.history.scrollRestoration = 'manual';
 
@@ -357,7 +426,7 @@ export default function BuyersGuideClient() {
           <Navbar />
         </div>
 
-        {/* Cinematic Hero Area - MAINTAINED FADING BACKGROUND */}
+        {/* Cinematic Hero Area */}
         <section className="relative w-full h-[50vh] min-h-[400px] flex items-center justify-center overflow-hidden bg-[#0A1128]">
           <div className="absolute inset-0 z-0">
             <Image 
@@ -367,18 +436,14 @@ export default function BuyersGuideClient() {
               className="object-cover opacity-40 grayscale mix-blend-luminosity"
               priority
             />
-            {/* Adjusted Gradient */}
-            <div className="absolute inset-0 bg-gradient-to-b from-[#0A1128]/95 via-brand-blue/80 to-[#F9F9F7]"></div>
+            <div className="absolute inset-0 bg-[#142f72]/80"></div>
           </div>
           
           <div className="relative z-10 max-w-[90rem] mx-auto w-full px-6 md:px-12 flex flex-col items-center text-center mt-16">
-            
-            {/* Eyebrow Text */}
             <div className="flex flex-wrap justify-center text-[0.65rem] sm:text-xs md:text-sm tracking-[0.3em] md:tracking-[0.4em] uppercase text-white/80 font-normal mb-4 md:mb-6 gap-4 items-center">
-              Support & Resources
+              Support &amp; Resources
             </div>
             
-            {/* Shining Text */}
             <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-[5.5rem] font-serif text-white leading-[1.1] md:leading-[1.15] tracking-tight mb-4 max-w-5xl drop-shadow-2xl shadow-black py-2">
               <motion.span 
                 initial={{ backgroundPosition: "200% center" }}
@@ -386,137 +451,147 @@ export default function BuyersGuideClient() {
                 transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
                 className="font-normal inline-block text-transparent bg-clip-text bg-gradient-to-r from-brand-gold via-[#fff2cd] to-brand-gold bg-[length:200%_auto] drop-shadow-[0_0_20px_rgba(197,160,113,0.4)] pr-4 pb-2 pt-1 overflow-visible"
               >
-                Buyer's Guide
+                Buyer&apos;s Guide: FAQs
               </motion.span>
             </h1>
             
             <p className="text-white/80 text-sm md:text-base font-normal leading-relaxed max-w-3xl mx-auto drop-shadow-md">
-              Navigate the buying process with ease. Here are valuable insights and expert tips to help you make informed purchasing decisions.
+              Frequently asked questions, requirements, payment policies, and guidelines to assist you throughout your property journey.
             </p>
-
           </div>
         </section>
 
         {/* Content Area with Sticky Sidebar Layout */}
-        <main className="flex-grow max-w-[90rem] mx-auto w-full px-6 md:px-12 py-20 lg:py-32 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-24 relative z-20">
+        <main className="flex-grow max-w-[90rem] mx-auto w-full px-6 md:px-12 py-16 lg:py-24 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 relative z-20">
           
           {/* Desktop Sticky Table of Contents */}
           <aside className="hidden lg:block lg:col-span-4 relative">
-            <div className="sticky top-40 bg-white p-8 rounded-sm shadow-[0_20px_40px_rgba(0,0,0,0.03)] border border-gray-100">
-              <h4 className="text-xs tracking-widest uppercase text-brand-gold font-bold mb-6">Select a Topic</h4>
-              <ul className="space-y-4 text-sm font-medium text-gray-500">
+            <div className="sticky top-32 bg-white p-6 rounded-sm shadow-[0_20px_40px_rgba(0,0,0,0.03)] border border-gray-100 max-h-[calc(100vh-160px)] overflow-y-auto">
+              <h4 className="text-xs tracking-widest uppercase text-brand-gold font-bold mb-4">Select a Section</h4>
+              <ul className="space-y-3 text-sm font-medium">
                 {TABS.map((tab) => {
                   const isActive = activeTab === tab.id;
-                  const isDisabled = tab.disabled;
-
                   return (
                     <li key={tab.id}>
-  <button
-    disabled={isDisabled}
-    onClick={() => !isDisabled && setActiveTab(tab.id)}
-    className={`text-left w-full transition-all duration-300 uppercase tracking-widest text-[11px] font-bold flex items-center gap-2
-      ${isActive 
-        ? 'text-brand-blue' 
-        : isDisabled
-          ? 'text-slate-300 cursor-not-allowed'
-          : 'text-slate-400 hover:text-brand-blue'
-      }
-    `}
-  >
-    {tab.label}
-  </button>
-</li>
-                  )
+                      <button
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`text-left w-full transition-all duration-200 uppercase tracking-wider text-[11px] font-bold py-1.5 px-2 rounded-sm
+                          ${isActive 
+                            ? 'text-brand-blue bg-slate-100 border-l-2 border-brand-gold pl-3' 
+                            : 'text-slate-500 hover:text-brand-blue hover:bg-slate-50'
+                          }
+                        `}
+                      >
+                        {tab.label}
+                      </button>
+                    </li>
+                  );
                 })}
               </ul>
             </div>
           </aside>
 
-          {/* Mobile Tabs */}
+          {/* Mobile Tabs Dropdown/Scroller */}
           <div className="block lg:hidden col-span-1 border-b border-gray-200 pb-4 overflow-x-auto hide-scrollbar">
-            <div className="flex gap-6 min-w-max px-2">
+            <div className="flex gap-4 min-w-max px-2">
               {TABS.map((tab) => {
                 const isActive = activeTab === tab.id;
-                const isDisabled = tab.disabled;
                 return (
                   <button
                     key={tab.id}
-                    disabled={isDisabled}
-                    onClick={() => !isDisabled && setActiveTab(tab.id)}
-                    className={`pb-2 uppercase tracking-widest text-[11px] font-bold transition-colors border-b-2
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`pb-2 uppercase tracking-widest text-[11px] font-bold transition-colors border-b-2 whitespace-nowrap
                       ${isActive 
                         ? 'text-brand-blue border-brand-gold' 
-                        : isDisabled
-                          ? 'text-slate-300 border-transparent cursor-not-allowed'
-                          : 'text-slate-400 border-transparent'
+                        : 'text-slate-400 border-transparent'
                       }
                     `}
                   >
                     {tab.label}
                   </button>
-                )
+                );
               })}
             </div>
           </div>
 
           {/* Main Content (Accordion) */}
-          <div className="lg:col-span-8 flex flex-col gap-4">
-            {activeData && (
-              <motion.div 
-                key={activeTab}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-                className="flex flex-col gap-4"
-              >
-                {activeData.sections.map((section) => {
-                  const isOpen = openAccordion === section.step;
-                  
-                  return (
-                    <div 
-                      key={section.step} 
-                      className={`border rounded-sm transition-all duration-300 overflow-hidden ${
-                        isOpen ? 'border-brand-blue/20 bg-white shadow-lg' : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+          <div className="lg:col-span-8 flex flex-col gap-6">
+            
+            {/* GENERAL DISCLAIMER BOX FROM PDF */}
+            <div className="bg-amber-50/60 border-l-4 border-brand-gold p-6 rounded-r-sm text-xs md:text-sm text-slate-700 leading-relaxed space-y-2">
+              <div className="flex items-center gap-2 text-brand-blue font-bold uppercase tracking-widest text-[10px]">
+                <AlertCircle size={14} className="text-brand-gold" />
+                General Disclaimer
+              </div>
+              <p>
+                These FAQs are provided for general guidance only and do not constitute a binding representation, amendment, or modification of the Contract to Sell (CTS) or any other signed transaction document. They do not create contractual rights, obligations, or entitlements beyond what is expressly set forth in the applicable signed documents and governing law. In the event of any inconsistency between these FAQs and the CTS or other signed transaction documents, the CTS and other signed transaction documents shall prevail.
+              </p>
+            </div>
+
+            {/* Questions Header */}
+            <div className="border-b border-slate-200 pb-3">
+              <h2 className="text-2xl md:text-3xl font-serif text-brand-blue">
+                {activeData.title}
+              </h2>
+            </div>
+
+            {/* Accordion Questions */}
+            <motion.div 
+              key={activeTab}
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+              className="flex flex-col gap-4"
+            >
+              {activeData.sections.map((section) => {
+                const isOpen = openAccordion === section.step;
+                // Strips leading zero: "01" -> "1", "14" -> "14"
+                const cleanNumber = parseInt(section.step, 10);
+                
+                return (
+                  <div 
+                    key={section.step} 
+                    className={`border rounded-sm transition-all duration-300 overflow-hidden ${
+                      isOpen ? 'border-brand-blue/20 bg-white shadow-md' : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                    }`}
+                  >
+                    <button 
+                      onClick={() => setOpenAccordion(isOpen ? null : section.step)}
+                      className={`w-full flex items-center justify-between p-5 md:px-6 transition-colors text-left outline-none ${
+                        isOpen ? 'bg-slate-50/70 pb-3' : 'bg-white hover:bg-slate-50/50'
                       }`}
                     >
-                      <button 
-                        onClick={() => setOpenAccordion(isOpen ? null : section.step)}
-                        className={`w-full flex items-center justify-between p-6 md:p-8 text-left outline-none transition-colors ${
-                          isOpen ? 'bg-slate-50/50' : 'bg-white'
-                        }`}
-                      >
-                        <div className="flex items-center gap-5 md:gap-6">
-                          <span className="text-brand-gold font-light text-xl md:text-2xl tracking-widest">
-                            {section.step}.
-                          </span>
-                          <h3 className={`text-xl md:text-2xl font-serif transition-colors ${isOpen ? 'text-brand-blue' : 'text-slate-700'}`}>
-                            {section.title}
-                          </h3>
-                        </div>
-                        <ChevronDown size={20} className={`transition-transform duration-300 ${isOpen ? 'rotate-180 text-brand-gold' : 'text-slate-400'}`} />
-                      </button>
-                      
-                      <AnimatePresence initial={false}>
-                        {isOpen && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                            className="overflow-hidden"
-                          >
-                            <div className="p-6 md:p-8 pt-0 bg-slate-50/50">
-                              <div className="w-full h-[1px] bg-slate-100 mb-6"></div>
-                              {section.content}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  )
-                })}
-              </motion.div>
-            )}
+                      <div className="flex items-center gap-3 pr-4">
+                        <span className="text-brand-gold font-mono font-bold text-sm shrink-0">
+                          Q{cleanNumber}
+                        </span>
+                        <h3 className={`text-base md:text-lg font-serif font-medium transition-colors leading-snug ${isOpen ? 'text-brand-blue' : 'text-slate-800'}`}>
+                          {section.title}
+                        </h3>
+                      </div>
+                      <ChevronDown size={18} className={`transition-transform duration-300 shrink-0 ${isOpen ? 'rotate-180 text-brand-gold' : 'text-slate-400'}`} />
+                    </button>
+                    
+                    <AnimatePresence initial={false}>
+                      {isOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                          className="overflow-hidden bg-slate-50/70"
+                        >
+                          <div className="px-5 md:px-6 pb-6 pt-1">
+                            <div className="w-full h-[1px] bg-slate-200/60 mb-3.5"></div>
+                            {section.content}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
+            </motion.div>
           </div>
         </main>
 
