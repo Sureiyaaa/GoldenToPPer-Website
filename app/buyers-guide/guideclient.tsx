@@ -429,13 +429,7 @@ export default function BuyersGuideClient() {
         {/* Cinematic Hero Area */}
         <section className="relative w-full h-[50vh] min-h-[400px] flex items-center justify-center overflow-hidden bg-[#0A1128]">
           <div className="absolute inset-0 z-0">
-            <Image 
-              src="/images/buyers-guide/buyers-guide.webp" 
-              alt="Golden Topper Buyer's Guide" 
-              fill 
-              className="object-cover opacity-40 grayscale mix-blend-luminosity"
-              priority
-            />
+            
             <div className="absolute inset-0 bg-[#142f72]/80"></div>
           </div>
           
