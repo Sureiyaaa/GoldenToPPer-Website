@@ -133,81 +133,146 @@ export async function saveProjectAction(payload: any) {
     }
 
     // 5. Unit Layouts
-    // The admin form controls the full set of layouts:
-    // - Add Layout -> new row is inserted on Save
-    // - Trash/remove -> row is omitted and therefore removed on Save
-    // - placement toggles/orders are persisted here as well
+    // Preserve existing unit_layout IDs instead of deleting/recreating every row.
+    //
+    // Existing row with a valid ID -> UPDATE
+    // New form row without an ID     -> INSERT
+    // Existing DB row removed in UI  -> DELETE
+    //
+    // This keeps blueprint URLs such as ?blueprint=546 stable across normal edits.
     const unitLayouts = Array.isArray(finalData.unit_layouts)
       ? finalData.unit_layouts
       : [];
 
-    // Handle storage cleanup for removed/replaced layout images
-    const { data: oldLayouts } = await supabaseAdmin
+    const { data: oldLayouts, error: oldLayoutsError } = await supabaseAdmin
       .from('unit_layout')
-      .select('thumbnail')
+      .select('id, thumbnail')
       .eq('project_id', targetProjectId);
 
+    if (oldLayoutsError) {
+      throw new Error(`Layout fetch error: ${oldLayoutsError.message}`);
+    }
+
+    const existingLayoutIds = new Set(
+      (oldLayouts || []).map((layout: any) => Number(layout.id))
+    );
+
+    const retainedLayoutIds = new Set<number>();
+    const newLayoutRows: any[] = [];
+
+    const buildLayoutValues = (item: any) => ({
+      tower_name: item.tower_name || 'Tower A - Residential',
+      bg_color: item.bg_color || '#051431',
+      title: item.title,
+      description: item.description || '',
+      thumbnail: item.thumbnail || '',
+      min_sqm: item.min_sqm ? parseFloat(item.min_sqm) : null,
+      max_sqm: item.max_sqm ? parseFloat(item.max_sqm) : null,
+
+      // Map popup placement
+      show_on_map_card: Boolean(item.show_on_map_card),
+      map_card_order:
+        item.show_on_map_card && item.map_card_order
+          ? parseInt(String(item.map_card_order), 10)
+          : null,
+
+      // /projects listing placement
+      show_on_project_page: Boolean(item.show_on_project_page),
+      project_page_order:
+        item.show_on_project_page && item.project_page_order
+          ? parseInt(String(item.project_page_order), 10)
+          : null,
+    });
+
+    for (const item of unitLayouts) {
+      const parsedId =
+        item.id !== undefined && item.id !== null && item.id !== ''
+          ? Number(item.id)
+          : null;
+
+      const isExistingLayout =
+        parsedId !== null &&
+        Number.isInteger(parsedId) &&
+        existingLayoutIds.has(parsedId);
+
+      if (isExistingLayout) {
+        const { error: updateLayoutError } = await supabaseAdmin
+          .from('unit_layout')
+          .update(buildLayoutValues(item))
+          .eq('project_id', targetProjectId)
+          .eq('id', parsedId);
+
+        if (updateLayoutError) {
+          throw new Error(
+            `Layout update error (${parsedId}): ${updateLayoutError.message}`
+          );
+        }
+
+        retainedLayoutIds.add(parsedId);
+      } else {
+        newLayoutRows.push({
+          project_id: targetProjectId,
+          ...buildLayoutValues(item),
+        });
+      }
+    }
+
+    // Insert layouts that were newly added in the admin form.
+    if (newLayoutRows.length > 0) {
+      const { error: insertLayoutError } = await supabaseAdmin
+        .from('unit_layout')
+        .insert(newLayoutRows);
+
+      if (insertLayoutError) {
+        throw new Error(`Layout insert error: ${insertLayoutError.message}`);
+      }
+    }
+
+    // Delete only layouts that existed before but were removed from the admin form.
+    const removedLayoutIds = (oldLayouts || [])
+      .map((layout: any) => Number(layout.id))
+      .filter((id: number) => !retainedLayoutIds.has(id));
+
+    if (removedLayoutIds.length > 0) {
+      const { error: deleteLayoutError } = await supabaseAdmin
+        .from('unit_layout')
+        .delete()
+        .eq('project_id', targetProjectId)
+        .in('id', removedLayoutIds);
+
+      if (deleteLayoutError) {
+        throw new Error(`Layout delete error: ${deleteLayoutError.message}`);
+      }
+    }
+
+    // Clean up old layout images only after the DB mutations succeeded.
+    // This covers both removed layouts and images replaced on an existing layout.
     const newLayoutUrls = unitLayouts
       .map((layout: any) => layout.thumbnail)
       .filter(Boolean);
 
-    if (oldLayouts) {
-      for (const layout of oldLayouts) {
-        if (
-          layout.thumbnail &&
-          !newLayoutUrls.includes(layout.thumbnail) &&
-          layout.thumbnail.includes('/storage/v1/object/public/images/')
-        ) {
-          const oldStoragePath =
-            layout.thumbnail.split('/storage/v1/object/public/images/')[1];
+    for (const oldLayout of oldLayouts || []) {
+      if (
+        oldLayout.thumbnail &&
+        !newLayoutUrls.includes(oldLayout.thumbnail) &&
+        oldLayout.thumbnail.includes('/storage/v1/object/public/images/')
+      ) {
+        const oldStoragePath =
+          oldLayout.thumbnail.split('/storage/v1/object/public/images/')[1];
 
-          if (oldStoragePath) {
-            await supabaseAdmin.storage
-              .from('images')
-              .remove([oldStoragePath]);
+        if (oldStoragePath) {
+          const { error: storageCleanupError } = await supabaseAdmin.storage
+            .from('images')
+            .remove([oldStoragePath]);
+
+          // A storage cleanup problem should not undo an otherwise valid project save.
+          if (storageCleanupError) {
+            console.warn(
+              `Failed to clean up old layout image for layout ${oldLayout.id}:`,
+              storageCleanupError
+            );
           }
         }
-      }
-    }
-
-    // Existing behavior: rebuild this project's unit-layout rows from the form.
-    await supabaseAdmin
-      .from('unit_layout')
-      .delete()
-      .eq('project_id', targetProjectId);
-
-    if (unitLayouts.length > 0) {
-      const layoutRows = unitLayouts.map((item: any) => ({
-        project_id: targetProjectId,
-        tower_name: item.tower_name || 'Tower A - Residential',
-        bg_color: item.bg_color || '#051431',
-        title: item.title,
-        description: item.description || '',
-        thumbnail: item.thumbnail || '',
-        min_sqm: item.min_sqm ? parseFloat(item.min_sqm) : null,
-        max_sqm: item.max_sqm ? parseFloat(item.max_sqm) : null,
-
-        // Map popup placement
-        show_on_map_card: Boolean(item.show_on_map_card),
-        map_card_order:
-          item.show_on_map_card && item.map_card_order
-            ? parseInt(String(item.map_card_order), 10)
-            : null,
-
-        // /projects listing placement
-        show_on_project_page: Boolean(item.show_on_project_page),
-        project_page_order:
-          item.show_on_project_page && item.project_page_order
-            ? parseInt(String(item.project_page_order), 10)
-            : null,
-      }));
-
-      const { error: layoutError } = await supabaseAdmin
-        .from('unit_layout')
-        .insert(layoutRows);
-
-      if (layoutError) {
-        throw new Error(`Layout error: ${layoutError.message}`);
       }
     }
 

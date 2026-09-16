@@ -35,6 +35,7 @@ const projectSchema = z.object({
   amenities_title_gold: z.string().optional(),
   tags: z.array(z.object({ tag_name: z.string().min(1, "Tag cannot be empty") })),
   unit_layouts: z.array(z.object({
+    id: z.union([z.number(), z.string()]).optional().nullable(),
     title: z.string().min(1, "Title required"), 
     tower_name: z.string().min(1, "Tower required"),
     bg_color: z.string().optional(), // Add this
@@ -194,7 +195,15 @@ function ProjectManager() {
 
   const { fields: tagFields, append: appendTag, remove: removeTag } = useFieldArray({ control, name: "tags" });
   const { fields: amenityFields, append: appendAmenity, remove: removeAmenity } = useFieldArray({ control, name: "amenities" });
-  const { fields: layoutFields, append: appendLayout, remove: removeLayout } = useFieldArray({ control, name: "unit_layouts" });
+  const {
+    fields: layoutFields,
+    append: appendLayout,
+    remove: removeLayout
+  } = useFieldArray({
+    control,
+    name: "unit_layouts",
+    keyName: "fieldKey"
+  });
   const { fields: markerFields, append: appendMarker, remove: removeMarker } = useFieldArray({ control, name: "child_markers" });
 
   useEffect(() => {
@@ -382,7 +391,7 @@ function ProjectManager() {
       thumbnail: previews[`amenities.${i}.thumbnail`] || a.thumbnail || BLANK_IMAGE
     })) : [],
     unit_layout: formData.unit_layouts?.length > 0 ? formData.unit_layouts.map((l, i) => ({
-    id: i + 1, 
+    id: l.id ?? i + 1, 
     title: l.title || `Layout ${i + 1}`, 
     tower_name: l.tower_name || "Tower A - Residential",
     bg_color: l.bg_color || "#051431",
@@ -656,7 +665,7 @@ function ProjectManager() {
 
               return (
                 <div
-                  key={field.id}
+                  key={field.fieldKey}
                   className="p-4 mt-4 bg-gray-50 border border-gray-100 rounded-xl relative group shadow-sm"
                 >
                   <button
