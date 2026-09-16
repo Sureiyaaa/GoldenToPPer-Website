@@ -156,11 +156,25 @@ export default function PromotionsClient({ initialPromotions, projectImages = []
                 <h1 className="text-6xl sm:text-7xl lg:text-[8.5rem] font-serif font-normal leading-[0.95] tracking-tight">
 
                   <div className="overflow-hidden pb-2">
-                    <motion.div initial={{ backgroundPosition: '200% center' }} animate={{ backgroundPosition: '-200% center' }} transition={{ repeat: Infinity, duration: 20, ease: 'linear' }} className="hero-word text-transparent bg-clip-text bg-[linear-gradient(115deg,#173B85_0%,#173B85_38%,#D6B65E_48%,#FFF2CD_52%,#173B85_62%,#173B85_100%)] bg-[length:250%_100%]">Golden</motion.div>
+                    <motion.div
+                    initial={{ backgroundPosition: '200% center' }}
+                    animate={{ backgroundPosition: '-200% center' }}
+                    transition={{ repeat: Infinity, duration: 20, ease: 'linear' }}
+                    className="hero-word text-transparent bg-clip-text bg-[linear-gradient(115deg,#142f72_0%,#142f72_38%,#D6B65E_48%,#FFF2CD_52%,#142f72_62%,#142f72_100%)] bg-[length:250%_100%]"
+                  >
+                    Golden
+                  </motion.div>
                   </div>
 
                   <div className="overflow-hidden pb-4">
-                    <motion.div initial={{ backgroundPosition: '200% center' }} animate={{ backgroundPosition: '-200% center' }} transition={{ repeat: Infinity, duration: 20, ease: 'linear' }} className="hero-word text-transparent bg-clip-text bg-[linear-gradient(115deg,#B88929_0%,#CDA43E_38%,#FFF2CD_49%,#FFF9E8_52%,#D5AE4B_62%,#B88929_100%)] bg-[length:250%_100%] drop-shadow-[0_0_20px_rgba(197,160,113,0.25)]">Opportunities</motion.div>
+                    <motion.div
+                    initial={{ backgroundPosition: '200% center' }}
+                    animate={{ backgroundPosition: '-200% center' }}
+                    transition={{ repeat: Infinity, duration: 20, ease: 'linear' }}
+                    className="hero-word text-transparent bg-clip-text bg-[linear-gradient(115deg,#d0b370_0%,#d0b370_38%,#F4E8C9_49%,#FFF9E8_52%,#DFC996_62%,#d0b370_100%)] bg-[length:250%_100%] drop-shadow-[0_0_20px_rgba(208,179,112,0.25)]"
+                  >
+                    Opportunities
+                  </motion.div>
                   </div>
 
                 </h1>
@@ -169,7 +183,7 @@ export default function PromotionsClient({ initialPromotions, projectImages = []
               {/* Hero Description */}
               <div className="hero-desc lg:col-span-4 lg:pb-6 flex flex-col items-start gap-8">
 
-                <p className="text-lg text-white/90 font-medium leading-relaxed drop-shadow-[0_1px_4px_rgba(0,0,0,0.35)]">
+                <p className="text-[12px] sm:text-base md:text-lg lg:text-xl text-white/90 font-light leading-relaxed max-w-3xl mx-auto drop-shadow-[0_1px_4px_rgba(0,0,0,0.35)] mb-10 md:mb-12">
                   Strategic investments designed for the discerning buyer. Unlock exclusive promotional terms, priority selections, and unmatched value across our premium portfolio.
                 </p>
 

@@ -375,7 +375,7 @@ export default function InquireClient({
                   }}
                   className="inline-block text-transparent bg-clip-text bg-gradient-to-r from-brand-gold via-[#e6c96b] to-brand-gold bg-[length:200%_auto] pr-4 pb-1 overflow-visible"
                 >
-                  Golden Topper.
+                  Golden Topper
                 </motion.span>
               </h1>
 
