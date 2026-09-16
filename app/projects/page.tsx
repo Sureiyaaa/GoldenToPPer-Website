@@ -1,14 +1,16 @@
-import { createClient } from '@supabase/supabase-js'; 
+import { createClient } from '@supabase/supabase-js';
 import ProjectsClient from './projectsclient';
 import type { Metadata } from 'next';
 
 // SEO Configuration for the Projects Directory
 export const metadata: Metadata = {
   title: 'Our Projects | Golden Topper',
-  description: 'Explore Golden Topper\'s premium real estate developments across the Philippines, including pre-selling and ready-for-occupancy properties.',
+  description:
+    "Explore Golden Topper's premium real estate developments across the Philippines, including pre-selling and ready-for-occupancy properties.",
   openGraph: {
     title: 'Our Projects | Golden Topper',
-    description: 'Explore premium residential and commercial real estate developments by Golden Topper.',
+    description:
+      'Explore premium residential and commercial real estate developments by Golden Topper.',
     url: 'https://www.goldentopper.vercel.app/projects',
     siteName: 'Golden Topper',
     images: [
@@ -17,14 +19,14 @@ export const metadata: Metadata = {
         width: 1200,
         height: 630,
         alt: 'Golden Topper Projects Directory',
-      }
+      },
     ],
     locale: 'en_PH',
     type: 'website',
   },
 };
 
-export const revalidate = 60; 
+export const revalidate = 60;
 
 export default async function ProjectsPage() {
   // Utilizing the raw supabase-js client to ensure build stability on the server
@@ -37,9 +39,18 @@ export default async function ProjectsPage() {
     .from('project_table')
     .select(`
       *,
-      unit_layout (title),
-      project_tag (tags (tag_name)),
-      virtual_tours (*) 
+      unit_layout (
+        id,
+        title,
+        show_on_project_page,
+        project_page_order
+      ),
+      project_tag (
+        tags (
+          tag_name
+        )
+      ),
+      virtual_tours (*)
     `)
     .is('deleted_at', null)
     .eq('is_active', true)
@@ -51,19 +62,39 @@ export default async function ProjectsPage() {
 
   const serializedProjects = (data || []).map((item: any) => ({
     id: item.id,
-    name: item.title, 
+    name: item.title,
     address: item.address,
     city: item.city,
     slug: item.slug,
     image: item.image || '/images/placeholder.webp',
     proximity: item.proximity,
-    statusText: item.status || "Pre-Selling",
-    tags: item.project_tag?.map((pt: any) => pt.tags.tag_name) || [],
-    units: [...new Set((item.unit_layout || []).map((u: any) => u.title))] as string[],
-    
+    statusText: item.status || 'Pre-Selling',
+
+    tags:
+      item.project_tag
+        ?.map((pt: any) => pt.tags?.tag_name)
+        .filter(Boolean) || [],
+
+    units: [
+      ...new Set(
+        (item.unit_layout || [])
+          .filter((unit: any) => unit.show_on_project_page)
+          .sort(
+            (a: any, b: any) =>
+              (a.project_page_order ?? Number.MAX_SAFE_INTEGER) -
+              (b.project_page_order ?? Number.MAX_SAFE_INTEGER)
+          )
+          .map((unit: any) => unit.title)
+      ),
+    ] as string[],
+
     // Pass the 360 tour data and the old fallback url
-    virtual_tours: item.virtual_tours?.filter((tour: any) => tour.status === 'Active') || [],
-    virtual_tour_url: item.virtual_tour_url || null
+    virtual_tours:
+      item.virtual_tours?.filter(
+        (tour: any) => tour.status === 'Active'
+      ) || [],
+
+    virtual_tour_url: item.virtual_tour_url || null,
   }));
 
   return <ProjectsClient initialProjects={serializedProjects} />;

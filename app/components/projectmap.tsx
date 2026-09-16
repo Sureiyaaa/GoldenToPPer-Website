@@ -29,7 +29,15 @@ interface Project {
   slug: string;
   coords: [number, number];
   image: string;
-  unit: { id: number; title: string; thumbnail: string }[];
+
+  unit: {
+    id: number;
+    title: string;
+    thumbnail: string;
+    show_on_map_card: boolean;
+    map_card_order: number | null;
+  }[];
+
   type?: string;
   icon?: string;
   drivetime?: string;
@@ -236,36 +244,59 @@ export default function ProjectMap({ projectKey, onProjectSelect }: UnifiedMapPr
   const fetchGlobalMapData = async () => {
     try {
       const { data, error } = await supabase
-        .from('project_table')
-        .select(`
-          id, title, address, city, slug, image, map_icon,
-          parent_marker (latitude, longitude),
-          unit_layout (id, title, thumbnail)
-        `)
-        .is('deleted_at', null)
-        .eq('is_active', true);
+  .from("project_table")
+  .select(`
+    id,
+    title,
+    address,
+    city,
+    slug,
+    image,
+    map_icon,
+    parent_marker (latitude, longitude),
+    unit_layout (
+      id,
+      title,
+      thumbnail,
+      show_on_map_card,
+      map_card_order
+    )
+  `)
+  .is("deleted_at", null)
+  .eq("is_active", true);
 
       if (error) throw error;
 
       const formattedProjects: Project[] = data.map((item: any) => {
-        const marker = Array.isArray(item.parent_marker) ? item.parent_marker[0] : item.parent_marker;
-        return {
-          id: item.id,
-          name: item.title,
-          address: item.address,
-          city: item.city || '',
-          slug: item.slug,
-          coords: [parseFloat(marker?.latitude || 0), parseFloat(marker?.longitude || 0)],
-          image: item.image || '/images/placeholder.webp',
-          icon: item.map_icon || '/images/projectmap/pin.png', // Fallback to your default PNG if empty
-          unit: item.unit_layout?.map((u: any) => ({
-            id: u.id,
-            title: u.title,
-            thumbnail: u.thumbnail
-          })) || [],
-          type: 'project'
-        };
-      });
+  const marker = Array.isArray(item.parent_marker)
+    ? item.parent_marker[0]
+    : item.parent_marker;
+
+  return {
+    id: item.id,
+    name: item.title,
+    address: item.address,
+    city: item.city || "",
+    slug: item.slug,
+    coords: [
+      parseFloat(marker?.latitude || 0),
+      parseFloat(marker?.longitude || 0),
+    ],
+    image: item.image || "/images/placeholder.webp",
+    icon: item.map_icon || "/images/projectmap/pin.png",
+
+    unit:
+      item.unit_layout?.map((u: any) => ({
+        id: u.id,
+        title: u.title,
+        thumbnail: u.thumbnail,
+        show_on_map_card: u.show_on_map_card,
+        map_card_order: u.map_card_order,
+      })) || [],
+
+    type: "project",
+  };
+});
 
       setProjects(formattedProjects.filter(p => p.coords[0] !== 0));
     } catch (error) {
@@ -286,6 +317,17 @@ export default function ProjectMap({ projectKey, onProjectSelect }: UnifiedMapPr
     : [12.2797, 122.7740];
 
   const defaultZoom = isUnifiedMode ? 15 : 6;
+
+  // Unit layouts explicitly selected in Supabase for the project map card.
+  // `show_on_map_card` controls visibility and `map_card_order` controls order.
+  const mapCardUnits =
+    activeProject?.unit
+      ?.filter((unit) => unit.show_on_map_card)
+      .sort(
+        (a, b) =>
+          (a.map_card_order ?? Number.MAX_SAFE_INTEGER) -
+          (b.map_card_order ?? Number.MAX_SAFE_INTEGER)
+      ) ?? [];
 
   return (
     <div className="relative w-full h-[650px] md:h-[600px] bg-brand-blue rounded-2xl overflow-hidden shadow-2xl border border-gray-200">
@@ -529,9 +571,9 @@ export default function ProjectMap({ projectKey, onProjectSelect }: UnifiedMapPr
                 )}
 
                 {/* HOVER TAGS SECTION */}
-                {!isUnifiedMode && activeProject.unit && activeProject.unit.length > 0 && (
+                {!isUnifiedMode && mapCardUnits.length > 0 && (
                   <div className="hidden md:flex flex-wrap gap-2 content-start mt-1 relative">
-                    {activeProject.unit.slice(0, 3).map((unitItem) => (
+                    {mapCardUnits.map((unitItem) => (
                       <Link
                         key={`${activeProject.id}-${unitItem.id}`}
                         href={`/projects/${activeProject.slug}?blueprint=${unitItem.id}#blueprints`}
