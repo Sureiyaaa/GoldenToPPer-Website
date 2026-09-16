@@ -202,14 +202,16 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
                         </div>
 
                         {/* Units */}
-                        <div className="mb-12 flex flex-wrap gap-x-6 gap-y-3 text-sm font-semibold text-gray-600">
-                          {project.units?.map((unitTitle: string, i: number) => (
-                            <div key={i} className="flex items-center gap-2">
-                              <span className="h-1.5 w-1.5 rounded-full bg-brand-gold"></span>
-                              {unitTitle}
-                            </div>
-                          ))}
-                        </div>
+                        {project.units?.length > 0 && (
+                          <div className="mb-12 flex flex-wrap gap-x-6 gap-y-3 text-sm font-semibold text-gray-600">
+                            {project.units.map((unitTitle: string, i: number) => (
+                              <div key={i} className="flex items-center gap-2">
+                                <span className="h-1.5 w-1.5 rounded-full bg-brand-gold"></span>
+                                {unitTitle}
+                              </div>
+                            ))}
+                          </div>
+                        )}
 
                         {/* Buttons */}
                         <div className="flex flex-col gap-3 w-full md:w-[90%]">
@@ -580,4 +582,4 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
       </div>
     </PageTransition>
   );
-}
+} 

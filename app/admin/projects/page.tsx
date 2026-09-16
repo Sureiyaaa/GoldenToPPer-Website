@@ -35,13 +35,18 @@ const projectSchema = z.object({
   amenities_title_gold: z.string().optional(),
   tags: z.array(z.object({ tag_name: z.string().min(1, "Tag cannot be empty") })),
   unit_layouts: z.array(z.object({
+    id: z.union([z.number(), z.string()]).optional().nullable(),
     title: z.string().min(1, "Title required"), 
     tower_name: z.string().min(1, "Tower required"),
     bg_color: z.string().optional(), // Add this
     description: z.string(), 
     min_sqm: z.string().min(1, "Required"), 
     max_sqm: z.string().min(1, "Required"), 
-    thumbnail: z.string()
+    thumbnail: z.string(),
+    show_on_map_card: z.boolean().optional(),
+    map_card_order: z.string().optional(),
+    show_on_project_page: z.boolean().optional(),
+    project_page_order: z.string().optional()
   })),
   amenities: z.array(z.object({
     title: z.string().min(1, "Title required"), description: z.string(), thumbnail: z.string(), tower: z.string().nullable().optional()
@@ -201,7 +206,15 @@ function ProjectManager() {
 
   const { fields: tagFields, append: appendTag, remove: removeTag } = useFieldArray({ control, name: "tags" });
   const { fields: amenityFields, append: appendAmenity, remove: removeAmenity } = useFieldArray({ control, name: "amenities" });
-  const { fields: layoutFields, append: appendLayout, remove: removeLayout } = useFieldArray({ control, name: "unit_layouts" });
+  const {
+    fields: layoutFields,
+    append: appendLayout,
+    remove: removeLayout
+  } = useFieldArray({
+    control,
+    name: "unit_layouts",
+    keyName: "fieldKey"
+  });
   const { fields: markerFields, append: appendMarker, remove: removeMarker } = useFieldArray({ control, name: "child_markers" });
 
   useEffect(() => {
@@ -245,7 +258,11 @@ function ProjectManager() {
             tower_name: l.tower_name || "Tower A - Residential",
             bg_color: l.bg_color || "#051431",
             min_sqm: l.min_sqm ? String(l.min_sqm) : "", 
-            max_sqm: l.max_sqm ? String(l.max_sqm) : "" 
+            max_sqm: l.max_sqm ? String(l.max_sqm) : "",
+            show_on_map_card: Boolean(l.show_on_map_card),
+            map_card_order: l.map_card_order != null ? String(l.map_card_order) : "",
+            show_on_project_page: Boolean(l.show_on_project_page),
+            project_page_order: l.project_page_order != null ? String(l.project_page_order) : ""
           })),
 
           amenities: data.amenityData.map((a: any) => ({
@@ -307,6 +324,12 @@ function ProjectManager() {
   );
   
   const hasErrors = Object.keys(errors).length > 0;
+
+  const mapCardLayoutCount =
+    formData.unit_layouts?.filter((layout) => layout.show_on_map_card).length || 0;
+
+  const projectPageLayoutCount =
+    formData.unit_layouts?.filter((layout) => layout.show_on_project_page).length || 0;
 
   const onSubmit = async (data: ProjectFormData) => {
     setIsSaving(true);
@@ -398,14 +421,18 @@ function ProjectManager() {
       thumbnail: previews[`amenities.${i}.thumbnail`] || a.thumbnail || BLANK_IMAGE
     })) : [],
     unit_layout: formData.unit_layouts?.length > 0 ? formData.unit_layouts.map((l, i) => ({
-    id: i + 1, 
+    id: l.id ?? i + 1, 
     title: l.title || `Layout ${i + 1}`, 
     tower_name: l.tower_name || "Tower A - Residential",
     bg_color: l.bg_color || "#051431",
     description: l.description || 'Description...', 
     min_sqm: l.min_sqm || '0', 
     max_sqm: l.max_sqm || '0', 
-    thumbnail: previews[`unit_layouts.${i}.thumbnail`] || l.thumbnail || BLANK_IMAGE
+    thumbnail: previews[`unit_layouts.${i}.thumbnail`] || l.thumbnail || BLANK_IMAGE,
+    show_on_map_card: l.show_on_map_card || false,
+    map_card_order: l.map_card_order || "",
+    show_on_project_page: l.show_on_project_page || false,
+    project_page_order: l.project_page_order || ""
   })) : []
   };
 
@@ -638,94 +665,302 @@ function ProjectManager() {
           {/* Section 5: Blueprints */}
           <div>
             <div className="flex justify-between items-center border-b pb-2">
-              <h3 className="text-xs font-bold text-brand-gold uppercase tracking-widest">Unit Layouts</h3>
-              <button type="button" onClick={() => appendLayout({ 
-                title: "", 
-                tower_name: "Tower A - Residential", 
-                bg_color: "#051431", // Add this
-                description: "", 
-                min_sqm: "", 
-                max_sqm: "", 
-                thumbnail: "" 
-              })} className="text-[10px] text-brand-blue font-bold uppercase flex items-center gap-1"><PlusCircle size={12}/> Add Layout</button>
-                          </div>
-            
-            
-            {layoutFields.map((field, index) => (
-              <div key={field.id} className="p-4 mt-4 bg-gray-50 border border-gray-100 rounded-lg relative group">
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    removeNestedFieldFiles("unit_layouts", index);
-                    removeLayout(index);
-                  }} 
-                  className="absolute top-4 right-4 text-gray-300 hover:text-red-500"
-                >
-                  <Trash2 size={16} />
-                </button>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelStyles}>Tower Name</label>
-                    <input 
-                      {...register(`unit_layouts.${index}.tower_name`)} 
-                      placeholder="e.g. Tower A - Residential" 
-                      className={inputStyles} 
-                    />
-                    {errors?.unit_layouts?.[index]?.tower_name && (
-                      <p className="text-red-500 text-[10px] font-bold mt-1">{errors.unit_layouts[index]?.tower_name?.message}</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className={labelStyles}>Layout Title</label>
-                    <input 
-                      {...register(`unit_layouts.${index}.title`)} 
-                      placeholder="e.g. Studio Unit" 
-                      className={inputStyles} 
-                    />
-                    {errors?.unit_layouts?.[index]?.title && (
-                      <p className="text-red-500 text-[10px] font-bold mt-1">{errors.unit_layouts[index]?.title?.message}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-4 mb-2">
-                  <ColorInputSync 
-                    label="Card Left Background Color" 
-                    fieldName={`unit_layouts.${index}.bg_color`} 
-                    register={register} 
-                    watch={watch} 
-                    setValue={setValue} 
-                    inputStyles={inputStyles} 
-                    labelStyles={labelStyles} 
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelStyles}>Min SQM</label>
-                    <input type="text" {...register(`unit_layouts.${index}.min_sqm`)} className={inputStyles} />
-                    {errors?.unit_layouts?.[index]?.min_sqm && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.unit_layouts[index]?.min_sqm?.message}</p>}
-                  </div>
-                  <div>
-                    <label className={labelStyles}>Max SQM</label>
-                    <input type="text" {...register(`unit_layouts.${index}.max_sqm`)} className={inputStyles} />
-                    {errors?.unit_layouts?.[index]?.max_sqm && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.unit_layouts[index]?.max_sqm?.message}</p>}
-                  </div>
-                </div>
-
-                <label className={labelStyles}>Description</label>
-                <textarea {...register(`unit_layouts.${index}.description`)} rows={2} className={`${inputStyles} resize-none`} />
-                
-                <div className="mt-4">
-                  <ImageDropzone 
-                    fieldPath={`unit_layouts.${index}.thumbnail`} label="Floorplan Image" height="h-24"
-                    watch={watch} setValue={setValue} errors={errors} 
-                    setPendingFiles={setPendingFiles} setPreviews={setPreviews} previews={previews} 
-                  />
+              <div>
+                <h3 className="text-xs font-bold text-brand-gold uppercase tracking-widest">Unit Layouts</h3>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="px-2 py-1 rounded-full bg-brand-blue/5 border border-brand-blue/10 text-[9px] font-bold uppercase tracking-wider text-brand-blue">
+                    {mapCardLayoutCount} Map Card
+                  </span>
+                  <span className="px-2 py-1 rounded-full bg-brand-gold/10 border border-brand-gold/30 text-[9px] font-bold uppercase tracking-wider text-brand-blue">
+                    {projectPageLayoutCount} Projects Page
+                  </span>
                 </div>
               </div>
-            ))}
+
+              <button
+                type="button"
+                onClick={() =>
+                  appendLayout({
+                    title: "",
+                    tower_name: "Tower A - Residential",
+                    bg_color: "#051431",
+                    description: "",
+                    min_sqm: "",
+                    max_sqm: "",
+                    thumbnail: "",
+                    show_on_map_card: false,
+                    map_card_order: "",
+                    show_on_project_page: false,
+                    project_page_order: ""
+                  })
+                }
+                className="text-[10px] text-brand-blue hover:text-brand-gold font-bold uppercase flex items-center gap-1 transition-colors"
+              >
+                <PlusCircle size={12} /> Add Layout
+              </button>
+            </div>
+
+            <p className="mt-3 text-[10px] leading-relaxed text-gray-400">
+              Add or remove floorplans here, then choose where each layout is promoted.
+              Display order controls the sequence shown on the public site.
+            </p>
+
+            {layoutFields.map((field, index) => {
+              const showOnMapCard = Boolean(watch(`unit_layouts.${index}.show_on_map_card`));
+              const showOnProjectPage = Boolean(watch(`unit_layouts.${index}.show_on_project_page`));
+
+              return (
+                <div
+                  key={field.fieldKey}
+                  className="p-4 mt-4 bg-gray-50 border border-gray-100 rounded-xl relative group shadow-sm"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      removeNestedFieldFiles("unit_layouts", index);
+                      removeLayout(index);
+                    }}
+                    className="absolute top-4 right-4 text-gray-300 hover:text-red-500 transition-colors"
+                    aria-label="Remove unit layout"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+
+                  <div className="pr-8">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelStyles}>Tower Name</label>
+                        <input
+                          {...register(`unit_layouts.${index}.tower_name`)}
+                          placeholder="e.g. Tower A - Residential"
+                          className={inputStyles}
+                        />
+                        {errors?.unit_layouts?.[index]?.tower_name && (
+                          <p className="text-red-500 text-[10px] font-bold mt-1">
+                            {errors.unit_layouts[index]?.tower_name?.message}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className={labelStyles}>Layout Title</label>
+                        <input
+                          {...register(`unit_layouts.${index}.title`)}
+                          placeholder="e.g. Studio Unit"
+                          className={inputStyles}
+                        />
+                        {errors?.unit_layouts?.[index]?.title && (
+                          <p className="text-red-500 text-[10px] font-bold mt-1">
+                            {errors.unit_layouts[index]?.title?.message}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Placement controls */}
+                    <div className="mt-5 p-4 rounded-xl bg-white border border-gray-200 shadow-sm">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <p className="text-[10px] font-bold text-brand-blue uppercase tracking-widest">
+                            Display Placement
+                          </p>
+                          <p className="text-[9px] text-gray-400 mt-1">
+                            Control where this layout appears outside the project detail page.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3">
+                        {/* Map popup */}
+                        <div
+                          className={`flex items-center justify-between gap-3 rounded-lg border p-3 transition-all ${
+                            showOnMapCard
+                              ? "border-brand-gold/50 bg-brand-gold/10"
+                              : "border-gray-200 bg-gray-50"
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextValue = !showOnMapCard;
+                              setValue(`unit_layouts.${index}.show_on_map_card`, nextValue, {
+                                shouldDirty: true,
+                                shouldValidate: true
+                              });
+
+                              if (!nextValue) {
+                                setValue(`unit_layouts.${index}.map_card_order`, "", {
+                                  shouldDirty: true
+                                });
+                              }
+                            }}
+                            className="flex flex-1 items-center gap-3 text-left"
+                          >
+                            <span
+                              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                showOnMapCard
+                                  ? "border-brand-gold bg-brand-gold text-brand-blue"
+                                  : "border-gray-300 bg-white"
+                              }`}
+                            >
+                              {showOnMapCard && <CheckCircle2 size={13} />}
+                            </span>
+
+                            <span>
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-brand-blue">
+                                Show on Map Card
+                              </span>
+                              <span className="block text-[9px] text-gray-400 mt-0.5">
+                                Displays this layout as a tag in the map project popup.
+                              </span>
+                            </span>
+                          </button>
+
+                          <div className="w-20 shrink-0">
+                            <label className="block text-[8px] font-bold uppercase tracking-wider text-gray-400 mb-1">
+                              Order
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              inputMode="numeric"
+                              disabled={!showOnMapCard}
+                              {...register(`unit_layouts.${index}.map_card_order`)}
+                              className={`${inputStyles} py-2 text-center disabled:opacity-40 disabled:cursor-not-allowed`}
+                              placeholder="-"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Projects listing */}
+                        <div
+                          className={`flex items-center justify-between gap-3 rounded-lg border p-3 transition-all ${
+                            showOnProjectPage
+                              ? "border-brand-blue/30 bg-brand-blue/5"
+                              : "border-gray-200 bg-gray-50"
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextValue = !showOnProjectPage;
+                              setValue(`unit_layouts.${index}.show_on_project_page`, nextValue, {
+                                shouldDirty: true,
+                                shouldValidate: true
+                              });
+
+                              if (!nextValue) {
+                                setValue(`unit_layouts.${index}.project_page_order`, "", {
+                                  shouldDirty: true
+                                });
+                              }
+                            }}
+                            className="flex flex-1 items-center gap-3 text-left"
+                          >
+                            <span
+                              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                showOnProjectPage
+                                  ? "border-brand-blue bg-brand-blue text-brand-gold"
+                                  : "border-gray-300 bg-white"
+                              }`}
+                            >
+                              {showOnProjectPage && <CheckCircle2 size={13} />}
+                            </span>
+
+                            <span>
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-brand-blue">
+                                Show on Projects Page
+                              </span>
+                              <span className="block text-[9px] text-gray-400 mt-0.5">
+                                Displays this layout in the public projects listing.
+                              </span>
+                            </span>
+                          </button>
+
+                          <div className="w-20 shrink-0">
+                            <label className="block text-[8px] font-bold uppercase tracking-wider text-gray-400 mb-1">
+                              Order
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              inputMode="numeric"
+                              disabled={!showOnProjectPage}
+                              {...register(`unit_layouts.${index}.project_page_order`)}
+                              className={`${inputStyles} py-2 text-center disabled:opacity-40 disabled:cursor-not-allowed`}
+                              placeholder="-"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 mb-2">
+                      <ColorInputSync
+                        label="Card Left Background Color"
+                        fieldName={`unit_layouts.${index}.bg_color`}
+                        register={register}
+                        watch={watch}
+                        setValue={setValue}
+                        inputStyles={inputStyles}
+                        labelStyles={labelStyles}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelStyles}>Min SQM</label>
+                        <input
+                          type="text"
+                          {...register(`unit_layouts.${index}.min_sqm`)}
+                          className={inputStyles}
+                        />
+                        {errors?.unit_layouts?.[index]?.min_sqm && (
+                          <p className="text-red-500 text-[10px] font-bold mt-1">
+                            {errors.unit_layouts[index]?.min_sqm?.message}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className={labelStyles}>Max SQM</label>
+                        <input
+                          type="text"
+                          {...register(`unit_layouts.${index}.max_sqm`)}
+                          className={inputStyles}
+                        />
+                        {errors?.unit_layouts?.[index]?.max_sqm && (
+                          <p className="text-red-500 text-[10px] font-bold mt-1">
+                            {errors.unit_layouts[index]?.max_sqm?.message}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <label className={labelStyles}>Description</label>
+                    <textarea
+                      {...register(`unit_layouts.${index}.description`)}
+                      rows={2}
+                      className={`${inputStyles} resize-none`}
+                    />
+
+                    <div className="mt-4">
+                      <ImageDropzone
+                        fieldPath={`unit_layouts.${index}.thumbnail`}
+                        label="Floorplan Image"
+                        height="h-24"
+                        watch={watch}
+                        setValue={setValue}
+                        errors={errors}
+                        setPendingFiles={setPendingFiles}
+                        setPreviews={setPreviews}
+                        previews={previews}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           <div className="mt-4">
