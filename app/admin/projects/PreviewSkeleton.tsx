@@ -69,12 +69,15 @@ export default function PreviewSkeleton({ data }: { data: any }) {
 
  const availableTowers = useMemo<string[]>(() => {
     const amenities = data.amenities ?? [];
-    return Array.from(
-      new Set(
+    const uniqueTowers: string[] = Array.from(
+      new Set<string>(
         amenities
-          .map((item: any) => item.tower?.trim())
-          .filter((tower: any): tower is string => Boolean(tower))
+          .map((item: any) => (item.tower ? String(item.tower).trim() : ''))
+          .filter((tower: string) => Boolean(tower))
       )
+    );
+    return uniqueTowers.sort((a: string, b: string) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
     );
   }, [data.amenities]);
 

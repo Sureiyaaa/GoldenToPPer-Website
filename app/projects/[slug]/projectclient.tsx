@@ -145,6 +145,8 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
           .map((item) => item.tower?.trim())
           .filter((t): t is string => Boolean(t))
       )
+    ).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
     );
   }, [initialProjectData.amenities]);
 
