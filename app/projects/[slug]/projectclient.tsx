@@ -2,9 +2,9 @@
 
 import Navbar from "@/app/components/navbar";
 import Image from "next/image";
-import { Layers, Building2, Target, Key, MapPin, ArrowRight, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Layers, Target, Key, MapPin, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import Footer from '@/app/components/footer';
-import { useEffect, useRef, useState, useMemo, Suspense } from 'react';;
+import { useEffect, useRef, useState, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation'; 
 import Lenis from 'lenis';
 import gsap from 'gsap';
@@ -15,12 +15,22 @@ import dynamic from "next/dynamic";
 import Link from 'next/link';
 import PageTransition from '@/app/components/page-transitions';
 
+
+type Tower = 'tower 1' | 'tower 2' | 'tower 3';
+
+const towerLabels: Record<Tower, string> = {
+  'tower 1': 'Tower A',
+  'tower 2': 'Tower B',
+  'tower 3': 'Tower C',
+};
+
 interface Amenity {
   id: number;
   project_id: number;
   title: string;
   description: string;
   thumbnail: string;
+  tower: Tower | null;
 }
 
 interface UnitLayout {
@@ -119,6 +129,62 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
   const rafId = useRef<number | null>(null);
   const [isGrabbing, setIsGrabbing] = useState(false);
 
+  // --- AMENITIES TOWER FILTER ---
+  const availableTowers = useMemo<Tower[]>(() => {
+    const amenities = initialProjectData.amenities ?? [];
+
+    return Array.from(
+      new Set(
+        amenities
+          .map((item) => item.tower)
+          .filter((tower): tower is Tower => tower !== null)
+      )
+    );
+  }, [initialProjectData.amenities]);
+
+  const [selectedTower, setSelectedTower] = useState<Tower | null>(
+    () => availableTowers[0] ?? null
+  );
+
+  useEffect(() => {
+    if (availableTowers.length === 0) {
+      setSelectedTower(null);
+      return;
+    }
+
+    if (selectedTower && availableTowers.includes(selectedTower)) {
+      return;
+    }
+
+    setSelectedTower(availableTowers[0]);
+  }, [availableTowers, selectedTower]);
+
+  const filteredAmenities = useMemo(() => {
+    const amenities = initialProjectData.amenities ?? [];
+
+    const sortByTitle = (items: Amenity[]) =>
+      [...items].sort((a, b) =>
+        a.title.trim().localeCompare(b.title.trim(), undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        })
+      );
+
+    // No assigned towers: preserve the original behavior and show every
+    // amenity, including amenities whose tower value is null.
+    if (!selectedTower) {
+      return sortByTitle(amenities);
+    }
+
+    // Amenities with a null tower are shared/general amenities. Keep them
+    // visible together with the amenities exclusive to the selected tower.
+    return sortByTitle(
+      amenities.filter(
+        (item) => item.tower === null || item.tower === selectedTower
+      )
+    );
+  }, [initialProjectData.amenities, selectedTower]);
+
   
   // 1. LERP ANIMATION LOOP (The magic that makes it smooth)
   useEffect(() => {
@@ -136,6 +202,16 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
       if (rafId.current) cancelAnimationFrame(rafId.current);
     };
   }, []);
+
+  // Reset the carousel whenever the selected tower changes.
+  useEffect(() => {
+    targetScroll.current = 0;
+    currentScroll.current = 0;
+
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollLeft = 0;
+    }
+  }, [selectedTower]);
 
   // 2. URL PARAMETER SYNC
   useEffect(() => {
@@ -431,101 +507,203 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
           </section>
         )}
 
+        
         {/* --- AMENITIES DRAGGABLE CAROUSEL SECTION --- */}
-        {initialProjectData.amenities?.length > 0 && (
-          <section className="relative w-full bg-[#132243] flex flex-col justify-center py-24 md:py-32 overflow-hidden group/amenities">
-            
-            {/* SECTION HEADER */}
-            <div className="max-w-[90rem] px-6 md:px-12 w-full mx-auto mb-10 md:mb-14 shrink-0">
-              <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 w-full text-white">
-                <div>
-                  <div className="text-xs tracking-[0.25em] uppercase text-brand-gold font-bold mb-2 md:mb-4 flex items-center gap-3">
-                    Amenities &amp; Facilities
-                  </div>
-                  <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif leading-tight">
-                    <span className="inline-block whitespace-nowrap">
-                      {initialProjectData.extended_description?.[0]?.amenities_title || 'Experience A Fresh'}
-                    </span>
-                    <br />
-                    <span className="text-brand-gold">
-                      {initialProjectData.extended_description?.[0]?.amenities_title_gold || `Way Of Living in ${initialProjectData.title}.`}
-                    </span>
-                  </h2>
-                </div>
-                <p className="text-white/70 font-light leading-relaxed max-w-sm text-justify md:text-right text-sm md:text-base hidden sm:block">
-                  Swipe, drag, or use the arrows to explore our expansive leisure amenities designed for your wellness.
-                </p>
-              </div>
+
+{initialProjectData.amenities?.length > 0 && (
+  <section className="relative w-full bg-[#132243] flex flex-col justify-center py-24 md:py-32 overflow-hidden group/amenities">
+
+    {/* SECTION HEADER */}
+    <div className="max-w-[90rem] px-6 md:px-12 w-full mx-auto mb-8 md:mb-10 shrink-0">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 w-full text-white">
+
+        <div>
+          <div className="text-xs tracking-[0.25em] uppercase text-brand-gold font-bold mb-2 md:mb-4 flex items-center gap-3">
+            Amenities &amp; Facilities
+          </div>
+
+          <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif leading-tight">
+            <span className="inline-block whitespace-nowrap">
+              {initialProjectData.extended_description?.[0]
+                ?.amenities_title || 'Experience A Fresh'}
+            </span>
+
+            <br />
+
+            <span className="text-brand-gold">
+              {initialProjectData.extended_description?.[0]
+                ?.amenities_title_gold ||
+                `Way Of Living in ${initialProjectData.title}.`}
+            </span>
+          </h2>
+        </div>
+
+        <p className="text-white/70 font-light leading-relaxed max-w-sm text-justify md:text-right text-sm md:text-base hidden sm:block">
+          Swipe, drag, or use the arrows to explore our expansive leisure
+          amenities designed for your wellness.
+        </p>
+
+      </div>
+    </div>
+
+
+    {/* TOWER FILTER: only shown when more than one tower has amenities */}
+    {availableTowers.length > 1 && (
+    <div className="max-w-[90rem] px-6 md:px-12 w-full mx-auto mb-8 md:mb-10">
+      <div className="flex flex-col gap-4">
+
+        <span className="text-[10px] md:text-xs tracking-[0.25em] uppercase text-white/40 font-bold">
+          Select Tower
+        </span>
+
+        <div className="flex flex-wrap items-center gap-2 md:gap-3">
+          {availableTowers.map((tower) => {
+            const isActive = selectedTower === tower;
+
+            return (
+              <button
+                key={tower}
+                type="button"
+                onClick={() => setSelectedTower(tower)}
+                className={`
+                  px-5 md:px-7 py-3
+                  rounded-full
+                  border
+                  text-xs md:text-sm
+                  uppercase
+                  tracking-[0.15em]
+                  transition-all
+                  duration-300
+                  ${
+                    isActive
+                      ? 'bg-brand-gold border-brand-gold text-[#132243]'
+                      : 'bg-transparent border-white/20 text-white/60 hover:text-white hover:border-brand-gold/70'
+                  }
+                `}
+              >
+                {towerLabels[tower]}
+              </button>
+            );
+          })}
+        </div>
+
+      </div>
+    </div>
+    )}
+
+
+    {/* CAROUSEL */}
+    <div className="relative w-full">
+
+      {/* PREVIOUS */}
+      <button
+        type="button"
+        onClick={scrollPrev}
+        aria-label="Previous Amenities"
+        className="absolute left-4 md:left-8 top-[36%] -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-[#132243]/80 hover:bg-brand-gold border border-brand-gold/100 hover:border-[#132243]/100 text-brand-gold hover:text-[#132243] backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer outline-none group active:scale-95"
+      >
+        <ChevronLeft
+          size={24}
+          strokeWidth={2.5}
+          className="transition-transform duration-300 group-hover:-translate-x-0.5"
+        />
+      </button>
+
+
+      {/* NEXT */}
+      <button
+        type="button"
+        onClick={scrollNext}
+        aria-label="Next Amenities"
+        className="absolute right-4 md:right-8 top-[36%] -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-[#132243]/80 hover:bg-brand-gold border border-brand-gold/100 hover:border-[#132243]/100 text-brand-gold hover:text-[#132243] backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer outline-none group active:scale-95"
+      >
+        <ChevronRight
+          size={24}
+          strokeWidth={2.5}
+          className="transition-transform duration-300 group-hover:translate-x-0.5"
+        />
+      </button>
+
+
+      {/* CAROUSEL CONTAINER */}
+      <div
+        ref={scrollContainerRef}
+        onMouseDown={onDragStart}
+        onMouseLeave={onDragEnd}
+        onMouseUp={onDragEnd}
+        onMouseMove={onDragMove}
+        onTouchStart={onDragStart}
+        onTouchEnd={onDragEnd}
+        onTouchMove={onDragMove}
+        className={`
+          flex gap-6 md:gap-8
+          px-6 md:px-12
+          2xl:pl-[calc((100vw-90rem)/2+3rem)]
+          overflow-x-hidden
+          w-full
+          items-start
+          pb-8
+          ${isGrabbing ? 'cursor-grabbing' : 'cursor-grab'}
+        `}
+        style={{
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+          touchAction: 'pan-y',
+        }}
+      >
+
+        {filteredAmenities.map((item, index) => (
+          <div
+            key={item.id}
+            className="shrink-0 w-[82vw] sm:w-[50vw] md:w-[40vw] lg:w-[30vw] flex flex-col group pointer-events-none select-none"
+          >
+
+            <div className="relative h-[38vh] min-h-[240px] max-h-[380px] w-full overflow-hidden rounded-xl bg-gray-800 shadow-2xl pointer-events-auto">
+
+              <Image
+                src={item.thumbnail}
+                alt={item.title}
+                fill
+                draggable="false"
+                sizes="(max-width: 768px) 82vw, (max-width: 1024px) 40vw, 30vw"
+                className="object-cover group-hover:scale-105 transition-transform duration-[1.5s] ease-out pointer-events-none select-none"
+              />
+
+              <div className="absolute inset-0 bg-black/15 group-hover:bg-transparent transition-colors duration-500 pointer-events-none" />
+
             </div>
 
-            {/* CAROUSEL WRAPPER WITH END ARROWS */}
-            <div className="relative w-full">
-              
-             {/* PREVIOUS BUTTON (Left Side) */}
-              <button
-                type="button"
-                onClick={scrollPrev}
-                aria-label="Previous Amenities"
-                className="absolute left-4 md:left-8 top-[36%] -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-[#132243]/80 hover:bg-brand-gold border border-brand-gold/100 hover:border-[#132243]/100 text-brand-gold hover:text-[#132243] backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer outline-none group active:scale-95"
-              >
-                <ChevronLeft size={24} strokeWidth={2.5} className="transition-transform duration-300 group-hover:-translate-x-0.5" />
-              </button>
 
-              {/* NEXT BUTTON (Right Side) */}
-              <button
-                type="button"
-                onClick={scrollNext}
-                aria-label="Next Amenities"
-                className="absolute right-4 md:right-8 top-[36%] -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-[#132243]/80 hover:bg-brand-gold border border-brand-gold/100 hover:border-[#132243]/100 text-brand-gold hover:text-[#132243] backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer outline-none group active:scale-95"
-              >
-                <ChevronRight size={24} strokeWidth={2.5} className="transition-transform duration-300 group-hover:translate-x-0.5" />
-              </button>
+            <div className="mt-5 flex flex-col gap-2 pr-4">
 
-              {/* SMOOTH DRAG/CAROUSEL CONTAINER */}
-              <div 
-                ref={scrollContainerRef}
-                onMouseDown={onDragStart}
-                onMouseLeave={onDragEnd}
-                onMouseUp={onDragEnd}
-                onMouseMove={onDragMove}
-                onTouchStart={onDragStart}
-                onTouchEnd={onDragEnd}
-                onTouchMove={onDragMove}
-                className={`flex gap-6 md:gap-8 px-6 md:px-12 2xl:pl-[calc((100vw-90rem)/2+3rem)] overflow-x-hidden w-full items-start pb-8 ${isGrabbing ? 'cursor-grabbing' : 'cursor-grab'}`}
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', touchAction: 'pan-y' }}
-              >
-                <style dangerouslySetInnerHTML={{ __html: `div::-webkit-scrollbar { display: none; }` }} />
-                
-                {initialProjectData.amenities.map((item, index) => (
-                  <div key={item.id} className="shrink-0 w-[82vw] sm:w-[50vw] md:w-[40vw] lg:w-[30vw] flex flex-col group pointer-events-none select-none">
-                    <div className="relative h-[38vh] min-h-[240px] max-h-[380px] w-full overflow-hidden rounded-xl bg-gray-800 shadow-2xl pointer-events-auto">
-                      <Image
-                        src={item.thumbnail} 
-                        alt={item.title} 
-                        fill 
-                        draggable="false"
-                        sizes="(max-width: 768px) 82vw, (max-width: 1024px) 40vw, 30vw"
-                        className="object-cover group-hover:scale-105 transition-transform duration-[1.5s] ease-out pointer-events-none select-none"
-                      />
-                      <div className="absolute inset-0 bg-black/15 group-hover:bg-transparent transition-colors duration-500 pointer-events-none"></div>
-                    </div>
-                    <div className="mt-5 flex flex-col gap-2 pr-4">
-                      <div className="flex items-center gap-3">
-                        <span className="text-brand-gold font-mono text-sm">0{index + 1}</span>
-                        <h3 className="text-xl md:text-2xl font-serif text-white">{item.title}</h3>
-                      </div>
-                      <p className="text-white/60 text-sm leading-relaxed pl-7 border-l border-white/10 line-clamp-3">
-                        {item.description}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-                <div className="w-[5vw] md:w-[10vw] shrink-0 pointer-events-none"></div>
+              <div className="flex items-center gap-3">
+
+                <span className="text-brand-gold font-mono text-sm">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+
+                <h3 className="text-xl md:text-2xl font-serif text-white">
+                  {item.title}
+                </h3>
+
               </div>
 
+              <p className="text-white/60 text-sm leading-relaxed pl-7 border-l border-white/10 line-clamp-3">
+                {item.description}
+              </p>
+
             </div>
-          </section>
-        )}
+
+          </div>
+        ))}
+
+        <div className="w-[5vw] md:w-[10vw] shrink-0 pointer-events-none" />
+
+      </div>
+    </div>
+
+  </section>
+)}
 
         {/* --- ROOM BLUEPRINTS SECTION (STACKED CARDS) --- */}
         {initialProjectData.unit_layout?.length > 0 && (
