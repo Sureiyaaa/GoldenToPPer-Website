@@ -430,7 +430,7 @@ export default function BuyersGuideClient() {
         <section className="relative w-full h-[50vh] min-h-[400px] flex items-center justify-center overflow-hidden bg-[#0A1128]">
           <div className="absolute inset-0 z-0">
             
-            <div className="absolute inset-0 bg-[#142f72]/80"></div>
+            <div className="absolute inset-0 bg-brand-blue"></div>
           </div>
           
           <div className="relative z-10 max-w-[90rem] mx-auto w-full px-6 md:px-12 flex flex-col items-center text-center mt-16">

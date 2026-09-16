@@ -44,7 +44,7 @@ const projectSchema = z.object({
     thumbnail: z.string()
   })),
   amenities: z.array(z.object({
-    title: z.string().min(1, "Title required"), description: z.string(), thumbnail: z.string()
+    title: z.string().min(1, "Title required"), description: z.string(), thumbnail: z.string(), tower: z.string().nullable().optional()
   })),
   map_latitude: z.string().min(1, "Required"),
   map_longitude: z.string().min(1, "Required"),
@@ -117,6 +117,17 @@ const ColorInputSync = ({
     </div>
   );
 };
+
+function formatTowerToLetter(raw?: string | null): string {
+  if (!raw) return '';
+  const trimmed = raw.trim();
+  const match = trimmed.match(/^tower\s+(\d+)$/i);
+  if (match) {
+    const letter = String.fromCharCode(64 + parseInt(match[1], 10)); // 1 -> A, 2 -> B, 3 -> C, 4 -> D
+    return `Tower ${letter}`;
+  }
+  return trimmed;
+}
 
 function ProjectManager() {
   const router = useRouter();
@@ -236,16 +247,23 @@ function ProjectManager() {
             min_sqm: l.min_sqm ? String(l.min_sqm) : "", 
             max_sqm: l.max_sqm ? String(l.max_sqm) : "" 
           })),
-          amenities: data.amenityData,
+
+          amenities: data.amenityData.map((a: any) => ({
+            ...a,
+            tower: formatTowerToLetter(a.tower) || null
+          })),
+          
           child_markers: data.markerData.map((m: any) => ({
             ...m,
+            
             distance_km: m.distance_km ? String(m.distance_km) : "",
             distance_drive: m.distance_drive ? String(m.distance_drive) : "",
             distance_walk: m.distance_walk ? String(m.distance_walk) : "",
             latitude: m.latitude ? String(m.latitude) : "",
             longitude: m.longitude ? String(m.longitude) : "",
             marker_icon: m.marker_type_table?.[0]?.icon || "", 
-            marker_type: m.marker_type_table?.[0]?.name || "general"
+            marker_type: m.marker_type_table?.[0]?.name || "general",
+            
           }))
         });
 
@@ -277,6 +295,17 @@ function ProjectManager() {
   }, [editId, reset]);
 
   const formData = watch();
+
+  const availableTowerOptions = Array.from(
+    new Set([
+      'Tower A',
+      'Tower B',
+      'Tower C',
+      ...(formData.unit_layouts || []).map((l) => formatTowerToLetter(l.tower_name)),
+      ...(formData.amenities || []).map((a) => formatTowerToLetter(a.tower))
+    ].filter((name): name is string => Boolean(name)))
+  );
+  
   const hasErrors = Object.keys(errors).length > 0;
 
   const onSubmit = async (data: ProjectFormData) => {
@@ -364,7 +393,8 @@ function ProjectManager() {
     amenities: formData.amenities?.length > 0 ? formData.amenities.map((a, i) => ({
       id: i + 1, 
       title: a.title || `Amenity ${i + 1}`, 
-      description: a.description || 'Description...', 
+      description: a.description || 'Description...',
+      tower: a.tower || null,
       thumbnail: previews[`amenities.${i}.thumbnail`] || a.thumbnail || BLANK_IMAGE
     })) : [],
     unit_layout: formData.unit_layouts?.length > 0 ? formData.unit_layouts.map((l, i) => ({
@@ -544,7 +574,7 @@ function ProjectManager() {
           <div>
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="text-xs font-bold text-brand-gold uppercase tracking-widest">Amenities</h3>
-              <button type="button" onClick={() => appendAmenity({ title: "", description: "", thumbnail: "" })} className="text-[10px] text-brand-blue font-bold uppercase flex items-center gap-1"><PlusCircle size={12}/> Add Amenity</button>
+              <button type="button" onClick={() => appendAmenity({ title: "", description: "", thumbnail: "", tower: null })} className="text-[10px] text-brand-blue font-bold uppercase flex items-center gap-1"><PlusCircle size={12}/> Add Amenity</button>
             </div>
 
             <div className="grid grid-cols-2 gap-4 mt-4 mb-6 p-4 bg-brand-blue/5 rounded-xl border border-brand-blue/10">
@@ -574,6 +604,22 @@ function ProjectManager() {
                 <label className={labelStyles}>Amenity Name</label>
                 <input {...register(`amenities.${index}.title`)} className={inputStyles} />
                 {errors?.amenities?.[index]?.title && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.amenities[index]?.title?.message}</p>}
+                
+                <label className={labelStyles}>Assigned Tower (Optional / Shared)</label>
+                <div className="flex gap-2">
+                  <input 
+                    {...register(`amenities.${index}.tower`)} 
+                    placeholder="e.g. Tower D (or leave blank for all)" 
+                    className={inputStyles} 
+                    list={`tower-list-${index}`}
+                  />
+                  <datalist id={`tower-list-${index}`}>
+                    <option value="">All Towers (Shared)</option>
+                    {availableTowerOptions.map((opt) => (
+                      <option key={opt} value={opt} />
+                    ))}
+                  </datalist>
+                </div>
                 
                 <label className={labelStyles}>Description</label>
                 <textarea {...register(`amenities.${index}.description`)} rows={2} className={`${inputStyles} resize-none`} />

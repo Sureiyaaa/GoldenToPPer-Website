@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo } from 'react';
 import Image from "next/image";
-import { Layers, Target, Key, MapPin, ArrowRight } from 'lucide-react';
+import { Layers, Target, Key, MapPin, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
@@ -10,8 +10,27 @@ if (typeof window !== 'undefined') {
   gsap.registerPlugin(ScrollTrigger);
 }
 
-// Transparent 1x1 Pixel Base64
 const BLANK_IMAGE = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+
+interface Amenity {
+  id: number;
+  title: string;
+  description: string;
+  thumbnail: string;
+  tower?: string | null;
+}
+
+function formatTowerName(raw?: string | null): string {
+  if (!raw) return '';
+  const trimmed = raw.trim();
+  const legacyMatch = trimmed.match(/^tower\s+(\d+)$/i);
+  if (legacyMatch) {
+    const num = parseInt(legacyMatch[1], 10);
+    const letter = String.fromCharCode(64 + num);
+    return `Tower ${letter}`;
+  }
+  return trimmed;
+}
 
 function DummyMapSection() {
   return (
@@ -48,6 +67,41 @@ export default function PreviewSkeleton({ data }: { data: any }) {
   const rafId = useRef<number | null>(null);
   const [isGrabbing, setIsGrabbing] = useState(false);
 
+ const availableTowers = useMemo<string[]>(() => {
+    const amenities = data.amenities ?? [];
+    return Array.from(
+      new Set(
+        amenities
+          .map((item: any) => item.tower?.trim())
+          .filter((tower: any): tower is string => Boolean(tower))
+      )
+    );
+  }, [data.amenities]);
+
+  const [selectedTower, setSelectedTower] = useState<string | null>(
+    () => availableTowers[0] ?? null
+  );
+
+  const filteredAmenities = useMemo(() => {
+    const amenities = data.amenities ?? [];
+    const sortByTitle = (items: Amenity[]) =>
+      [...items].sort((a, b) =>
+        a.title.trim().localeCompare(b.title.trim(), undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        })
+      );
+
+    if (!selectedTower) {
+      return sortByTitle(amenities);
+    }
+    return sortByTitle(
+      amenities.filter(
+        (item: any) => !item.tower || item.tower.trim().toLowerCase() === selectedTower.toLowerCase()
+      )
+    );
+  }, [data.amenities, selectedTower]);
+
   // 1. SMOOTH LERP LOOP
   useEffect(() => {
     const smoothDrag = () => {
@@ -60,6 +114,14 @@ export default function PreviewSkeleton({ data }: { data: any }) {
     rafId.current = requestAnimationFrame(smoothDrag);
     return () => { if (rafId.current) cancelAnimationFrame(rafId.current); };
   }, []);
+
+  useEffect(() => {
+    targetScroll.current = 0;
+    currentScroll.current = 0;
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollLeft = 0;
+    }
+  }, [selectedTower]);
 
   // 2. DRAG HANDLERS
   const onDragStart = (e: React.MouseEvent | React.TouchEvent) => {
@@ -83,21 +145,34 @@ export default function PreviewSkeleton({ data }: { data: any }) {
 
   const onDragEnd = () => { isDragging.current = false; setIsGrabbing(false); };
 
-  // GSAP Animations scoped to the right-side split screen container
+  const scrollPrev = () => {
+    if (!scrollContainerRef.current) return;
+    const step = scrollContainerRef.current.clientWidth * 0.75;
+    targetScroll.current = Math.max(0, targetScroll.current - step);
+  };
+
+  const scrollNext = () => {
+    if (!scrollContainerRef.current) return;
+    const step = scrollContainerRef.current.clientWidth * 0.75;
+    const maxScroll = scrollContainerRef.current.scrollWidth - scrollContainerRef.current.clientWidth;
+    targetScroll.current = Math.min(maxScroll, targetScroll.current + step);
+  };
+
+  // GSAP Animations scoped to the live preview container
   useEffect(() => {
     let ctx = gsap.context(() => {
-      // Stacking Cards for Blueprints
-      if (data.unit_layout?.length > 0) {
-        const blueprintCards = gsap.utils.toArray('.blueprint-card');
-        blueprintCards.forEach((card: any, i) => {
-          if (i !== blueprintCards.length - 1) {
+      const towerGroups = gsap.utils.toArray('.tower-group');
+      towerGroups.forEach((group: any) => {
+        const cards = group.querySelectorAll('.blueprint-card');
+        cards.forEach((card: any, i: number) => {
+          if (i !== cards.length - 1) {
             gsap.to(card, {
               scale: 0.92,
               opacity: 0.4,
               filter: "blur(4px)",
               scrollTrigger: {
-                trigger: blueprintCards[i + 1] as HTMLElement,
-                scroller: "#preview-scroller", // <--- IMPORTANT FOR SPLIT SCREEN
+                trigger: cards[i + 1] as HTMLElement,
+                scroller: "#preview-scroller",
                 start: "top 85%",
                 end: "top 20%",
                 scrub: true,
@@ -105,7 +180,7 @@ export default function PreviewSkeleton({ data }: { data: any }) {
             });
           }
         });
-      }
+      });
     });
 
     return () => ctx.revert();
@@ -123,20 +198,19 @@ export default function PreviewSkeleton({ data }: { data: any }) {
     { label: data.unit_total, icon: <Key size={16} /> },
   ].filter(tag => tag.label && tag.label !== '0-0 SQM' && tag.label !== '0 Units');
 
-   const groupedLayouts = useMemo<Record<string, any[]>>(() => {
+  const groupedLayouts = useMemo<Record<string, any[]>>(() => {
     if (!data?.unit_layout || !Array.isArray(data.unit_layout)) return {};
 
     const cleanName = (val: string) =>
       val
-        .replace(/[\u2013\u2014]/g, '-') // Normalize em/en dashes to hyphen
-        .replace(/\s+/g, ' ')            // Collapse multiple spaces/tabs/newlines
+        .replace(/[\u2013\u2014]/g, '-')
+        .replace(/\s+/g, ' ')
         .trim();
 
     return data.unit_layout.reduce((acc: Record<string, any[]>, item: any) => {
       const rawTower = item?.tower_name ? cleanName(String(item.tower_name)) : 'Tower A - Residential';
       const fallbackTower = rawTower || 'Tower A - Residential';
 
-      // Find existing group ignoring casing & dash spacing
       const matchKey = Object.keys(acc).find(
         (key) => cleanName(key).toLowerCase() === fallbackTower.toLowerCase()
       );
@@ -179,7 +253,6 @@ export default function PreviewSkeleton({ data }: { data: any }) {
               </div>
             </div>
 
-            {/* LIVE DOT PROPERTY AWARDS BADGE RENDERING */}
             {data.img_awards && data.img_awards !== '' && (
               <div className="hidden lg:block mb-10">
                 <Image 
@@ -211,20 +284,17 @@ export default function PreviewSkeleton({ data }: { data: any }) {
 
       {/* --- EDITORIAL SECTION --- */}
       {data.extended_description?.length > 0 && (
-  <section 
-    className="relative min-h-screen py-24 flex items-center pointer-events-none"
-    style={{ 
-      background: `linear-gradient(to bottom, #ffffff 0%, #ffffff 65%, ${
-        data.extended_description[0]?.editorial_bg_color && data.extended_description[0]?.editorial_bg_color !== 'transparent'
-          ? data.extended_description[0].editorial_bg_color
-          : '#ffffff'
-      } 100%)` 
-    }}
-  >
-          {/* THE FIX: Added `lg:h-[600px]` to lock the grid's height. This stops the wrapper from re-centering on every keystroke. */}
+        <section 
+          className="relative min-h-screen py-24 flex items-center pointer-events-none"
+          style={{ 
+            background: `linear-gradient(to bottom, #ffffff 0%, #ffffff 65%, ${
+              data.extended_description[0]?.editorial_bg_color && data.extended_description[0]?.editorial_bg_color !== 'transparent'
+                ? data.extended_description[0].editorial_bg_color
+                : '#ffffff'
+            } 100%)` 
+          }}
+        >
           <div className="max-w-[90rem] mx-auto px-6 md:px-12 w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center lg:h-[600px]">
-            
-            {/* IMAGE CONTAINER: Changed to h-full so it perfectly matches the 600px grid height on desktop */}
             <div className="relative w-full h-[400px] lg:h-full rounded-sm overflow-hidden shadow-2xl bg-gray-200 border border-gray-300">
               <Image 
                 src={data.extended_description[0]?.editorial_img || BLANK_IMAGE} 
@@ -234,9 +304,7 @@ export default function PreviewSkeleton({ data }: { data: any }) {
               />
             </div>
 
-            {/* TEXT CONTAINER: Added h-full and justify-center to stay vertically centered within the locked box */}
             <div className="flex flex-col gap-8 items-start justify-center h-full overflow-hidden">
-              
               <h2 
                 className="font-serif text-2xl sm:text-3xl lg:text-[36px] xl:text-[44px] leading-[1.18] transition-colors duration-300 shrink-0"
                 style={{ color: data.extended_description[0]?.editorial_title_color || '#132243' }}
@@ -256,77 +324,139 @@ export default function PreviewSkeleton({ data }: { data: any }) {
                 </p>
               </div>
             </div>
-
           </div>
         </section>
       )}
       
-      {/* --- AMENITIES HORIZONTAL SCROLL SECTION --- */}
+      {/* --- AMENITIES DRAGGABLE CAROUSEL SECTION --- */}
       {data.amenities?.length > 0 && (
-        <section className="relative w-full h-screen bg-[#132243] flex flex-col justify-center overflow-hidden py-16 md:py-20">
-          <div className="max-w-[90rem] px-6 md:px-12 w-full mx-auto mb-6 md:mb-10 shrink-0 pointer-events-none">
-            <div className="text-xs tracking-widest uppercase text-brand-gold font-bold mb-2 md:mb-4 flex items-center gap-4">
-              Amenities & Facilities
+        <section className="relative w-full bg-[#132243] flex flex-col justify-center py-24 md:py-32 overflow-hidden group/amenities">
+          <div className="max-w-[90rem] px-6 md:px-12 w-full mx-auto mb-8 md:mb-10 shrink-0 pointer-events-none">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 w-full text-white">
+              <div>
+                <div className="text-xs tracking-[0.25em] uppercase text-brand-gold font-bold mb-2 md:mb-4 flex items-center gap-3">
+                  Amenities &amp; Facilities
+                </div>
+                <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif leading-tight">
+                  <span className="inline-block whitespace-nowrap">
+                    {data.extended_description?.[0]?.amenities_title || 'Experience A Fresh'}
+                  </span>
+                  <br />
+                  <span className="text-brand-gold">
+                    {data.extended_description?.[0]?.amenities_title_gold || `Way Of Living in ${data.title || 'this project'}.`}
+                  </span>
+                </h2>
+              </div>
+              <p className="text-white/70 font-light leading-relaxed max-w-sm text-justify md:text-right text-sm md:text-base hidden sm:block">
+                Swipe, drag, or use the arrows to explore our expansive leisure amenities designed for your wellness.
+              </p>
             </div>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif leading-tight text-white">
-              {data.extended_description[0]?.amenities_title} <br />
-              <span className="text-brand-gold">{data.extended_description[0]?.amenities_title_gold}</span>
-            </h2>
           </div>
 
-          <div 
-            ref={scrollContainerRef}
-            onMouseDown={onDragStart} onMouseLeave={onDragEnd} onMouseUp={onDragEnd} onMouseMove={onDragMove}
-            onTouchStart={onDragStart} onTouchEnd={onDragEnd} onTouchMove={onDragMove}
-            className={`flex gap-8 md:gap-10 px-6 md:px-12 w-full overflow-x-hidden items-start ${isGrabbing ? 'cursor-grabbing' : 'cursor-grab'}`}
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', touchAction: 'pan-y' }}
-          >
-            <style dangerouslySetInnerHTML={{ __html: `::-webkit-scrollbar { display: none; }` }} />
-            
-            {data.amenities.map((item: any, index: number) => (
-              <div key={item.id || index} className="shrink-0 w-[80vw] md:w-[45vw] lg:w-[32vw] flex flex-col group pointer-events-none select-none">
-                <div className="relative h-[40vh] min-h-[220px] max-h-[380px] w-full overflow-hidden rounded-sm bg-gray-800 border border-white/10 shadow-2xl pointer-events-auto">
-                  <Image src={item.thumbnail || BLANK_IMAGE} alt={item.title} fill draggable="false" className="object-cover pointer-events-none select-none" />
-                  <div className="absolute inset-0 bg-black/10 pointer-events-none"></div>
-                </div>
-                <div className="mt-5 flex flex-col gap-2 pr-4 pointer-events-none select-none">
-                  <div className="flex items-center gap-3">
-                    <span className="text-brand-gold font-mono text-sm">0{index + 1}</span>
-                    <h3 className="text-xl md:text-2xl font-serif text-white">{item.title || 'Amenity Title'}</h3>
-                  </div>
-                  <p className="text-white/60 text-xs md:text-sm leading-relaxed pl-7 border-l border-white/10 line-clamp-3">
-                    {item.description || 'Amenity description...'}
-                  </p>
+          {/* TOWER FILTER BADGES */}
+          {availableTowers.length > 1 && (
+            <div className="max-w-[90rem] px-6 md:px-12 w-full mx-auto mb-8 md:mb-10 pointer-events-auto">
+              <div className="flex flex-col gap-4">
+                <span className="text-[10px] md:text-xs tracking-[0.25em] uppercase text-white/40 font-bold">
+                  Select Tower
+                </span>
+                <div className="flex flex-wrap items-center gap-2 md:gap-3">
+                  {availableTowers.map((tower) => {
+                    const isActive = selectedTower === tower;
+                    return (
+                      <button
+                        key={tower}
+                        type="button"
+                        onClick={() => setSelectedTower(tower)}
+                        className={`px-5 md:px-7 py-3 rounded-full border text-xs md:text-sm uppercase tracking-[0.15em] transition-all duration-300 ${
+                          isActive
+                            ? 'bg-brand-gold border-brand-gold text-[#132243]'
+                            : 'bg-transparent border-white/20 text-white/60 hover:text-white hover:border-brand-gold/70'
+                        }`}
+                      >
+                        {formatTowerName(tower)}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-            ))}
-            <div className="w-[10vw] shrink-0 pointer-events-none"></div>
+            </div>
+          )}
+
+          {/* CAROUSEL WRAPPER */}
+          <div className="relative w-full">
+            <button
+              type="button"
+              onClick={scrollPrev}
+              aria-label="Previous Amenities"
+              className="absolute left-4 md:left-8 top-[36%] -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-[#132243]/80 hover:bg-brand-gold border border-brand-gold/100 hover:border-[#132243]/100 text-brand-gold hover:text-[#132243] backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer outline-none group active:scale-95"
+            >
+              <ChevronLeft size={24} strokeWidth={2.5} className="transition-transform duration-300 group-hover:-translate-x-0.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={scrollNext}
+              aria-label="Next Amenities"
+              className="absolute right-4 md:right-8 top-[36%] -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-[#132243]/80 hover:bg-brand-gold border border-brand-gold/100 hover:border-[#132243]/100 text-brand-gold hover:text-[#132243] backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer outline-none group active:scale-95"
+            >
+              <ChevronRight size={24} strokeWidth={2.5} className="transition-transform duration-300 group-hover:translate-x-0.5" />
+            </button>
+
+            <div 
+              ref={scrollContainerRef}
+              onMouseDown={onDragStart} onMouseLeave={onDragEnd} onMouseUp={onDragEnd} onMouseMove={onDragMove}
+              onTouchStart={onDragStart} onTouchEnd={onDragEnd} onTouchMove={onDragMove}
+              className={`flex gap-6 md:gap-8 px-6 md:px-12 2xl:pl-[calc((100vw-90rem)/2+3rem)] overflow-x-hidden w-full items-start pb-8 ${isGrabbing ? 'cursor-grabbing' : 'cursor-grab'}`}
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', touchAction: 'pan-y' }}
+            >
+              <style dangerouslySetInnerHTML={{ __html: `::-webkit-scrollbar { display: none; }` }} />
+              
+              {filteredAmenities.map((item: any, index: number) => (
+                <div key={item.id || index} className="shrink-0 w-[82vw] sm:w-[50vw] md:w-[40vw] lg:w-[30vw] flex flex-col group pointer-events-none select-none">
+                  <div className="relative h-[38vh] min-h-[240px] max-h-[380px] w-full overflow-hidden rounded-xl bg-gray-800 shadow-2xl pointer-events-auto">
+                    <Image src={item.thumbnail || BLANK_IMAGE} alt={item.title} fill draggable="false" sizes="(max-width: 768px) 82vw, (max-width: 1024px) 40vw, 30vw" className="object-cover group-hover:scale-105 transition-transform duration-[1.5s] ease-out pointer-events-none select-none" />
+                    <div className="absolute inset-0 bg-black/15 group-hover:bg-transparent transition-colors duration-500 pointer-events-none" />
+                  </div>
+                  <div className="mt-5 flex flex-col gap-2 pr-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-brand-gold font-mono text-sm">{String(index + 1).padStart(2, '0')}</span>
+                      <h3 className="text-xl md:text-2xl font-serif text-white">{item.title}</h3>
+                    </div>
+                    <p className="text-white/60 text-sm leading-relaxed pl-7 border-l border-white/10 line-clamp-3">
+                      {item.description}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              <div className="w-[5vw] md:w-[10vw] shrink-0 pointer-events-none" />
+            </div>
           </div>
         </section>
       )}
 
       {/* --- ROOM BLUEPRINTS SECTION --- */}
       {data.unit_layout?.length > 0 && (
-        <section id="blueprints" ref={blueprintSectionRef} className="relative w-full py-32 bg-transparent z-10 pointer-events-none">
+        <section id="blueprints" ref={blueprintSectionRef} className="relative w-full py-32 bg-transparent z-10">
           <div className="max-w-[75rem] mx-auto px-6 md:px-12 relative">
             <div className="mb-20 text-center">
               <div className="text-xs tracking-widest uppercase text-brand-blue font-bold mb-4 flex items-center justify-center gap-4">
                 Room Blueprints
               </div>
               <h2 className="text-4xl md:text-5xl lg:text-7xl font-serif text-brand-blue leading-tight">
-                Design Your <span className=" text-brand-gold">Sanctuary</span>
+                Design Your <span className="text-brand-gold">Sanctuary</span>
               </h2>
             </div>
 
             {/* Grouped by Tower */}
             {Object.entries(groupedLayouts).map(([towerName, plans]) => (
-  <div key={towerName} className="tower-group relative mb-24 last:mb-0">
+              <div key={towerName} className="tower-group relative mb-32 last:mb-0">
                 
                 {/* Sticky Tower Header Pill */}
-                <div className="sticky top-4 z-20 pb-6 pt-2 flex justify-center">
-                  <div className="inline-flex items-center gap-3 px-6 py-2 rounded-full bg-brand-blue/90 backdrop-blur-md border border-brand-gold/40 shadow-xl">
+                <div className="sticky top-20 md:top-24 z-20 pb-8 pt-2 flex justify-center pointer-events-none">
+                  <div className="inline-flex items-center gap-3 px-6 py-2.5 rounded-full bg-brand-blue backdrop-blur-md border border-brand-gold/40 shadow-xl pointer-events-auto">
                     <span className="w-2 h-2 rounded-full bg-brand-gold animate-pulse" />
-                    <span className="text-xs uppercase tracking-[0.25em] font-serif text-white font-medium">
+                    <span className="text-xs md:text-sm uppercase tracking-[0.25em] font-serif text-white font-medium">
                       {towerName}
                     </span>
                   </div>
@@ -337,25 +467,26 @@ export default function PreviewSkeleton({ data }: { data: any }) {
                   {plans.map((plan: any, index: number) => (
                     <div
                       key={plan.id || index}
-                      className="blueprint-card sticky top-[15vh] w-full min-h-[60vh] lg:h-[65vh] bg-white rounded-xl shadow-[0_-10px_40px_rgba(0,0,0,0.08)] border border-gray-100 overflow-hidden flex flex-col lg:flex-row mb-12 origin-top"
+                      className="blueprint-card sticky top-[22vh] w-full min-h-[60vh] lg:h-[65vh] bg-white rounded-xl shadow-[0_-10px_40px_rgba(0,0,0,0.08)] border border-gray-100 overflow-hidden flex flex-col lg:flex-row mb-12 origin-top"
                       style={{ zIndex: index + 1 }}
                     >
                       <div 
-                      className="w-full lg:w-2/5 p-8 md:p-12 lg:p-16 flex flex-col justify-center border-b lg:border-b-0 lg:border-r border-white/10 transition-colors"
-                      style={{ backgroundColor: plan.bg_color || '#051431' }}
-                    >
-                      <div className="text-brand-gold font-mono text-sm mb-4">0{index + 1}</div>
-                      <h3 className="text-3xl md:text-4xl lg:text-5xl font-serif text-white mb-4">{plan.title || 'Layout Title'}</h3>
-                      <p className="font-sans tracking-widest text-white/70 font-bold text-xs uppercase mb-4">
-                        {Number(plan.min_sqm) === Number(plan.max_sqm) || !plan.max_sqm
-                          ? `± ${plan.min_sqm || 0} SQM`
-                          : `± ${plan.min_sqm || 0} - ± ${plan.max_sqm || 0} SQM`}
-                      </p>
-                      <p className="text-white/80 leading-relaxed text-sm md:text-base">{plan.description || 'Description...'}</p>
-                    </div>
-                      <div className="w-full lg:w-3/5 relative p-8 md:p-12 bg-white flex items-center justify-center border-l border-gray-100">
-                        <div className="relative w-full h-full min-h-[350px] lg:min-h-full">
-                          <Image src={plan.thumbnail || BLANK_IMAGE} alt={plan.title} fill className="object-contain drop-shadow-2xl" />
+                        className="w-full lg:w-2/5 text-white p-8 md:p-12 lg:p-16 flex flex-col justify-center border-b lg:border-b-0 lg:border-r border-white/10 transition-colors"
+                        style={{ backgroundColor: plan.bg_color || '#051431' }}
+                      >
+                        <div className="text-brand-gold font-mono text-sm mb-4">0{index + 1}</div>
+                        <h3 className="text-3xl md:text-4xl lg:text-5xl font-serif text-white mb-4">{plan.title}</h3>
+                        <p className="font-sans tracking-widest text-white/70 font-bold text-sm md:text-base mb-8 uppercase">
+                          {Number(plan.min_sqm) === Number(plan.max_sqm) || !plan.max_sqm
+                            ? `± ${plan.min_sqm || 0} SQM`
+                            : `± ${plan.min_sqm || 0} - ± ${plan.max_sqm || 0} SQM`}
+                        </p>
+                        <p className="text-white/80 leading-relaxed text-sm md:text-base">{plan.description}</p>
+                      </div>
+
+                      <div className="w-full lg:w-3/5 relative p-8 md:p-12 bg-white flex items-center justify-center group">
+                        <div className="relative w-full h-full min-h-[350px] lg:min-h-full transition-transform duration-700 ease-out group-hover:scale-105">
+                          <Image src={plan.thumbnail || BLANK_IMAGE} alt={plan.title} fill sizes="(max-width: 1024px) 100vw, 60vw" className="object-contain drop-shadow-2xl" />
                         </div>
                       </div>
                     </div>
