@@ -16,13 +16,7 @@ import Link from 'next/link';
 import PageTransition from '@/app/components/page-transitions';
 
 
-type Tower = 'tower 1' | 'tower 2' | 'tower 3';
 
-const towerLabels: Record<Tower, string> = {
-  'tower 1': 'Tower A',
-  'tower 2': 'Tower B',
-  'tower 3': 'Tower C',
-};
 
 interface Amenity {
   id: number;
@@ -30,7 +24,7 @@ interface Amenity {
   title: string;
   description: string;
   thumbnail: string;
-  tower: Tower | null;
+  tower?: string | null;
 }
 
 interface UnitLayout {
@@ -86,6 +80,7 @@ const UnifiedProjectMap = dynamic(() => import('@/app/components/unifiedprojectm
   ssr: false 
 });
 
+
 function ModernMapSection({ projectSlug, subtitle }: { projectSlug: string; subtitle?: string }) {
   return (
     <section className="relative py-24 bg-[#0A1128] overflow-hidden flex items-center min-h-[900px]">
@@ -113,6 +108,18 @@ if (typeof window !== 'undefined') {
   gsap.registerPlugin(ScrollTrigger);
 }
 
+function formatTowerName(raw?: string | null): string {
+  if (!raw) return '';
+  const trimmed = raw.trim();
+  const legacyMatch = trimmed.match(/^tower\s+(\d+)$/i);
+  if (legacyMatch) {
+    const num = parseInt(legacyMatch[1], 10);
+    const letter = String.fromCharCode(64 + num);
+    return `Tower ${letter}`;
+  }
+  return trimmed;
+}
+
 function DynamicProjectContent({ initialProjectData, currentSlug }: { initialProjectData: Project, currentSlug: string }) {
   const searchParams = useSearchParams(); 
   const blueprintIdParam = searchParams.get('blueprint');
@@ -129,39 +136,39 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
   const rafId = useRef<number | null>(null);
   const [isGrabbing, setIsGrabbing] = useState(false);
 
-  // --- AMENITIES TOWER FILTER ---
-  const availableTowers = useMemo<Tower[]>(() => {
+// --- DYNAMIC AMENITIES TOWER FILTER ---
+  const availableTowers = useMemo<string[]>(() => {
     const amenities = initialProjectData.amenities ?? [];
-
     return Array.from(
       new Set(
         amenities
-          .map((item) => item.tower)
-          .filter((tower): tower is Tower => tower !== null)
+          .map((item) => item.tower?.trim())
+          .filter((t): t is string => Boolean(t))
       )
+    ).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
     );
   }, [initialProjectData.amenities]);
 
-  const [selectedTower, setSelectedTower] = useState<Tower | null>(
+  const [selectedTower, setSelectedTower] = useState<string | null>(
     () => availableTowers[0] ?? null
   );
+
+  
 
   useEffect(() => {
     if (availableTowers.length === 0) {
       setSelectedTower(null);
       return;
     }
-
     if (selectedTower && availableTowers.includes(selectedTower)) {
       return;
     }
-
     setSelectedTower(availableTowers[0]);
   }, [availableTowers, selectedTower]);
 
   const filteredAmenities = useMemo(() => {
     const amenities = initialProjectData.amenities ?? [];
-
     const sortByTitle = (items: Amenity[]) =>
       [...items].sort((a, b) =>
         a.title.trim().localeCompare(b.title.trim(), undefined, {
@@ -170,17 +177,13 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
         })
       );
 
-    // No assigned towers: preserve the original behavior and show every
-    // amenity, including amenities whose tower value is null.
     if (!selectedTower) {
       return sortByTitle(amenities);
     }
 
-    // Amenities with a null tower are shared/general amenities. Keep them
-    // visible together with the amenities exclusive to the selected tower.
     return sortByTitle(
       amenities.filter(
-        (item) => item.tower === null || item.tower === selectedTower
+        (item) => !item.tower || item.tower.trim().toLowerCase() === selectedTower.toLowerCase()
       )
     );
   }, [initialProjectData.amenities, selectedTower]);
@@ -549,46 +552,44 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
 
     {/* TOWER FILTER: only shown when more than one tower has amenities */}
     {availableTowers.length > 1 && (
-    <div className="max-w-[90rem] px-6 md:px-12 w-full mx-auto mb-8 md:mb-10">
-      <div className="flex flex-col gap-4">
+      <div className="max-w-[90rem] px-6 md:px-12 w-full mx-auto mb-8 md:mb-10">
+        <div className="flex flex-col gap-4">
+          <span className="text-[10px] md:text-xs tracking-[0.25em] uppercase text-white/40 font-bold">
+            Select Tower
+          </span>
 
-        <span className="text-[10px] md:text-xs tracking-[0.25em] uppercase text-white/40 font-bold">
-          Select Tower
-        </span>
+          <div className="flex flex-wrap items-center gap-2 md:gap-3">
+            {availableTowers.map((tower) => {
+              const isActive = selectedTower === tower;
 
-        <div className="flex flex-wrap items-center gap-2 md:gap-3">
-          {availableTowers.map((tower) => {
-            const isActive = selectedTower === tower;
-
-            return (
-              <button
-                key={tower}
-                type="button"
-                onClick={() => setSelectedTower(tower)}
-                className={`
-                  px-5 md:px-7 py-3
-                  rounded-full
-                  border
-                  text-xs md:text-sm
-                  uppercase
-                  tracking-[0.15em]
-                  transition-all
-                  duration-300
-                  ${
-                    isActive
-                      ? 'bg-brand-gold border-brand-gold text-[#132243]'
-                      : 'bg-transparent border-white/20 text-white/60 hover:text-white hover:border-brand-gold/70'
-                  }
-                `}
-              >
-                {towerLabels[tower]}
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={tower}
+                  type="button"
+                  onClick={() => setSelectedTower(tower)}
+                  className={`
+                    px-5 md:px-7 py-3
+                    rounded-full
+                    border
+                    text-xs md:text-sm
+                    uppercase
+                    tracking-[0.15em]
+                    transition-all
+                    duration-300
+                    ${
+                      isActive
+                        ? 'bg-brand-gold border-brand-gold text-[#132243]'
+                        : 'bg-transparent border-white/20 text-white/60 hover:text-white hover:border-brand-gold/70'
+                    }
+                  `}
+                >
+                  {formatTowerName(tower)}
+                </button>
+              );
+            })}
+          </div>
         </div>
-
       </div>
-    </div>
     )}
 
 

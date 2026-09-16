@@ -315,23 +315,31 @@ export async function saveProjectAction(payload: any) {
         }
       }
     }
+await supabaseAdmin
+  .from('amenities')
+  .delete()
+  .eq('project_id', targetProjectId);
 
-    await supabaseAdmin
-      .from('amenities')
-      .delete()
-      .eq('project_id', targetProjectId);
+if (amenities.length > 0) {
+  const amenityRows = amenities.map((item: any) => ({
+    project_id: targetProjectId,
+    title: item.title,
+    description: item.description || '',
+    thumbnail: item.thumbnail || '',
+    tower:
+      typeof item.tower === 'string' && item.tower.trim()
+        ? item.tower.trim()
+        : null,
+  }));
 
-    if (amenities.length > 0) {
-      const cleanedAmenities = amenities.map((amenity: any) => {
-        const { id, ...rest } = amenity;
-        return { ...rest, project_id: targetProjectId };
-      });
+  const { error: amenityError } = await supabaseAdmin
+    .from('amenities')
+    .insert(amenityRows);
 
-      const { error: amenityErr } = await supabaseAdmin
-        .from('amenities')
-        .insert(cleanedAmenities);
-
-      if (amenityErr) throw amenityErr;
+  if (amenityError) {
+    throw new Error(`Amenity error: ${amenityError.message}`);
+  }
+}
     }
 
     // 7. Map Markers
