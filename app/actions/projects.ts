@@ -276,45 +276,46 @@ export async function saveProjectAction(payload: any) {
       }
     }
 
-    // 6. Amenities (Handle Storage Cleanup server-side)
-    const amenities = Array.isArray(finalData.amenities)
-      ? finalData.amenities
-      : [];
+// 6. Amenities (Handle Storage Cleanup server-side)
+const amenities = Array.isArray(finalData.amenities)
+  ? finalData.amenities
+  : [];
 
-    const { data: oldAmenities } = await supabaseAdmin
-      .from('amenities')
-      .select('thumbnail')
-      .eq('project_id', targetProjectId);
+const { data: oldAmenities } = await supabaseAdmin
+  .from('amenities')
+  .select('thumbnail')
+  .eq('project_id', targetProjectId);
 
-    const newAmenityUrls = amenities
-      .map((amenity: any) => amenity.thumbnail)
-      .filter(Boolean);
+const newAmenityUrls = amenities
+  .map((amenity: any) => amenity.thumbnail)
+  .filter(Boolean);
 
-    if (oldAmenities) {
-      for (const amenity of oldAmenities) {
-        if (
-          amenity.thumbnail &&
-          !newAmenityUrls.includes(amenity.thumbnail) &&
-          amenity.thumbnail.includes('/storage/v1/object/public/images/')
-        ) {
-          const oldStoragePath =
-            amenity.thumbnail.split('/storage/v1/object/public/images/')[1];
+if (oldAmenities) {
+  for (const amenity of oldAmenities) {
+    if (
+      amenity.thumbnail &&
+      !newAmenityUrls.includes(amenity.thumbnail) &&
+      amenity.thumbnail.includes('/storage/v1/object/public/images/')
+    ) {
+      const oldStoragePath =
+        amenity.thumbnail.split('/storage/v1/object/public/images/')[1];
 
-          if (oldStoragePath) {
-            const { error: deleteError } = await supabaseAdmin.storage
-              .from('images')
-              .remove([oldStoragePath]);
+      if (oldStoragePath) {
+        const { error: deleteError } = await supabaseAdmin.storage
+          .from('images')
+          .remove([oldStoragePath]);
 
-            if (deleteError) {
-              console.warn(
-                'Failed to delete old amenity image from storage:',
-                deleteError
-              );
-            }
-          }
+        if (deleteError) {
+          console.warn(
+            'Failed to delete old amenity image from storage:',
+            deleteError
+          );
         }
       }
     }
+  }
+}
+
 await supabaseAdmin
   .from('amenities')
   .delete()
@@ -340,10 +341,9 @@ if (amenities.length > 0) {
     throw new Error(`Amenity error: ${amenityError.message}`);
   }
 }
-    }
 
-    // 7. Map Markers
-    if (finalData.map_latitude && finalData.map_longitude) {
+// 7. Map Markers
+if (finalData.map_latitude && finalData.map_longitude) {
       await supabaseAdmin.from('parent_marker').upsert(
         {
           project_id: targetProjectId,
