@@ -561,17 +561,24 @@ function VirtualToursManager({ checkPerm }: ManagerProps) {
                       </span>
                     </div>
 
-                    <div className="col-span-3 flex justify-end gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="col-span-3 flex items-center justify-end gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                       {checkPerm('virtual_tours', 'can_edit') && (
-                        <button onClick={() => handleToggleStatus(tour.id, tour.status, tour.title)} className={`p-2 bg-white shadow-sm border rounded-lg ${tour.status === 'Active' ? 'border-green-200 text-green-600' : 'border-gray-200 text-gray-400'}`}>
-                          {tour.status === 'Active' ? <Eye size={14} /> : <EyeOff size={14} />}
-                        </button>
-                      )}
-                      {checkPerm('virtual_tours', 'can_edit') && (
-                        <button onClick={() => router.push(`/admin/virtualtours?edit=${tour.id}`)} className="p-2 bg-white shadow-sm border border-gray-200 text-brand-blue hover:bg-brand-blue hover:text-white rounded-lg transition-colors"><Edit2 size={14} /></button>
+                        <Link 
+                          href={`/admin/virtualtours?project=${tour.project_id || tour.id}`}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-white shadow-sm border border-gray-200 text-brand-blue hover:bg-brand-blue hover:text-white rounded-lg transition-colors text-xs font-bold uppercase tracking-wider"
+                        >
+                          <Edit2 size={13} />
+                          <span>Manage Tours</span>
+                        </Link>
                       )}
                       {checkPerm('virtual_tours', 'can_delete') && (
-                        <button onClick={() => handleArchiveClick(tour.id, tour.title)} className="p-2 bg-white shadow-sm border border-gray-200 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors"><Trash2 size={14} /></button>
+                        <button 
+                          onClick={() => handleArchiveClick(tour.id, tour.title)} 
+                          className="p-2 bg-white shadow-sm border border-gray-200 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors"
+                          title="Delete Project Tours"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       )}
                     </div>
                   </div>
