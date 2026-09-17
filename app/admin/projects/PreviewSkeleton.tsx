@@ -20,6 +20,21 @@ interface Amenity {
   tower?: string | null;
 }
 
+export type ProjectEditorRegion =
+  | 'hero-image'
+  | 'project-title'
+  | 'location'
+  | 'awards'
+  | 'tags'
+  | 'editorial';
+
+interface PreviewSkeletonProps {
+  data: any;
+  editorMode?: boolean;
+  selectedRegion?: ProjectEditorRegion | null;
+  onSelectRegion?: (region: ProjectEditorRegion) => void;
+}
+
 function formatTowerName(raw?: string | null): string {
   if (!raw) return '';
   const trimmed = raw.trim();
@@ -55,7 +70,12 @@ function DummyMapSection() {
   );
 }
 
-export default function PreviewSkeleton({ data }: { data: any }) {
+export default function PreviewSkeleton({
+  data,
+  editorMode = false,
+  selectedRegion = null,
+  onSelectRegion,
+}: PreviewSkeletonProps) {
   const blueprintSectionRef = useRef<HTMLElement>(null);
   
   // --- DRAG TO SCROLL STATE ---
@@ -66,6 +86,34 @@ export default function PreviewSkeleton({ data }: { data: any }) {
   const currentScroll = useRef(0);
   const rafId = useRef<number | null>(null);
   const [isGrabbing, setIsGrabbing] = useState(false);
+
+  const selectRegion = (
+  e: React.MouseEvent,
+  region: ProjectEditorRegion
+) => {
+  if (!editorMode) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  onSelectRegion?.(region);
+};
+
+const regionStyle = (region: ProjectEditorRegion) => {
+  if (!editorMode) return '';
+
+  return `
+    pointer-events-auto
+    cursor-pointer
+    transition-all
+    duration-150
+    ${
+      selectedRegion === region
+        ? 'ring-2 ring-brand-gold ring-offset-2 ring-offset-transparent'
+        : 'hover:ring-2 hover:ring-white/70'
+    }
+  `;
+};
 
  const availableTowers = useMemo<string[]>(() => {
     const amenities = data.amenities ?? [];
@@ -231,102 +279,630 @@ export default function PreviewSkeleton({ data }: { data: any }) {
     <div className="relative font-sans text-gray-900 bg-[#E7E7E7] overflow-x-hidden">
       
       {/* --- HERO SECTION --- */}
-      <section className="relative h-[85vh] w-full overflow-hidden pointer-events-none bg-gray-900">
-        <div className="absolute inset-0">
-          <Image 
-            src={data.image || BLANK_IMAGE}
-            alt={data.title} fill sizes="100vw" priority className="object-cover"
+        <section
+          className={`
+            relative
+            h-[85vh]
+            w-full
+            overflow-hidden
+            bg-gray-900
+            ${
+              editorMode
+                ? 'pointer-events-auto'
+                : 'pointer-events-none'
+            }
+          `}
+        >
+
+          {/* EDITABLE HERO IMAGE */}
+          <div
+            onClick={(e) =>
+              selectRegion(e, 'hero-image')
+            }
+            className={`
+              absolute inset-0
+              ${regionStyle('hero-image')}
+            `}
+          >
+            <Image
+              src={data.image || BLANK_IMAGE}
+              alt={data.title}
+              fill
+              sizes="100vw"
+              priority
+              className="object-cover"
+            />
+
+            {editorMode &&
+              selectedRegion === 'hero-image' && (
+                <span
+                  className="
+                    absolute
+                    top-5 left-5
+                    z-30
+                    rounded-md
+                    bg-brand-gold
+                    px-3 py-1.5
+                    text-[10px]
+                    font-bold
+                    uppercase
+                    tracking-wider
+                    text-brand-blue
+                    shadow-lg
+                  "
+                >
+                  Hero Image
+                </span>
+              )}
+          </div>
+
+          {/* DARK OVERLAY */}
+          <div
+            className="
+              absolute inset-0
+              bg-black/40
+              pointer-events-none
+              z-10
+            "
+          />
+
+          {/* HERO CONTENT */}
+          <div
+            className="
+              absolute inset-0
+              z-20
+              flex flex-col
+              justify-end
+              px-6 pb-16
+              md:px-12 md:pb-24
+              max-w-[90rem]
+              mx-auto
+              w-full
+              pointer-events-none
+            "
+          >
+            <div
+              className="
+                flex flex-col
+                md:flex-row
+                justify-between
+                items-end
+                w-full
+              "
+            >
+
+              <div
+                className="
+                  flex flex-col
+                  w-full md:w-auto
+                "
+              >
+
+                {/* EDITABLE PROJECT TITLE */}
+                <div
+                  onClick={(e) =>
+                    selectRegion(
+                      e,
+                      'project-title'
+                    )
+                  }
+                  className={`
+                    relative
+                    w-fit
+                    rounded-sm
+                    ${regionStyle(
+                      'project-title'
+                    )}
+                  `}
+                >
+                  {editorMode &&
+                    selectedRegion ===
+                      'project-title' && (
+                      <span
+                        className="
+                          absolute
+                          -top-7 left-0
+                          rounded-md
+                          bg-brand-gold
+                          px-2 py-1
+                          text-[9px]
+                          font-bold
+                          uppercase
+                          tracking-wider
+                          text-brand-blue
+                          shadow-lg
+                        "
+                      >
+                        Project Title
+                      </span>
+                    )}
+
+                  <h1
+                    className="
+                      text-5xl
+                      md:text-8xl
+                      font-serif
+                      mb-5
+                      drop-shadow-2xl
+                      py-2
+                    "
+                  >
+                    <span
+                      className="
+                        inline-block
+                        text-transparent
+                        bg-clip-text
+                        bg-gradient-to-r
+                        from-brand-gold
+                        via-[#fff2cd]
+                        to-brand-gold
+                        pr-4 pb-2 pt-1
+                      "
+                    >
+                      {data.title ||
+                        'Project Title'}
+                    </span>
+                  </h1>
+                </div>
+
+
+                {/* EDITABLE LOCATION */}
+                <div
+                  onClick={(e) =>
+                    selectRegion(
+                      e,
+                      'location'
+                    )
+                  }
+                  className={`
+                    relative
+                    flex
+                    items-center
+                    gap-2
+                    mb-10
+                    text-white/80
+                    rounded-sm
+                    w-fit
+                    px-1 py-1
+                    ${regionStyle(
+                      'location'
+                    )}
+                  `}
+                >
+                  {editorMode &&
+                    selectedRegion ===
+                      'location' && (
+                      <span
+                        className="
+                          absolute
+                          -top-7 left-0
+                          rounded-md
+                          bg-brand-gold
+                          px-2 py-1
+                          text-[9px]
+                          font-bold
+                          uppercase
+                          tracking-wider
+                          text-brand-blue
+                          shadow-lg
+                        "
+                      >
+                        Location
+                      </span>
+                    )}
+
+                  <span className="text-brand-gold">
+                    <MapPin size={18} />
+                  </span>
+
+                  <span
+                    className="
+                      text-xs md:text-sm
+                      font-bold
+                      uppercase
+                      tracking-[0.3em]
+                    "
+                  >
+                    {data.city || 'City'},{' '}
+                    {data.country ||
+                      'Country'}
+                  </span>
+                </div>
+
+              </div>
+
+
+      {/* EDITABLE AWARD BADGE */}
+      {data.img_awards &&
+        data.img_awards !== '' && (
+          <div
+            onClick={(e) =>
+              selectRegion(
+                e,
+                'awards'
+              )
+            }
+            className={`
+              relative
+              hidden
+              lg:block
+              mb-10
+              rounded-sm
+              ${regionStyle(
+                'awards'
+              )}
+            `}
+          >
+            {editorMode &&
+              selectedRegion ===
+                'awards' && (
+                <span
+                  className="
+                    absolute
+                    -top-7 left-0
+                    rounded-md
+                    bg-brand-gold
+                    px-2 py-1
+                    text-[9px]
+                    font-bold
+                    uppercase
+                    tracking-wider
+                    text-brand-blue
+                    shadow-lg
+                  "
+                >
+                  Awards
+                </span>
+              )}
+
+            <Image
+              src={data.img_awards}
+              alt="Award"
+              width={350}
+              height={120}
+              className="
+                object-contain
+                drop-shadow-2xl
+              "
+            />
+          </div>
+        )}
+    </div>
+
+
+    <div className="flex flex-col gap-8">
+
+      {/* EDITABLE TAGS / STATS */}
+      <div
+        onClick={(e) =>
+          selectRegion(
+            e,
+            'tags'
+          )
+        }
+        className={`
+          relative
+          flex
+          flex-wrap
+          gap-4
+          w-fit
+          rounded-sm
+          ${regionStyle(
+            'tags'
+          )}
+        `}
+      >
+        {editorMode &&
+          selectedRegion ===
+            'tags' && (
+            <span
+              className="
+                absolute
+                -top-7 left-0
+                rounded-md
+                bg-brand-gold
+                px-2 py-1
+                text-[9px]
+                font-bold
+                uppercase
+                tracking-wider
+                text-brand-blue
+                shadow-lg
+              "
+            >
+              Tags & Stats
+            </span>
+          )}
+
+        {displayTags.map(
+          (tag, index) => (
+            <span
+              key={index}
+              className="
+                flex items-center
+                gap-3
+                px-6 py-3
+                rounded-sm
+                border
+                border-white/30
+                bg-black/30
+                backdrop-blur-xl
+                text-white
+                text-[10px]
+                md:text-xs
+                font-bold
+                uppercase
+                tracking-[0.2em]
+                shadow-2xl
+              "
+            >
+              <span
+                className="
+                  text-brand-gold
+                "
+              >
+                {tag.icon}
+              </span>
+
+              {tag.label}
+            </span>
+          )
+        )}
+      </div>
+
+
+      <div
+        className="
+          flex flex-col
+          sm:flex-row
+          gap-4 sm:gap-6
+          w-full sm:w-auto
+        "
+      >
+        <div
+          className="
+            group
+            relative
+            flex
+            items-center
+            justify-center
+            gap-6
+            w-fit
+            bg-brand-blue
+            px-8 py-4
+            overflow-hidden
+            rounded-sm
+            shadow-lg
+          "
+        >
+          <span
+            className="
+              relative z-10
+              text-[11px]
+              tracking-[0.25em]
+              font-bold
+              text-white
+              uppercase
+            "
+          >
+            Inquire Now
+          </span>
+
+          <ArrowRight
+            size={16}
+            className="
+              relative z-10
+              text-white
+            "
           />
         </div>
-        <div className="absolute inset-0 bg-black/40" />
+      </div>
 
-        <div className="absolute inset-0 flex flex-col justify-end px-6 pb-16 md:px-12 md:pb-24 max-w-[90rem] mx-auto w-full">
-          <div className="flex flex-col md:flex-row justify-between items-end w-full">
-            <div className="flex flex-col w-full md:w-auto">
-              <h1 className="text-5xl md:text-8xl font-serif mb-5 drop-shadow-2xl py-2">
-                <span className="inline-block text-transparent bg-clip-text bg-gradient-to-r from-brand-gold via-[#fff2cd] to-brand-gold pr-4 pb-2 pt-1">
-                  {data.title || 'Project Title'}
-                </span>
-              </h1>
-              <div className="flex items-center gap-2 mb-10 text-white/80">
-                <span className="text-brand-gold"><MapPin size={18} /></span>
-                <span className="text-xs md:text-sm font-bold uppercase tracking-[0.3em]">
-                  {data.city || 'City'}, {data.country || 'Country'}
-                </span>
-              </div>
-            </div>
-
-            {data.img_awards && data.img_awards !== '' && (
-              <div className="hidden lg:block mb-10">
-                <Image 
-                  src={data.img_awards} alt="Award" width={350} height={120}
-                  className="object-contain drop-shadow-2xl"
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-8">
-            <div className="flex flex-wrap gap-4">
-              {displayTags.map((tag, index) => (
-                <span key={index} className="flex items-center gap-3 px-6 py-3 rounded-sm border border-white/30 bg-black/30 backdrop-blur-xl text-white text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] shadow-2xl">
-                  <span className="text-brand-gold">{tag.icon}</span>
-                  {tag.label}
-                </span>
-              ))}
-            </div>
-            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 w-full sm:w-auto">
-              <div className="group relative flex items-center justify-center gap-6 w-fit bg-brand-blue px-8 py-4 overflow-hidden rounded-sm shadow-lg">
-                <span className="relative z-10 text-[11px] tracking-[0.25em] font-bold text-white uppercase">Inquire Now</span>
-                <ArrowRight size={16} className="relative z-10 text-white" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+    </div>
+  </div>
+</section>
 
       {/* --- EDITORIAL SECTION --- */}
       {data.extended_description?.length > 0 && (
-        <section 
-          className="relative min-h-screen py-24 flex items-center pointer-events-none"
-          style={{ 
-            background: `linear-gradient(to bottom, #ffffff 0%, #ffffff 65%, ${
-              data.extended_description[0]?.editorial_bg_color && data.extended_description[0]?.editorial_bg_color !== 'transparent'
-                ? data.extended_description[0].editorial_bg_color
-                : '#ffffff'
-            } 100%)` 
+        <section
+          onClick={(e) =>
+            selectRegion(e, 'editorial')
+          }
+          className={`
+            relative
+            min-h-screen
+            py-24
+            flex
+            items-center
+            transition-all
+            duration-150
+
+            ${
+              editorMode
+                ? `
+                  pointer-events-auto
+                  cursor-pointer
+                  ${
+                    selectedRegion === 'editorial'
+                      ? 'ring-2 ring-inset ring-brand-gold'
+                      : 'hover:ring-2 hover:ring-inset hover:ring-white/70'
+                  }
+                `
+                : 'pointer-events-none'
+            }
+          `}
+          style={{
+            background: `linear-gradient(
+              to bottom,
+              #ffffff 0%,
+              #ffffff 65%,
+              ${
+                data.extended_description[0]
+                  ?.editorial_bg_color &&
+                data.extended_description[0]
+                  ?.editorial_bg_color !== 'transparent'
+                  ? data.extended_description[0]
+                      .editorial_bg_color
+                  : '#ffffff'
+              } 100%
+            )`,
           }}
         >
-          <div className="max-w-[90rem] mx-auto px-6 md:px-12 w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center lg:h-[600px]">
-            <div className="relative w-full h-[400px] lg:h-full rounded-sm overflow-hidden shadow-2xl bg-gray-200 border border-gray-300">
-              <Image 
-                src={data.extended_description[0]?.editorial_img || BLANK_IMAGE} 
-                alt="Editorial" 
-                fill 
+
+          {/* EDITOR LABEL */}
+          {editorMode &&
+            selectedRegion === 'editorial' && (
+              <span
+                className="
+                  absolute
+                  top-5 left-5
+                  z-30
+                  rounded-md
+                  bg-brand-gold
+                  px-3 py-1.5
+                  text-[10px]
+                  font-bold
+                  uppercase
+                  tracking-wider
+                  text-brand-blue
+                  shadow-lg
+                "
+              >
+                Editorial Section
+              </span>
+            )}
+
+
+          <div
+            className="
+              max-w-[90rem]
+              mx-auto
+              px-6 md:px-12
+              w-full
+              grid
+              grid-cols-1
+              lg:grid-cols-2
+              gap-16
+              items-center
+              lg:h-[600px]
+            "
+          >
+
+            {/* EDITORIAL IMAGE */}
+            <div
+              className="
+                relative
+                w-full
+                h-[400px]
+                lg:h-full
+                rounded-sm
+                overflow-hidden
+                shadow-2xl
+                bg-gray-200
+                border
+                border-gray-300
+              "
+            >
+              <Image
+                src={
+                  data.extended_description[0]
+                    ?.editorial_img ||
+                  BLANK_IMAGE
+                }
+                alt="Editorial"
+                fill
                 className="object-cover"
               />
             </div>
 
-            <div className="flex flex-col gap-8 items-start justify-center h-full overflow-hidden">
-              <h2 
-                className="font-serif text-2xl sm:text-3xl lg:text-[36px] xl:text-[44px] leading-[1.18] transition-colors duration-300 shrink-0"
-                style={{ color: data.extended_description[0]?.editorial_title_color || '#132243' }}
+
+            {/* EDITORIAL COPY */}
+            <div
+              className="
+                flex
+                flex-col
+                gap-8
+                items-start
+                justify-center
+                h-full
+                overflow-hidden
+              "
+            >
+              <h2
+                className="
+                  font-serif
+                  text-2xl
+                  sm:text-3xl
+                  lg:text-[36px]
+                  xl:text-[44px]
+                  leading-[1.18]
+                  transition-colors
+                  duration-300
+                  shrink-0
+                "
+                style={{
+                  color:
+                    data.extended_description[0]
+                      ?.editorial_title_color ||
+                    '#132243',
+                }}
               >
-                {(data.extended_description[0]?.editorial_title || 'Editorial Headline').split('\n').map((line: string, idx: number) => (
-                  <span key={idx} className="block whitespace-nowrap">
-                    {line}
-                  </span>
-                ))}
+                {(
+                  data.extended_description[0]
+                    ?.editorial_title ||
+                  'Editorial Headline'
+                )
+                  .split('\n')
+                  .map(
+                    (
+                      line: string,
+                      idx: number
+                    ) => (
+                      <span
+                        key={idx}
+                        className="block"
+                      >
+                        {line}
+                      </span>
+                    )
+                  )}
               </h2>
-              <div className="space-y-6 overflow-y-auto w-full pr-2" style={{ scrollbarWidth: 'thin' }}>
-                <p 
-                  className="text-lg leading-relaxed text-justify whitespace-pre-line transition-colors duration-300"
-                  style={{ color: data.extended_description[0]?.editorial_desc_color || '#4B5563' }}
+
+
+              <div
+                className="
+                  space-y-6
+                  overflow-y-auto
+                  w-full
+                  pr-2
+                "
+                style={{
+                  scrollbarWidth: 'thin',
+                }}
+              >
+                <p
+                  className="
+                    text-lg
+                    leading-relaxed
+                    text-justify
+                    whitespace-pre-line
+                    transition-colors
+                    duration-300
+                  "
+                  style={{
+                    color:
+                      data.extended_description[0]
+                        ?.editorial_desc_color ||
+                      '#4B5563',
+                  }}
                 >
-                  {data.extended_description[0]?.editorial_long || 'Write your description here...'}
+                  {data.extended_description[0]
+                    ?.editorial_long ||
+                    'Write your description here...'}
                 </p>
               </div>
             </div>
+
           </div>
         </section>
       )}

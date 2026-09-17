@@ -29,6 +29,112 @@ export async function fetchAdminProjectsList() {
   return data;
 }
 
+export async function createBasicProjectAction(input: {
+  title: string;
+  slug: string;
+  status: string;
+  address: string;
+  city: string;
+  country: string;
+  sqm: string;
+  unit_total: string;
+}) {
+  try {
+    const session = await getCustomSession();
+
+    if (!session) {
+      throw new Error('Unauthorized: Please log in.');
+    }
+
+    const title = input.title.trim();
+    const slug = input.slug.trim();
+    const status = input.status.trim();
+    const address = input.address.trim();
+    const city = input.city.trim();
+    const country = input.country.trim() || 'Philippines';
+
+    if (!title) {
+      throw new Error('Project title is required.');
+    }
+
+    if (!slug || !slug.startsWith('/')) {
+      throw new Error('URL slug must start with "/".');
+    }
+
+    if (!status) {
+      throw new Error('Project status is required.');
+    }
+
+    if (!address || !city || !country) {
+      throw new Error('Project location is required.');
+    }
+
+    // Prevent duplicate public URLs.
+    const { data: existingSlug, error: slugCheckError } =
+      await supabaseAdmin
+        .from('project_table')
+        .select('id')
+        .eq('slug', slug)
+        .is('deleted_at', null)
+        .maybeSingle();
+
+    if (slugCheckError) {
+      throw slugCheckError;
+    }
+
+    if (existingSlug) {
+      throw new Error(
+        'That URL slug is already being used by another project.'
+      );
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('project_table')
+      .insert({
+        title,
+        slug,
+        status,
+        address,
+        city,
+        country,
+
+        sqm: input.sqm || null,
+        unit_total: input.unit_total || null,
+
+        // Website/media content will be completed in the editor.
+        image: '',
+        img_awards: null,
+        map_icon: null,
+
+        // IMPORTANT:
+        // New projects remain hidden until intentionally enabled.
+        is_active: false,
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data?.id) {
+      throw new Error('Project was created but no project ID was returned.');
+    }
+
+    return {
+      success: true,
+      projectId: data.id,
+    };
+  } catch (error: any) {
+    console.error('[createBasicProjectAction]', error);
+
+    return {
+      success: false,
+      error: error?.message || 'Failed to create project.',
+    };
+  }
+}
+
 export async function saveProjectAction(payload: any) {
   try {
     // 1. Verify custom session

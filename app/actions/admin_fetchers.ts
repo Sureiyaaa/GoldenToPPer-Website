@@ -205,6 +205,99 @@ export async function createAuditLogAction(action_type: string, entity_type: str
   return { success: true };
 }
 
+export async function fetchRecentAuditLogsAction(limit: number = 5) {
+  const session = await getCustomSession();
+
+  if (!session) {
+    throw new Error("Unauthorized");
+  }
+
+  // Keep the dashboard compact even if a bigger number is accidentally passed.
+  const safeLimit = Math.min(Math.max(limit, 1), 10);
+
+  const { data, error } = await supabaseAdmin
+    .from('audit_logs')
+    .select(`
+      id,
+      created_at,
+      user_email,
+      action_type,
+      entity_type,
+      entity_name,
+      details
+    `)
+    .order('created_at', { ascending: false })
+    .limit(safeLimit);
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? [];
+}
+
+export async function fetchWebsiteSectionStatesAction() {
+  const session = await getCustomSession();
+
+  if (!session) {
+    throw new Error('Unauthorized');
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('modules')
+    .select('id, module_name, module_code, is_active')
+    .order('id');
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? [];
+}
+
+export async function saveWebsiteSectionStatesAction(
+  changes: Array<{
+    id: number;
+    is_active: boolean;
+    module_name: string;
+    display_name: string;
+  }>
+) {
+  const session = await getCustomSession();
+
+  if (!session) {
+    throw new Error('Unauthorized');
+  }
+
+  if (!Array.isArray(changes) || changes.length === 0) {
+    return { success: true };
+  }
+
+  for (const change of changes) {
+    const { error } = await supabaseAdmin
+      .from('modules')
+      .update({
+        is_active: change.is_active,
+      })
+      .eq('id', change.id);
+
+    if (error) {
+      throw error;
+    }
+
+    await createAuditLogAction(
+      'EDIT',
+      change.display_name,
+      'Website visibility',
+      change.is_active
+        ? 'Shown on website.'
+        : 'Hidden from website.'
+    );
+  }
+
+  return { success: true };
+}
+
 export async function submitInquiryAction(data: any) {
   try {
     let currentClientId = null;

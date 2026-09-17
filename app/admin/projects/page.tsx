@@ -3,13 +3,22 @@
 
 import { getCurrentUser } from '@/app/actions/auth';
 import { useState, useEffect, Suspense } from 'react';
-import { saveProjectAction, fetchProjectForEdit } from '@/app/actions/projects';
+import {
+  saveProjectAction,
+  fetchProjectForEdit,
+  createBasicProjectAction
+} from '@/app/actions/projects';
+import {
+  createAuditLogAction
+} from '@/app/actions/admin_fetchers';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { ArrowLeft, Save, Loader2, PlusCircle, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
-import PreviewSkeleton from './PreviewSkeleton';
+import PreviewSkeleton, {
+  ProjectEditorRegion
+} from './PreviewSkeleton';
 import ImageDropzone from '@/app/components/imagedropzone';
 import { createClient } from '@/utils/supabase/client';
 
@@ -25,8 +34,8 @@ const projectSchema = z.object({
  
   image: z.string(), 
   img_awards: z.string(), 
-  editorial_title: z.string().min(1, "Editorial title is required"),
-  editorial_long: z.string().min(1, "Editorial description is required"),
+  editorial_title: z.string(),
+  editorial_long: z.string(),
   editorial_img: z.string(),
   editorial_title_color: z.string().optional(),
   editorial_desc_color: z.string().optional(),
@@ -51,8 +60,8 @@ const projectSchema = z.object({
   amenities: z.array(z.object({
     title: z.string().min(1, "Title required"), description: z.string(), thumbnail: z.string(), tower: z.string().nullable().optional()
   })),
-  map_latitude: z.string().min(1, "Required"),
-  map_longitude: z.string().min(1, "Required"),
+  map_latitude: z.string(),
+  map_longitude: z.string(),
   map_icon: z.string().optional(), // NEW: Main project map pin
    map_subtitle: z.string().optional(),
   child_markers: z.array(z.object({
@@ -68,6 +77,44 @@ const projectSchema = z.object({
 });
 
 type ProjectFormData = z.infer<typeof projectSchema>;
+const basicProjectSchema = z.object({
+  title: z
+    .string()
+    .min(1, 'Project title is required'),
+
+  slug: z
+    .string()
+    .min(1, 'URL slug is required')
+    .startsWith('/', 'URL slug must start with /'),
+
+  status: z
+    .string()
+    .min(1, 'Project status is required'),
+
+  address: z
+    .string()
+    .min(1, 'Street address is required'),
+
+  city: z
+    .string()
+    .min(1, 'City is required'),
+
+  country: z
+    .string()
+    .min(1, 'Country is required'),
+
+  sqm: z
+    .string()
+    .min(1, 'Total SQM is required'),
+
+  unit_total: z
+    .string()
+    .min(1, 'Total units is required'),
+});
+
+type BasicProjectFormData =
+  z.infer<typeof basicProjectSchema>;
+
 const BLANK_IMAGE = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
 
 const ColorInputSync = ({ 
@@ -103,21 +150,58 @@ const ColorInputSync = ({
   return (
     <div>
       <label className={labelStyles}>{label}</label>
-      <div className="flex items-center gap-2">
-        <input 
-          type="color" 
-          value={currentColor || '#000000'} 
+      <div className="flex items-center gap-3">
+
+        {/* COLOR SWATCH */}
+        <input
+          type="color"
+          value={currentColor || '#000000'}
           onChange={handleColorPickerChange}
-          className="w-8 h-8 rounded cursor-pointer border-0 p-0 shrink-0" 
+          className="
+            h-11
+            w-12
+            shrink-0
+            cursor-pointer
+            rounded-xl
+            border
+            border-gray-200
+            bg-white
+            p-1
+            shadow-sm
+          "
         />
-        <input 
-          type="text" 
-          value={textValue} 
+
+        {/* HEX VALUE */}
+        <input
+          type="text"
+          value={textValue}
           onChange={handleTextChange}
           placeholder="#FFFFFF"
-          className={`${inputStyles} py-1 px-2 text-[10px] uppercase font-mono`} 
+          className="
+            flex-1
+            h-11
+            rounded-xl
+            border
+            border-gray-200
+            bg-white
+            px-3
+            text-sm
+            font-mono
+            font-medium
+            uppercase
+            text-brand-blue
+            outline-none
+            transition-all
+            focus:border-brand-gold
+            focus:ring-2
+            focus:ring-brand-gold/10
+          "
         />
-        <input type="hidden" {...register(fieldName)} />
+
+        <input
+          type="hidden"
+          {...register(fieldName)}
+        />
       </div>
     </div>
   );
@@ -143,6 +227,24 @@ function ProjectManager() {
   const [isFetching, setIsFetching] = useState(!!editId); 
   const [isSaving, setIsSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [createError, setCreateError] = useState('');
+
+  type EditorSelection =
+  | ProjectEditorRegion
+  | 'page-settings'
+  | null;
+
+const [
+  selectedEditorRegion,
+  setSelectedEditorRegion
+] = useState<EditorSelection>(
+  'project-title'
+);
+
+const [
+  useLegacyEditor,
+  setUseLegacyEditor
+] = useState(false);
   
   const [pendingFiles, setPendingFiles] = useState<Record<string, File>>({});
   const [previews, setPreviews] = useState<Record<string, string>>({});
@@ -191,7 +293,11 @@ function ProjectManager() {
     return () => Object.values(previews).forEach(url => URL.revokeObjectURL(url));
   }, [previews]);
 
-  const { register, control, watch, handleSubmit, setValue, reset, formState: { errors, isSubmitting } } = useForm<ProjectFormData>({
+  const { register, control, watch, handleSubmit, setValue, reset, formState: {
+      errors,
+      isSubmitting,
+      isDirty
+    } } = useForm<ProjectFormData>({
     resolver: zodResolver(projectSchema),
     defaultValues: {
       title: "", slug: "", status: "", address: "", city: "", country: "Philippines",
@@ -203,6 +309,28 @@ function ProjectManager() {
      
     }
   });
+
+  const {
+  register: registerBasic,
+  handleSubmit: handleBasicSubmit,
+  formState: {
+    errors: basicErrors,
+    isSubmitting: isCreatingBasic,
+  },
+} = useForm<BasicProjectFormData>({
+  resolver: zodResolver(basicProjectSchema),
+
+  defaultValues: {
+    title: '',
+    slug: '',
+    status: '',
+    address: '',
+    city: '',
+    country: 'Philippines',
+    sqm: '',
+    unit_total: '',
+  },
+});
 
   const { fields: tagFields, append: appendTag, remove: removeTag } = useFieldArray({ control, name: "tags" });
   const { fields: amenityFields, append: appendAmenity, remove: removeAmenity } = useFieldArray({ control, name: "amenities" });
@@ -331,6 +459,53 @@ function ProjectManager() {
   const projectPageLayoutCount =
     formData.unit_layouts?.filter((layout) => layout.show_on_project_page).length || 0;
 
+const onCreateBasicProject = async (
+  data: BasicProjectFormData
+) => {
+  setCreateError('');
+
+  try {
+    const result =
+      await createBasicProjectAction(data);
+
+    if (
+      !result.success ||
+      !result.projectId
+    ) {
+      throw new Error(
+        result.error ||
+        'Failed to create project.'
+      );
+    }
+
+    // Log the creation without blocking the project
+    // if the audit log itself encounters a problem.
+    try {
+      await createAuditLogAction(
+        'CREATE',
+        'Projects',
+        data.title,
+        'Created new project. Hidden from website until enabled.'
+      );
+    } catch (auditError) {
+      console.warn(
+        'Project created, but audit log failed:',
+        auditError
+      );
+    }
+
+    // Continue directly into the editor.
+    router.replace(
+      `/admin/projects?edit=${result.projectId}`
+    );
+  } catch (error: any) {
+    setCreateError(
+      error?.message ||
+      'Failed to create project.'
+    );
+  }
+};
+
   const onSubmit = async (data: ProjectFormData) => {
     setIsSaving(true);
     try {
@@ -385,8 +560,22 @@ function ProjectManager() {
         throw new Error(result.error);
       }
 
-      setSuccessMsg(editId ? 'Project Updated Successfully!' : 'Project Published Successfully!');
-      setTimeout(() => router.replace(`/admin/dashboard`), 2000);
+      reset(finalData);
+
+      setPendingFiles({});
+      setPreviews({});
+
+      setSuccessMsg(
+        editId
+          ? 'Changes saved successfully.'
+          : 'Project created successfully.'
+      );
+
+      setIsSaving(false);
+
+      setTimeout(() => {
+        setSuccessMsg('');
+      }, 2000);
 
     } catch (error: any) {
       alert(`Action Failed: ${error.message}`);
@@ -436,12 +625,2004 @@ function ProjectManager() {
   })) : []
   };
 
+    const handleResetEditorChanges = () => {
+    Object.values(previews).forEach((url) => {
+      if (
+        typeof url === 'string' &&
+        url.startsWith('blob:')
+      ) {
+        URL.revokeObjectURL(url);
+      }
+    });
+
+    setPreviews({});
+    setPendingFiles({});
+
+    reset();
+  };
+
   const labelStyles = "text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1 mt-4";
   const inputStyles = "w-full border border-gray-200 rounded-lg p-3 text-sm focus:border-brand-gold outline-none transition-colors bg-gray-50 focus:bg-white";
 
   if (isFetching) {
     return <div className="flex h-screen w-full items-center justify-center bg-[#E7E7E7]"><Loader2 size={40} className="animate-spin text-brand-blue" /></div>;
   }
+
+  // ==========================================
+// NEW PROJECT: BASIC SETUP ONLY
+// ==========================================
+
+if (!editId) {
+  return ( 
+    <div
+      className="
+        min-h-screen
+        bg-[#F7F8FA]
+        text-gray-900
+        font-sans
+        overflow-y-auto
+      "
+    >
+      {/* TOP BAR */}
+      <header
+        className="
+          h-20
+          bg-white
+          border-b border-gray-200
+          flex items-center
+          px-6 md:px-10
+          sticky top-0
+          z-30
+        "
+      >
+        <button
+          type="button"
+          onClick={() =>
+            router.push(
+              '/admin/dashboard?section=Projects'
+            )
+          }
+          className="
+            flex items-center gap-2
+            text-xs
+            font-bold
+            text-gray-500
+            hover:text-brand-blue
+            transition-colors
+          "
+        >
+          <ArrowLeft size={16} />
+          Back to Projects
+        </button>
+      </header>
+
+
+      <main
+        className="
+          max-w-4xl
+          mx-auto
+          px-6
+          py-10 md:py-14
+        "
+      >
+        {/* PAGE INTRO */}
+        <div className="mb-8">
+          <p
+            className="
+              text-[10px]
+              font-bold
+              uppercase
+              tracking-[0.2em]
+              text-brand-gold
+              mb-3
+            "
+          >
+            Projects / New Project
+          </p>
+
+          <h1
+            className="
+              text-3xl md:text-4xl
+              font-serif
+              text-brand-blue
+              mb-3
+            "
+          >
+            Create a New Project
+          </h1>
+
+          <p
+            className="
+              text-sm
+              text-gray-500
+              max-w-xl
+              leading-relaxed
+            "
+          >
+            Enter the project basics first.
+            Website content, images, amenities,
+            layouts, and map information can be
+            added after the project is created.
+          </p>
+        </div>
+
+
+        {/* SAFETY MESSAGE */}
+        <div
+          className="
+            mb-6
+            flex items-start gap-3
+            rounded-xl
+            border border-blue-100
+            bg-blue-50/60
+            px-4 py-3
+          "
+        >
+          <AlertCircle
+            size={17}
+            className="
+              text-brand-blue
+              shrink-0
+              mt-0.5
+            "
+          />
+
+          <div>
+            <p
+              className="
+                text-xs
+                font-bold
+                text-brand-blue
+              "
+            >
+              New projects start hidden from the website
+            </p>
+
+            <p
+              className="
+                text-xs
+                text-gray-500
+                mt-1
+                leading-relaxed
+              "
+            >
+              You can complete the project content
+              before making it visible to website visitors.
+            </p>
+          </div>
+        </div>
+
+
+        {/* FORM */}
+        <form
+          onSubmit={
+            handleBasicSubmit(
+              onCreateBasicProject
+            )
+          }
+          className="
+            bg-white
+            border border-gray-200
+            rounded-2xl
+            shadow-sm
+            overflow-hidden
+          "
+        >
+
+          {/* PROJECT IDENTITY */}
+          <section className="p-6 md:p-8">
+            <div className="mb-6">
+              <h2
+                className="
+                  text-lg
+                  font-bold
+                  text-brand-blue
+                "
+              >
+                Project Information
+              </h2>
+
+              <p
+                className="
+                  text-xs
+                  text-gray-400
+                  mt-1
+                "
+              >
+                Basic information used to identify the project.
+              </p>
+            </div>
+
+
+            {/* TITLE */}
+            <div className="mb-5">
+              <label
+                className="
+                  block
+                  text-[10px]
+                  font-bold
+                  uppercase
+                  tracking-widest
+                  text-gray-500
+                  mb-2
+                "
+              >
+                Project Title
+              </label>
+
+              <input
+                {...registerBasic('title')}
+                placeholder="e.g. City Clou"
+                autoFocus
+                className="
+                  w-full
+                  rounded-xl
+                  border border-gray-200
+                  bg-white
+                  px-4 py-3
+                  text-sm
+                  text-brand-blue
+                  outline-none
+                  transition-all
+                  focus:border-brand-gold
+                  focus:ring-2
+                  focus:ring-brand-gold/10
+                "
+              />
+
+              {basicErrors.title && (
+                <p className="text-red-500 text-xs mt-1.5">
+                  {basicErrors.title.message}
+                </p>
+              )}
+            </div>
+
+
+            <div
+              className="
+                grid
+                grid-cols-1 md:grid-cols-2
+                gap-5
+              "
+            >
+              {/* SLUG */}
+              <div>
+                <label
+                  className="
+                    block
+                    text-[10px]
+                    font-bold
+                    uppercase
+                    tracking-widest
+                    text-gray-500
+                    mb-2
+                  "
+                >
+                  URL Slug
+                </label>
+
+                <input
+                  {...registerBasic('slug')}
+                  placeholder="/cityclou"
+                  className="
+                    w-full
+                    rounded-xl
+                    border border-gray-200
+                    bg-white
+                    px-4 py-3
+                    text-sm
+                    text-brand-blue
+                    outline-none
+                    transition-all
+                    focus:border-brand-gold
+                    focus:ring-2
+                    focus:ring-brand-gold/10
+                  "
+                />
+
+                <p className="text-[10px] text-gray-400 mt-1.5">
+                  The page address on the public website.
+                </p>
+
+                {basicErrors.slug && (
+                  <p className="text-red-500 text-xs mt-1">
+                    {basicErrors.slug.message}
+                  </p>
+                )}
+              </div>
+
+
+              {/* STATUS */}
+              <div>
+                <label
+                  className="
+                    block
+                    text-[10px]
+                    font-bold
+                    uppercase
+                    tracking-widest
+                    text-gray-500
+                    mb-2
+                  "
+                >
+                  Project Status
+                </label>
+
+                <select
+                  {...registerBasic('status')}
+                  className="
+                    w-full
+                    rounded-xl
+                    border border-gray-200
+                    bg-white
+                    px-4 py-3
+                    text-sm
+                    text-brand-blue
+                    outline-none
+                    cursor-pointer
+                    transition-all
+                    focus:border-brand-gold
+                    focus:ring-2
+                    focus:ring-brand-gold/10
+                  "
+                >
+                  <option value="">
+                    Select project status
+                  </option>
+
+                  <option value="Pre-Selling">
+                    Pre-Selling
+                  </option>
+
+                  <option value="Ready for Occupancy">
+                    Ready for Occupancy
+                  </option>
+                </select>
+
+                {basicErrors.status && (
+                  <p className="text-red-500 text-xs mt-1.5">
+                    {basicErrors.status.message}
+                  </p>
+                )}
+              </div>
+            </div>
+          </section>
+
+
+          <div className="border-t border-gray-100" />
+
+
+          {/* LOCATION */}
+          <section className="p-6 md:p-8">
+            <div className="mb-6">
+              <h2
+                className="
+                  text-lg
+                  font-bold
+                  text-brand-blue
+                "
+              >
+                Location & Scale
+              </h2>
+
+              <p
+                className="
+                  text-xs
+                  text-gray-400
+                  mt-1
+                "
+              >
+                Basic property location and project size.
+              </p>
+            </div>
+
+
+            {/* ADDRESS */}
+            <div className="mb-5">
+              <label
+                className="
+                  block
+                  text-[10px]
+                  font-bold
+                  uppercase
+                  tracking-widest
+                  text-gray-500
+                  mb-2
+                "
+              >
+                Street Address
+              </label>
+
+              <input
+                {...registerBasic('address')}
+                placeholder="Enter street address"
+                className="
+                  w-full
+                  rounded-xl
+                  border border-gray-200
+                  bg-white
+                  px-4 py-3
+                  text-sm
+                  text-brand-blue
+                  outline-none
+                  transition-all
+                  focus:border-brand-gold
+                  focus:ring-2
+                  focus:ring-brand-gold/10
+                "
+              />
+
+              {basicErrors.address && (
+                <p className="text-red-500 text-xs mt-1.5">
+                  {basicErrors.address.message}
+                </p>
+              )}
+            </div>
+
+
+            <div
+              className="
+                grid
+                grid-cols-1 md:grid-cols-2
+                gap-5 mb-5
+              "
+            >
+              {/* CITY */}
+              <div>
+                <label
+                  className="
+                    block
+                    text-[10px]
+                    font-bold
+                    uppercase
+                    tracking-widest
+                    text-gray-500
+                    mb-2
+                  "
+                >
+                  City
+                </label>
+
+                <input
+                  {...registerBasic('city')}
+                  placeholder="e.g. Cebu City"
+                  className="
+                    w-full
+                    rounded-xl
+                    border border-gray-200
+                    bg-white
+                    px-4 py-3
+                    text-sm
+                    text-brand-blue
+                    outline-none
+                    transition-all
+                    focus:border-brand-gold
+                    focus:ring-2
+                    focus:ring-brand-gold/10
+                  "
+                />
+
+                {basicErrors.city && (
+                  <p className="text-red-500 text-xs mt-1.5">
+                    {basicErrors.city.message}
+                  </p>
+                )}
+              </div>
+
+
+              {/* COUNTRY */}
+              <div>
+                <label
+                  className="
+                    block
+                    text-[10px]
+                    font-bold
+                    uppercase
+                    tracking-widest
+                    text-gray-500
+                    mb-2
+                  "
+                >
+                  Country
+                </label>
+
+                <input
+                  {...registerBasic('country')}
+                  className="
+                    w-full
+                    rounded-xl
+                    border border-gray-200
+                    bg-white
+                    px-4 py-3
+                    text-sm
+                    text-brand-blue
+                    outline-none
+                    transition-all
+                    focus:border-brand-gold
+                    focus:ring-2
+                    focus:ring-brand-gold/10
+                  "
+                />
+
+                {basicErrors.country && (
+                  <p className="text-red-500 text-xs mt-1.5">
+                    {basicErrors.country.message}
+                  </p>
+                )}
+              </div>
+            </div>
+
+
+            <div
+              className="
+                grid
+                grid-cols-1 md:grid-cols-2
+                gap-5
+              "
+            >
+              {/* SQM */}
+              <div>
+                <label
+                  className="
+                    block
+                    text-[10px]
+                    font-bold
+                    uppercase
+                    tracking-widest
+                    text-gray-500
+                    mb-2
+                  "
+                >
+                  Total SQM
+                </label>
+
+                <input
+                  {...registerBasic('sqm')}
+                  placeholder="e.g. 5280"
+                  inputMode="decimal"
+                  className="
+                    w-full
+                    rounded-xl
+                    border border-gray-200
+                    bg-white
+                    px-4 py-3
+                    text-sm
+                    text-brand-blue
+                    outline-none
+                    transition-all
+                    focus:border-brand-gold
+                    focus:ring-2
+                    focus:ring-brand-gold/10
+                  "
+                />
+
+                {basicErrors.sqm && (
+                  <p className="text-red-500 text-xs mt-1.5">
+                    {basicErrors.sqm.message}
+                  </p>
+                )}
+              </div>
+
+
+              {/* UNITS */}
+              <div>
+                <label
+                  className="
+                    block
+                    text-[10px]
+                    font-bold
+                    uppercase
+                    tracking-widest
+                    text-gray-500
+                    mb-2
+                  "
+                >
+                  Total Units
+                </label>
+
+                <input
+                  {...registerBasic('unit_total')}
+                  placeholder="e.g. 1622"
+                  inputMode="numeric"
+                  className="
+                    w-full
+                    rounded-xl
+                    border border-gray-200
+                    bg-white
+                    px-4 py-3
+                    text-sm
+                    text-brand-blue
+                    outline-none
+                    transition-all
+                    focus:border-brand-gold
+                    focus:ring-2
+                    focus:ring-brand-gold/10
+                  "
+                />
+
+                {basicErrors.unit_total && (
+                  <p className="text-red-500 text-xs mt-1.5">
+                    {basicErrors.unit_total.message}
+                  </p>
+                )}
+              </div>
+            </div>
+          </section>
+
+
+          {/* SERVER ERROR */}
+          {createError && (
+            <div className="px-6 md:px-8 pb-5">
+              <div
+                className="
+                  flex items-start gap-3
+                  rounded-xl
+                  border border-red-200
+                  bg-red-50
+                  px-4 py-3
+                  text-sm
+                  text-red-600
+                "
+              >
+                <AlertCircle
+                  size={17}
+                  className="shrink-0 mt-0.5"
+                />
+
+                {createError}
+              </div>
+            </div>
+          )}
+
+
+          {/* ACTIONS */}
+          <footer
+            className="
+              flex
+              flex-col-reverse sm:flex-row
+              sm:items-center
+              sm:justify-between
+              gap-3
+              px-6 md:px-8
+              py-5
+              bg-gray-50/70
+              border-t border-gray-100
+            "
+          >
+            <button
+              type="button"
+              onClick={() =>
+                router.push(
+                  '/admin/dashboard?section=Projects'
+                )
+              }
+              className="
+                px-4 py-2.5
+                text-xs
+                font-bold
+                text-gray-500
+                hover:text-brand-blue
+                transition-colors
+              "
+            >
+              Cancel
+            </button>
+
+            <button
+              type="submit"
+              disabled={isCreatingBasic}
+              className="
+                inline-flex
+                items-center
+                justify-center
+                gap-2
+                min-w-[210px]
+                rounded-xl
+                bg-brand-blue
+                px-5 py-3
+                text-xs
+                font-bold
+                text-white
+                uppercase
+                tracking-wider
+                shadow-md
+                hover:bg-brand-blue/90
+                transition-colors
+                disabled:opacity-60
+                disabled:cursor-not-allowed
+              "
+            >
+              {isCreatingBasic ? (
+                <>
+                  <Loader2
+                    size={16}
+                    className="animate-spin"
+                  />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <PlusCircle size={16} />
+                  Create Project & Continue
+                </>
+              )}
+            </button>
+          </footer>
+
+        </form>
+      </main>
+    </div>
+  );
+}
+
+// ==========================================
+// VISUAL PROJECT EDITOR
+// ==========================================
+
+if (
+  editId &&
+  !useLegacyEditor
+) {
+  return (
+    <div
+      className="
+        h-screen
+        w-full
+        flex
+        flex-col
+        overflow-hidden
+        bg-[#0B1220]
+        font-sans
+      "
+    >
+
+      {/* SUCCESS TOAST */}
+      {successMsg && (
+        <div
+          className="
+            fixed
+            top-24
+            left-1/2
+            -translate-x-1/2
+            z-[100]
+            flex
+            items-center
+            gap-2
+            rounded-xl
+            border
+            border-green-200
+            bg-white
+            px-4 py-3
+            shadow-xl
+          "
+        >
+          <CheckCircle2
+            size={17}
+            className="text-green-500"
+          />
+
+          <span
+            className="
+              text-xs
+              font-bold
+              text-brand-blue
+            "
+          >
+            {successMsg}
+          </span>
+        </div>
+      )}
+
+
+      {/* EDITOR TOP BAR */}
+      <header
+        className="
+          h-20
+          shrink-0
+          bg-white
+          border-b
+          border-gray-200
+          flex
+          items-center
+          justify-between
+          gap-6
+          px-6
+          z-40
+        "
+      >
+
+        {/* LEFT */}
+        <div
+          className="
+            flex
+            items-center
+            gap-4
+            min-w-0
+          "
+        >
+          <button
+            type="button"
+            onClick={() =>
+              router.push(
+                '/admin/dashboard?section=Projects'
+              )
+            }
+            className="
+              p-2
+              rounded-lg
+              text-gray-400
+              hover:text-brand-blue
+              hover:bg-gray-100
+              transition-colors
+              shrink-0
+            "
+            title="Back to Projects"
+          >
+            <ArrowLeft size={18} />
+          </button>
+
+          <div
+            className="
+              min-w-0
+            "
+          >
+            <div
+              className="
+                flex
+                items-center
+                gap-2
+                text-[10px]
+                font-bold
+                uppercase
+                tracking-widest
+                text-gray-400
+                mb-1
+              "
+            >
+              <span>Projects</span>
+              <span>/</span>
+              <span
+                className="
+                  text-brand-blue
+                  truncate
+                "
+              >
+                {formData.title ||
+                  'Project'}
+              </span>
+            </div>
+
+            <h1
+              className="
+                text-lg
+                font-bold
+                text-brand-blue
+                truncate
+              "
+            >
+              Edit Project
+            </h1>
+          </div>
+        </div>
+
+
+        {/* RIGHT */}
+        <div
+          className="
+            flex
+            items-center
+            gap-3
+            shrink-0
+          "
+        >
+
+          {/* DESKTOP PREVIEW */}
+          <span
+            className="
+              hidden xl:inline-flex
+              items-center
+              rounded-full
+              bg-gray-100
+              px-3 py-1.5
+              text-[10px]
+              font-bold
+              uppercase
+              tracking-wider
+              text-gray-500
+            "
+          >
+            Desktop Preview
+          </span>
+
+          {/* PAGE SETTINGS */}
+          <button
+            type="button"
+            onClick={() =>
+              setSelectedEditorRegion('page-settings')
+            }
+            className={`
+              px-3 py-2.5
+              rounded-lg
+              border
+              text-xs
+              font-bold
+              transition-colors
+
+              ${
+                selectedEditorRegion === 'page-settings'
+                  ? 'border-brand-blue bg-brand-blue/5 text-brand-blue'
+                  : 'border-gray-200 text-gray-500 hover:text-brand-blue'
+              }
+            `}
+          >
+            Page Settings
+          </button>
+
+
+          {/* DIVIDER */}
+          <div className="hidden lg:block h-6 w-px bg-gray-200 mx-1" />
+
+
+          {/* CHANGE STATUS */}
+          {isDirty && (
+            <span
+              className="
+                hidden lg:inline-flex
+                items-center
+                gap-1.5
+                text-xs
+                font-medium
+                text-amber-600
+                whitespace-nowrap
+              "
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              Unsaved changes
+            </span>
+          )}
+
+
+          {/* RESET */}
+          <button
+            type="button"
+            onClick={handleResetEditorChanges}
+            disabled={
+              !isDirty ||
+              isSaving ||
+              isSubmitting
+            }
+            className="
+              px-3 py-2.5
+              rounded-lg
+              text-xs
+              font-bold
+              text-gray-500
+              hover:bg-gray-100
+              disabled:opacity-30
+              disabled:cursor-not-allowed
+              transition-colors
+            "
+          >
+            Reset
+          </button>
+
+
+          {/* SAVE */}
+          <button
+            type="button"
+            onClick={handleSubmit(onSubmit)}
+            disabled={
+              !isDirty ||
+              isSaving ||
+              isSubmitting
+            }
+            className="
+              min-w-[130px]
+              inline-flex
+              items-center
+              justify-center
+              gap-2
+              rounded-lg
+              bg-brand-blue
+              px-4 py-2.5
+              text-xs
+              font-bold
+              text-white
+              hover:bg-brand-blue/90
+              disabled:opacity-40
+              disabled:cursor-not-allowed
+              transition-colors
+            "
+          >
+            {(isSaving || isSubmitting) ? (
+              <Loader2
+                size={15}
+                className="animate-spin"
+              />
+            ) : (
+              <Save size={15} />
+            )}
+
+            Save Changes
+          </button>
+
+        </div>
+      </header>
+
+
+      {/* EDITOR BODY */}
+      <div
+        className="
+          flex
+          flex-1
+          min-h-0
+          overflow-hidden
+        "
+      >
+
+        {/* WEBSITE CANVAS */}
+        <div
+          id="preview-scroller"
+          className="
+            flex-1
+            min-w-0
+            overflow-y-auto
+            relative
+            scroll-smooth
+            bg-black
+            custom-scrollbar
+          "
+        >
+          <PreviewSkeleton
+            data={previewData}
+            editorMode
+            selectedRegion={
+              selectedEditorRegion ===
+              'page-settings'
+                ? null
+                : selectedEditorRegion
+            }
+            onSelectRegion={
+              setSelectedEditorRegion
+            }
+          />
+        </div>
+
+
+        {/* INSPECTOR */}
+        <aside
+          className="
+            w-[380px]
+            xl:w-[420px]
+            shrink-0
+            bg-white
+            border-l
+            border-gray-200
+            shadow-2xl
+            flex
+            flex-col
+            z-30
+          "
+        >
+
+          {/* INSPECTOR HEADER */}
+          <div
+            className="
+              px-6 py-5
+              border-b
+              border-gray-100
+            "
+          >
+            <p
+              className="
+                text-[10px]
+                uppercase
+                tracking-widest
+                font-bold
+                text-brand-gold
+                mb-1
+              "
+            >
+              Selected Content
+            </p>
+
+            <h2
+              className="
+                text-xl
+                font-serif
+                text-brand-blue
+              "
+            >
+              {selectedEditorRegion === 'hero-image'
+              ? 'Hero Image'
+              : selectedEditorRegion === 'project-title'
+              ? 'Project Title'
+              : selectedEditorRegion === 'location'
+              ? 'Location'
+              : selectedEditorRegion === 'awards'
+              ? 'Awards Badge'
+              : selectedEditorRegion === 'tags'
+              ? 'Tags & Stats'
+              : selectedEditorRegion === 'editorial'
+              ? 'Editorial Section'
+              : selectedEditorRegion === 'page-settings'
+              ? 'Page Settings'
+              : 'Select Content'}
+            </h2>
+
+            <p
+              className="
+                text-xs
+                text-gray-400
+                mt-2
+                leading-relaxed
+              "
+            >
+              Click editable content in the
+              preview to change it.
+            </p>
+          </div>
+
+
+          {/* INSPECTOR CONTENT */}
+          <div
+            className="
+              flex-1
+              overflow-y-auto
+              p-6
+              custom-scrollbar
+            "
+          >
+
+            {/* PROJECT TITLE */}
+            {selectedEditorRegion ===
+              'project-title' && (
+              <div>
+                <label
+                  className="
+                    block
+                    text-[10px]
+                    font-bold
+                    uppercase
+                    tracking-widest
+                    text-gray-500
+                    mb-2
+                  "
+                >
+                  Project Title
+                </label>
+
+                <input
+                  {...register('title')}
+                  className="
+                    w-full
+                    border
+                    border-gray-200
+                    rounded-xl
+                    px-4 py-3
+                    text-sm
+                    text-brand-blue
+                    outline-none
+                    focus:border-brand-gold
+                    focus:ring-2
+                    focus:ring-brand-gold/10
+                  "
+                />
+
+                {errors.title && (
+                  <p
+                    className="
+                      text-xs
+                      text-red-500
+                      mt-1.5
+                    "
+                  >
+                    {errors.title.message}
+                  </p>
+                )}
+              </div>
+            )}
+
+
+            {/* HERO IMAGE */}
+            {selectedEditorRegion ===
+              'hero-image' && (
+              <div>
+                <ImageDropzone
+                  fieldPath="image"
+                  label="Main Hero Image"
+                  height="h-52"
+                  watch={watch}
+                  setValue={setValue}
+                  errors={errors}
+                  setPendingFiles={
+                    setPendingFiles
+                  }
+                  setPreviews={
+                    setPreviews
+                  }
+                  previews={previews}
+                />
+
+                <p
+                  className="
+                    text-[10px]
+                    text-gray-400
+                    leading-relaxed
+                    mt-3
+                  "
+                >
+                  This image fills the main
+                  project hero area. Use a
+                  high-resolution landscape
+                  image.
+                </p>
+              </div>
+            )}
+
+
+            {/* LOCATION */}
+            {selectedEditorRegion ===
+              'location' && (
+              <div className="space-y-4">
+
+                <div>
+                  <label
+                    className="
+                      block
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      tracking-widest
+                      text-gray-500
+                      mb-2
+                    "
+                  >
+                    City
+                  </label>
+
+                  <input
+                    {...register('city')}
+                    className="
+                      w-full
+                      border
+                      border-gray-200
+                      rounded-xl
+                      px-4 py-3
+                      text-sm
+                      text-brand-blue
+                      outline-none
+                      focus:border-brand-gold
+                    "
+                  />
+                </div>
+
+
+                <div>
+                  <label
+                    className="
+                      block
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      tracking-widest
+                      text-gray-500
+                      mb-2
+                    "
+                  >
+                    Country
+                  </label>
+
+                  <input
+                    {...register(
+                      'country'
+                    )}
+                    className="
+                      w-full
+                      border
+                      border-gray-200
+                      rounded-xl
+                      px-4 py-3
+                      text-sm
+                      text-brand-blue
+                      outline-none
+                      focus:border-brand-gold
+                    "
+                  />
+                </div>
+
+
+                <div>
+                  <label
+                    className="
+                      block
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      tracking-widest
+                      text-gray-500
+                      mb-2
+                    "
+                  >
+                    Street Address
+                  </label>
+
+                  <input
+                    {...register(
+                      'address'
+                    )}
+                    className="
+                      w-full
+                      border
+                      border-gray-200
+                      rounded-xl
+                      px-4 py-3
+                      text-sm
+                      text-brand-blue
+                      outline-none
+                      focus:border-brand-gold
+                    "
+                  />
+                </div>
+
+              </div>
+            )}
+
+
+            {/* AWARDS */}
+            {selectedEditorRegion ===
+              'awards' && (
+              <div>
+                <ImageDropzone
+                  fieldPath="img_awards"
+                  label="Awards Badge"
+                  height="h-52"
+                  watch={watch}
+                  setValue={setValue}
+                  errors={errors}
+                  setPendingFiles={
+                    setPendingFiles
+                  }
+                  setPreviews={
+                    setPreviews
+                  }
+                  previews={previews}
+                />
+
+                <p
+                  className="
+                    text-[10px]
+                    text-gray-400
+                    mt-3
+                  "
+                >
+                  Optional. Remove the image
+                  if this project does not
+                  have an award badge.
+                </p>
+              </div>
+            )}
+
+
+            {/* TAGS AND STATS */}
+            {selectedEditorRegion ===
+              'tags' && (
+              <div>
+
+                <div
+                  className="
+                    flex
+                    items-center
+                    justify-between
+                    mb-4
+                  "
+                >
+                  <p
+                    className="
+                      text-xs
+                      font-bold
+                      text-brand-blue
+                    "
+                  >
+                    Project Tags
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      appendTag({
+                        tag_name: ''
+                      })
+                    }
+                    className="
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      text-brand-blue
+                      hover:text-brand-gold
+                    "
+                  >
+                    + Add Tag
+                  </button>
+                </div>
+
+
+                <div
+                  className="
+                    space-y-3
+                  "
+                >
+                  {tagFields.map(
+                    (field, index) => (
+                      <div
+                        key={field.id}
+                        className="
+                          flex
+                          items-center
+                          gap-2
+                        "
+                      >
+                        <input
+                          {...register(
+                            `tags.${index}.tag_name`
+                          )}
+                          placeholder="Tag name"
+                          className="
+                            flex-1
+                            border
+                            border-gray-200
+                            rounded-xl
+                            px-3 py-2.5
+                            text-sm
+                            text-brand-blue
+                            outline-none
+                            focus:border-brand-gold
+                          "
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            removeTag(
+                              index
+                            )
+                          }
+                          className="
+                            p-2
+                            text-gray-300
+                            hover:text-red-500
+                          "
+                        >
+                          <Trash2
+                            size={15}
+                          />
+                        </button>
+                      </div>
+                    )
+                  )}
+                </div>
+
+
+                <div
+                  className="
+                    border-t
+                    border-gray-100
+                    mt-6 pt-6
+                    grid
+                    grid-cols-2
+                    gap-4
+                  "
+                >
+                  <div>
+                    <label
+                      className="
+                        block
+                        text-[10px]
+                        font-bold
+                        uppercase
+                        tracking-widest
+                        text-gray-500
+                        mb-2
+                      "
+                    >
+                      Total SQM
+                    </label>
+
+                    <input
+                      {...register('sqm')}
+                      className="
+                        w-full
+                        border
+                        border-gray-200
+                        rounded-xl
+                        px-3 py-2.5
+                        text-sm
+                        text-brand-blue
+                        outline-none
+                        focus:border-brand-gold
+                      "
+                    />
+                  </div>
+
+
+                  <div>
+                    <label
+                      className="
+                        block
+                        text-[10px]
+                        font-bold
+                        uppercase
+                        tracking-widest
+                        text-gray-500
+                        mb-2
+                      "
+                    >
+                      Total Units
+                    </label>
+
+                    <input
+                      {...register(
+                        'unit_total'
+                      )}
+                      className="
+                        w-full
+                        border
+                        border-gray-200
+                        rounded-xl
+                        px-3 py-2.5
+                        text-sm
+                        text-brand-blue
+                        outline-none
+                        focus:border-brand-gold
+                      "
+                    />
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* EDITORIAL */}
+{selectedEditorRegion ===
+  'editorial' && (
+  <div className="space-y-6">
+
+    {/* IMAGE */}
+    <div>
+      <ImageDropzone
+        fieldPath="editorial_img"
+        label="Editorial Image"
+        height="h-52"
+        watch={watch}
+        setValue={setValue}
+        errors={errors}
+        setPendingFiles={
+          setPendingFiles
+        }
+        setPreviews={
+          setPreviews
+        }
+        previews={previews}
+      />
+
+      <p
+        className="
+          mt-2
+          text-[10px]
+          leading-relaxed
+          text-gray-400
+        "
+      >
+        This image appears beside the
+        editorial headline and description.
+      </p>
+    </div>
+
+
+    <div
+      className="
+        border-t
+        border-gray-100
+        pt-6
+      "
+    >
+      {/* HEADLINE */}
+      <label
+        className="
+          block
+          text-[10px]
+          font-bold
+          uppercase
+          tracking-widest
+          text-gray-500
+          mb-2
+        "
+      >
+        Headline
+      </label>
+
+      <textarea
+        {...register(
+          'editorial_title'
+        )}
+        rows={3}
+        placeholder="Editorial headline"
+        className="
+          w-full
+          resize-none
+          rounded-xl
+          border
+          border-gray-200
+          px-4 py-3
+          text-sm
+          text-brand-blue
+          outline-none
+          transition-all
+          focus:border-brand-gold
+          focus:ring-2
+          focus:ring-brand-gold/10
+        "
+      />
+
+      {errors.editorial_title && (
+        <p
+          className="
+            mt-1.5
+            text-xs
+            text-red-500
+          "
+        >
+          {
+            errors.editorial_title
+              .message
+          }
+        </p>
+      )}
+    </div>
+
+
+    {/* DESCRIPTION */}
+    <div>
+      <label
+        className="
+          block
+          text-[10px]
+          font-bold
+          uppercase
+          tracking-widest
+          text-gray-500
+          mb-2
+        "
+      >
+        Description
+      </label>
+
+      <textarea
+        {...register(
+          'editorial_long'
+        )}
+        rows={8}
+        placeholder="Project description"
+        className="
+          w-full
+          resize-y
+          rounded-xl
+          border
+          border-gray-200
+          px-4 py-3
+          text-sm
+          leading-relaxed
+          text-brand-blue
+          outline-none
+          transition-all
+          focus:border-brand-gold
+          focus:ring-2
+          focus:ring-brand-gold/10
+        "
+      />
+    </div>
+
+
+    {/* COLORS */}
+    <div
+      className="
+        border-t
+        border-gray-100
+        pt-6
+      "
+    >
+      <div className="mb-4">
+        <p
+          className="
+            text-xs
+            font-bold
+            text-brand-blue
+          "
+        >
+          Appearance
+        </p>
+
+        <p
+          className="
+            mt-1
+            text-[10px]
+            leading-relaxed
+            text-gray-400
+          "
+        >
+          Adjust the colors used by this
+          editorial section.
+        </p>
+      </div>
+
+
+      <div
+        className="
+          grid
+          grid-cols-1
+          gap-4
+        "
+      >
+        <ColorInputSync
+          label="Headline Color"
+          fieldName="editorial_title_color"
+          register={register}
+          watch={watch}
+          setValue={setValue}
+          inputStyles={inputStyles}
+          labelStyles={labelStyles}
+        />
+
+        <ColorInputSync
+          label="Text Color"
+          fieldName="editorial_desc_color"
+          register={register}
+          watch={watch}
+          setValue={setValue}
+          inputStyles={inputStyles}
+          labelStyles={labelStyles}
+        />
+
+        <ColorInputSync
+          label="Background Color"
+          fieldName="editorial_bg_color"
+          register={register}
+          watch={watch}
+          setValue={setValue}
+          inputStyles={inputStyles}
+          labelStyles={labelStyles}
+        />
+      </div>
+    </div>
+
+  </div>
+)}
+
+            {/* PAGE SETTINGS */}
+            {selectedEditorRegion ===
+              'page-settings' && (
+              <div className="space-y-5">
+
+                <div
+                  className="
+                    rounded-xl
+                    bg-amber-50
+                    border
+                    border-amber-100
+                    p-4
+                  "
+                >
+                  <p
+                    className="
+                      text-xs
+                      font-bold
+                      text-amber-700
+                    "
+                  >
+                    Technical settings
+                  </p>
+
+                  <p
+                    className="
+                      text-[10px]
+                      leading-relaxed
+                      text-amber-700/70
+                      mt-1
+                    "
+                  >
+                    These values affect how
+                    the project is identified
+                    and addressed on the
+                    website.
+                  </p>
+                </div>
+
+
+                <div>
+                  <label
+                    className="
+                      block
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      tracking-widest
+                      text-gray-500
+                      mb-2
+                    "
+                  >
+                    URL Slug
+                  </label>
+
+                  <input
+                    {...register('slug')}
+                    className="
+                      w-full
+                      border
+                      border-gray-200
+                      rounded-xl
+                      px-4 py-3
+                      text-sm
+                      text-brand-blue
+                      outline-none
+                      focus:border-brand-gold
+                    "
+                  />
+
+                  {errors.slug && (
+                    <p
+                      className="
+                        text-xs
+                        text-red-500
+                        mt-1
+                      "
+                    >
+                      {errors.slug.message}
+                    </p>
+                  )}
+                </div>
+
+
+                <div>
+                  <label
+                    className="
+                      block
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      tracking-widest
+                      text-gray-500
+                      mb-2
+                    "
+                  >
+                    Project Status
+                  </label>
+
+                  <select
+                    {...register(
+                      'status'
+                    )}
+                    className="
+                      w-full
+                      border
+                      border-gray-200
+                      rounded-xl
+                      bg-white
+                      px-4 py-3
+                      text-sm
+                      text-brand-blue
+                      outline-none
+                      focus:border-brand-gold
+                    "
+                  >
+                    <option value="">
+                      Select status
+                    </option>
+
+                    <option
+                      value="Pre-Selling"
+                    >
+                      Pre-Selling
+                    </option>
+
+                    <option
+                      value="Ready for Occupancy"
+                    >
+                      Ready for Occupancy
+                    </option>
+                  </select>
+                </div>
+
+              </div>
+            )}
+
+
+            {/* NOTHING SELECTED */}
+            {!selectedEditorRegion && (
+              <div
+                className="
+                  py-12
+                  text-center
+                "
+              >
+                <p
+                  className="
+                    text-sm
+                    font-bold
+                    text-brand-blue
+                  "
+                >
+                  Select something to edit
+                </p>
+
+                <p
+                  className="
+                    text-xs
+                    text-gray-400
+                    mt-2
+                  "
+                >
+                  Hover over editable
+                  content in the preview
+                  and click it.
+                </p>
+              </div>
+            )}
+
+          </div>
+
+
+          {/* TEMPORARY FALLBACK */}
+          <div
+            className="
+              shrink-0
+              border-t
+              border-gray-100
+              p-4
+              bg-gray-50
+            "
+          >
+            <p
+              className="
+                text-[10px]
+                text-gray-400
+                mb-3
+                leading-relaxed
+              "
+            >
+              Editorial, amenities, unit
+              layouts, and map controls are
+              still available in the existing
+              editor while we migrate them.
+            </p>
+
+            <button
+              type="button"
+              onClick={() =>
+                setUseLegacyEditor(true)
+              }
+              className="
+                w-full
+                rounded-xl
+                border
+                border-gray-200
+                bg-white
+                px-4 py-3
+                text-xs
+                font-bold
+                text-brand-blue
+                hover:border-brand-gold
+                transition-colors
+              "
+            >
+              Open All Content Controls
+            </button>
+          </div>
+
+        </aside>
+      </div>
+    </div>
+  );
+}
 
   return (
     <div className="flex h-screen w-full bg-[#E7E7E7] font-sans text-gray-900 overflow-hidden relative">
@@ -460,9 +2641,38 @@ function ProjectManager() {
 
       {/* LEFT SIDE: ADMIN FORM ENTRY */}
       <div className="w-[500px] shrink-0 bg-white p-8 overflow-y-auto border-r border-gray-200 shadow-2xl z-20 flex flex-col relative custom-scrollbar">
-        <button onClick={() => router.push('/admin/dashboard')} className="flex items-center gap-2 text-[10px] text-gray-500 hover:text-brand-blue mb-8 font-bold uppercase tracking-widest transition-colors w-fit outline-none">
-          <ArrowLeft size={14} /> Back to Dashboard
+        <button
+          type="button"
+          onClick={() =>
+            router.push('/admin/dashboard?section=Projects')
+          }
+          className="flex items-center gap-2 text-[10px] text-gray-500 hover:text-brand-blue mb-8 font-bold uppercase tracking-widest transition-colors w-fit outline-none"
+        >
+          <ArrowLeft size={14} />
+          Back to Projects
         </button>
+
+              <button
+        type="button"
+        onClick={() =>
+          setUseLegacyEditor(false)
+        }
+        className="
+          flex
+          items-center
+          gap-2
+          text-[10px]
+          text-brand-blue
+          hover:text-brand-gold
+          mb-6
+          font-bold
+          uppercase
+          tracking-widest
+          transition-colors
+        "
+      >
+        ← Back to Visual Editor
+      </button>
 
         <h2 className="text-3xl font-serif text-brand-blue mb-8">{editId ? 'Edit Project' : 'Add New Project'}</h2>
         

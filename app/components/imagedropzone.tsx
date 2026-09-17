@@ -47,7 +47,10 @@ export default function ImageDropzone({
     setPreviews((prev) => ({ ...prev, [fieldPath]: objectUrl }));
     
     // Update the react-hook-form value so validation passes
-    setValue(fieldPath, file.name, { shouldValidate: true });
+    setValue(fieldPath, file.name, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
   };
 
   // --- NATIVE DRAG AND DROP HANDLERS ---
@@ -100,7 +103,10 @@ export default function ImageDropzone({
     });
     
     // Clear the react-hook-form value
-    setValue(fieldPath, "", { shouldValidate: true });
+    setValue(fieldPath, "", {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
     
     // Reset the hidden input
     if (inputRef.current) {
