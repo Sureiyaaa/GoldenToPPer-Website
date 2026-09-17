@@ -12,35 +12,60 @@ const supabaseAdmin = createClient(
 // ==========================================
 // VIRTUAL TOURS ACTIONS
 // ==========================================
+// ==========================================
+// VIRTUAL TOURS ACTIONS
+// ==========================================
 export async function fetchAdminVirtualToursList() {
   const session = await getCustomSession();
   if (!session) throw new Error("Unauthorized");
-  const { data, error } = await supabaseAdmin.from('virtual_tours').select('*, project_table(title)').order('id', { ascending: false });
-  if (error) throw error; return data;
-}
-
-export async function fetchVirtualTourForEdit(editId: string | number) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
-  const { data, error } = await supabaseAdmin.from('virtual_tours').select('*').eq('id', editId).limit(1).single();
-  if (error) throw error; return data;
+  const { data, error } = await supabaseAdmin
+    .from('virtual_tours')
+    .select('*, project_table(title)')
+    .order('id', { ascending: false });
+  if (error) throw error; 
+  return data;
 }
 
 export async function fetchProjectsForDropdown() {
   const session = await getCustomSession();
   if (!session) throw new Error("Unauthorized");
-  const { data, error } = await supabaseAdmin.from('project_table').select('id, title').is('deleted_at', null);
-  if (error) throw error; return data;
+  const { data, error } = await supabaseAdmin
+    .from('project_table')
+    .select(`
+      id, 
+      title,
+      unit_layout (
+        tower_name
+      )
+    `)
+    .is('deleted_at', null)
+    .order('title', { ascending: true });
+
+  if (error) throw error; 
+  return data || [];
+}
+
+export async function fetchVirtualTourForEdit(editId: string | number) {
+  const session = await getCustomSession();
+  if (!session) throw new Error("Unauthorized");
+  const { data, error } = await supabaseAdmin
+    .from('virtual_tours')
+    .select('*')
+    .eq('id', editId)
+    .limit(1)
+    .single();
+  if (error) throw error; 
+  return data;
 }
 
 export async function saveVirtualTourAction(payload: any, editId: number | null) {
   const session = await getCustomSession();
   if (!session) throw new Error("Unauthorized");
 
-  // Sanitize and align specifically to the table columns
   const cleanData: Record<string, any> = {
     title: payload.title || payload.unit_name || '',
     unit_name: payload.unit_name || payload.title || '',
+    tower_name: payload.tower_name || 'Tower A',
     project_id: Number(payload.project_id),
     status: payload.status || 'Active',
     view_areas: payload.view_areas || payload.rooms || [],
@@ -51,19 +76,72 @@ export async function saveVirtualTourAction(payload: any, editId: number | null)
       .from('virtual_tours')
       .update(cleanData)
       .eq('id', editId);
-    if (error) {
-      console.error("Update Virtual Tour Error:", error);
-      throw new Error(error.message);
-    }
+    if (error) throw new Error(error.message);
   } else {
     const { error } = await supabaseAdmin
       .from('virtual_tours')
       .insert([cleanData]);
-    if (error) {
-      console.error("Insert Virtual Tour Error:", error);
-      throw new Error(error.message);
+    if (error) throw new Error(error.message);
+  }
+  return { success: true };
+}
+
+export async function fetchProjectVirtualTours(projectId: number | string) {
+  const session = await getCustomSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const { data, error } = await supabaseAdmin
+    .from('virtual_tours')
+    .select('*')
+    .eq('project_id', Number(projectId))
+    .order('id', { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+export async function saveProjectVirtualToursAction(
+  projectId: number,
+  tours: any[],
+  deletedTourIds: number[]
+) {
+  const session = await getCustomSession();
+  if (!session) throw new Error("Unauthorized");
+
+  // 1. Delete removed records
+  if (deletedTourIds.length > 0) {
+    const { error: delError } = await supabaseAdmin
+      .from('virtual_tours')
+      .delete()
+      .in('id', deletedTourIds);
+    if (delError) throw new Error(delError.message);
+  }
+
+  // 2. Insert or update units
+  for (const tour of tours) {
+    const cleanData = {
+      project_id: projectId,
+      tower_name: tour.tower_name?.trim() || 'Tower A',
+      unit_name: tour.unit_name?.trim() || 'Standard Unit',
+      title: tour.title?.trim() || tour.unit_name?.trim() || 'Standard Unit',
+      status: tour.status || 'Active',
+      view_areas: tour.view_areas || [],
+    };
+
+    if (tour.id && typeof tour.id === 'number') {
+      const { error: updError } = await supabaseAdmin
+        .from('virtual_tours')
+        .update(cleanData)
+        .eq('id', tour.id);
+      if (updError) throw new Error(updError.message);
+    } else {
+      const { error: insError } = await supabaseAdmin
+        .from('virtual_tours')
+        .insert([cleanData]);
+      if (insError) throw new Error(insError.message);
     }
   }
+
   return { success: true };
 }
 

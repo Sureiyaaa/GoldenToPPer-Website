@@ -1,3 +1,4 @@
+// app/admin/virtualtours/PreviewSkeleton.tsx
 'use client';
 
 import dynamic from 'next/dynamic';
@@ -14,12 +15,25 @@ const DynamicVirtualTour = dynamic(() => import('@/app/components/VirtualTour'),
   ),
 });
 
-export default function PreviewSkeleton({ data }: { data: any }) {
+interface PreviewSkeletonProps {
+  data: {
+    projectName?: string;
+    towerName?: string;
+    unitName?: string;
+    rooms?: Array<{
+      id?: string;
+      title: string;
+      url: string;
+    }>;
+  };
+}
+
+export default function PreviewSkeleton({ data }: PreviewSkeletonProps) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const rooms = data.rooms || [];
+  const rooms = data?.rooms || [];
   const currentRoom = rooms[activeIndex];
 
-  // Prevent out of bounds if an admin deletes a room while previewing
+  // Prevent index out of bounds when rooms are removed
   useEffect(() => {
     if (rooms.length > 0 && activeIndex >= rooms.length) {
       setActiveIndex(Math.max(0, rooms.length - 1));
@@ -30,21 +44,36 @@ export default function PreviewSkeleton({ data }: { data: any }) {
   const handlePrev = () => setActiveIndex((prev) => (prev - 1 + rooms.length) % rooms.length);
 
   return (
-    <div className="w-full bg-black font-sans text-gray-900 flex flex-col relative h-full min-h-screen">
+    <div className="w-full bg-black font-sans text-gray-900 flex flex-col relative h-full min-h-screen select-none">
       
-      {/* Fake Top Bar */}
-      <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-black/90 to-transparent z-50 flex justify-between items-start p-6 md:p-8 pointer-events-none">
-        <div className="pointer-events-auto flex flex-col items-start gap-2">
-          <span className="text-brand-gold text-[10px] font-bold uppercase tracking-[0.2em] bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 shadow-lg">
+      {/* 4-Tier Breadcrumb Header */}
+      <div className="absolute top-0 left-0 w-full bg-gradient-to-b from-black/90 via-black/50 to-transparent z-50 p-6 pointer-events-none flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[#D4AF37] text-[10px] font-bold uppercase tracking-[0.2em] bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-[#D4AF37]/30 shadow-lg pointer-events-auto">
             Live Preview
           </span>
-          <h3 className="text-white font-serif text-2xl md:text-3xl ml-2 drop-shadow-md">
-            {currentRoom?.title || 'Room Title'}
-          </h3>
+        </div>
+
+        {/* 3 Pills: Project -> Tower -> Unit */}
+        <div className="flex flex-wrap items-center gap-2 pointer-events-auto">
+          <div className="px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-xl border border-white/15 text-xs text-white/80">
+            <span className="text-[9px] uppercase tracking-wider text-[#d4b26f] block font-semibold">Project</span>
+            <span className="font-medium text-white">{data?.projectName || 'Project'}</span>
+          </div>
+
+          <div className="px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-xl border border-white/15 text-xs text-white/80">
+            <span className="text-[9px] uppercase tracking-wider text-[#d4b26f] block font-semibold">Tower</span>
+            <span className="font-medium text-white">{data?.towerName || 'Tower A'}</span>
+          </div>
+
+          <div className="px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-xl border border-white/15 text-xs text-white/80">
+            <span className="text-[9px] uppercase tracking-wider text-[#d4b26f] block font-semibold">Unit</span>
+            <span className="font-medium text-white">{data?.unitName || 'Unit Layout'}</span>
+          </div>
         </div>
       </div>
 
-      {/* The 360 Viewer */}
+      {/* 360 Viewer */}
       <div className="flex-1 w-full h-full cursor-grab active:cursor-grabbing relative z-0">
         {currentRoom?.url ? (
           <DynamicVirtualTour key={currentRoom.url} image={currentRoom.url} />
@@ -56,15 +85,48 @@ export default function PreviewSkeleton({ data }: { data: any }) {
         )}
       </div>
 
-      {/* Admin Live Navigation Controls */}
-      {rooms.length > 1 && (
-        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-50 flex items-center gap-6 bg-black/60 backdrop-blur-lg px-6 py-3 rounded-full border border-white/10 shadow-2xl">
-          <button onClick={handlePrev} className="p-2 text-white hover:text-brand-gold transition-colors outline-none cursor-pointer"><ChevronLeft size={24} /></button>
-          <div className="flex flex-col items-center">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Room</span>
-            <span className="text-brand-gold text-xs font-bold tracking-[0.2em]">{activeIndex + 1} / {rooms.length}</span>
+      {/* View Areas Carousel */}
+      {rooms.length > 0 && (
+        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-50 pointer-events-auto flex items-center gap-3 bg-black/65 hover:bg-black/75 backdrop-blur-2xl px-4 py-2.5 rounded-[24px] border border-white/15 shadow-2xl max-w-[90vw]">
+          {rooms.length > 1 && (
+            <button 
+              type="button"
+              onClick={handlePrev} 
+              className="p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer outline-none"
+            >
+              <ChevronLeft size={20} strokeWidth={2.5} />
+            </button>
+          )}
+
+          <div className="flex items-center gap-2 overflow-x-auto py-1">
+            {rooms.map((room, index) => {
+              const isSelected = activeIndex === index;
+              return (
+                <button
+                  key={index}
+                  type="button"
+                  onClick={() => setActiveIndex(index)}
+                  className={`relative px-3 py-1.5 rounded-lg text-xs font-sans transition-all cursor-pointer outline-none flex items-center gap-2 ${
+                    isSelected 
+                      ? 'bg-white/20 border border-[#d4b26f] text-[#d4b26f] font-semibold shadow-[0_0_10px_rgba(212,178,111,0.3)]' 
+                      : 'bg-black/40 border border-white/10 text-white/70 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <span className="truncate max-w-[90px]">{room.title || `Area ${index + 1}`}</span>
+                </button>
+              );
+            })}
           </div>
-          <button onClick={handleNext} className="p-2 text-white hover:text-brand-gold transition-colors outline-none cursor-pointer"><ChevronRight size={24} /></button>
+
+          {rooms.length > 1 && (
+            <button 
+              type="button"
+              onClick={handleNext} 
+              className="p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer outline-none"
+            >
+              <ChevronRight size={20} strokeWidth={2.5} />
+            </button>
+          )}
         </div>
       )}
 
