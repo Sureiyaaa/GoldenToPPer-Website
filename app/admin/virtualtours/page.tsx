@@ -360,7 +360,10 @@ function VirtualToursManager() {
       await createAuditLogAction('EDIT', 'Virtual Tours', projName, `Updated towers & units for ${projName}.`);
 
       setSuccessMsg('All towers, units, and view areas saved successfully!');
-      setTimeout(() => setSuccessMsg(''), 2500);
+      setTimeout(() => {
+        setSuccessMsg('');
+        router.replace('/admin/dashboard');
+      }, 2000);
     } catch (err: any) {
       alert(`Save failed: ${err.message}`);
     } finally {

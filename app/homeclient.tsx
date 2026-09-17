@@ -60,10 +60,14 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
   const marqueeTween = useRef<gsap.core.Tween | null>(null);
   const dragState = useRef({ isDragging: false, startX: 0, currentProgress: 0 });
 
+  // === 4-TIER HIERARCHY STATE ===
   const [activeTourProject, setActiveTourProject] = useState<any | null>(null);
+  const [activeTourTower, setActiveTourTower] = useState<string | null>(null); // NEW: Tower tier
   const [activeTourUnit, setActiveTourUnit] = useState<any | null>(null);
   const [activeRoomIndex, setActiveRoomIndex] = useState(0);
+
   const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
+  const [isTowerDropdownOpen, setIsTowerDropdownOpen] = useState(false); // NEW
   const [isUnitDropdownOpen, setIsUnitDropdownOpen] = useState(false);
   const [maxVisible, setMaxVisible] = useState(6);
   
@@ -468,7 +472,6 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                     const heroTitle = (currentProject?.title || '').toLowerCase().trim();
                     const heroSlug = (currentProject?.slug || '').toLowerCase().replace(/^\//, '').trim();
 
-                    // Find matching project in Supabase records
                     const projectMatch = initialProjects.find((p: any) => {
                       const pName = (p.name || p.title || '').toLowerCase().trim();
                       const pSlug = (p.slug || '').toLowerCase().replace(/^\//, '').trim();
@@ -482,9 +485,22 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                     if (projectMatch) {
                       setActiveTourProject(projectMatch);
                       const tours = projectMatch.virtual_tours || [];
+
                       if (tours.length > 0) {
-                        setActiveTourUnit(tours[0]);
+                        const towers = Array.from(
+                          new Set(tours.map((t: any) => t.tower_name?.trim()).filter(Boolean))
+                        ).sort((a: any, b: any) => a.localeCompare(b, undefined, { numeric: true }));
+
+                        const initialTower = (towers[0] as string) || null;
+                        setActiveTourTower(initialTower);
+
+                        const towerUnits = initialTower
+                          ? tours.filter((t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === initialTower.toLowerCase())
+                          : tours;
+
+                        setActiveTourUnit(towerUnits[0] || tours[0]);
                       } else if (projectMatch.virtual_tour_url) {
+                        setActiveTourTower('Tower A');
                         setActiveTourUnit({
                           id: 'legacy',
                           unit_name: 'Main Unit',
@@ -492,8 +508,6 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                         });
                       }
                       setActiveRoomIndex(0);
-                    } else {
-                      console.warn("No Supabase project found matching hero slide:", currentProject);
                     }
                   }}
                   className="group flex items-center justify-center gap-3 w-full sm:w-auto bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/25 hover:border-brand-gold px-8 py-4 rounded-sm shadow-lg transition-all duration-300 outline-none cursor-pointer"
@@ -884,11 +898,25 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
 
           </section>
 
-          {/* === 3-TIER FULLSCREEN VIRTUAL TOUR MODAL === */}
+          {/* === 4-TIER FULLSCREEN VIRTUAL TOUR MODAL === */}
         {activeTourProject && activeTourUnit && (() => {
-          const availableUnits: any[] = activeTourProject.virtual_tours?.length > 0
-            ? activeTourProject.virtual_tours
-            : [activeTourUnit];
+          const allProjectTours: any[] = activeTourProject.virtual_tours || [];
+
+          // Unique towers for the active project
+          const availableTowers: string[] = Array.from(
+            new Set(
+              allProjectTours
+                .map((t: any) => t.tower_name?.trim())
+                .filter((name: any): name is string => Boolean(name))
+            )
+          ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+          // Filter units belonging to selected tower
+          const availableUnits: any[] = activeTourTower
+            ? allProjectTours.filter(
+                (t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === activeTourTower.toLowerCase()
+              )
+            : allProjectTours;
 
           const currentAreas = parseViewAreas(activeTourUnit);
           const activeScene = currentAreas[activeRoomIndex] || currentAreas[0];
@@ -898,6 +926,8 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
               
               {/* TOP BAR */}
               <div className="absolute top-0 left-0 w-full bg-gradient-to-b from-black/90 via-black/50 to-transparent z-50 p-3.5 sm:p-4 md:p-6 pointer-events-none flex flex-col gap-2.5">
+                
+                {/* Row 1: Badge + Close Button */}
                 <div className="w-full flex items-center justify-between">
                   <div className="flex items-center gap-1.5 px-3 py-1 md:px-4 md:py-1.5 bg-black/80 backdrop-blur-md rounded-full border border-[#D4AF37]/30 shadow-lg pointer-events-auto">
                     <span className="text-[#D4AF37] font-serif text-[9px] sm:text-[10px] md:text-[11px] font-bold tracking-widest uppercase">
@@ -906,14 +936,18 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                   </div>
 
                   <button
+                    type="button"
                     onClick={() => {
                       setActiveTourProject(null);
+                      setActiveTourTower(null);
                       setActiveTourUnit(null);
                       setActiveRoomIndex(0);
                       setIsProjectDropdownOpen(false);
+                      setIsTowerDropdownOpen(false);
                       setIsUnitDropdownOpen(false);
                     }}
                     className="pointer-events-auto group flex items-center gap-1.5 sm:gap-2 bg-black/70 backdrop-blur-md px-3 py-1.5 sm:px-4 sm:py-2 rounded-full border border-white/15 shadow-lg hover:bg-[#d0b370] transition-all duration-300 cursor-pointer outline-none shrink-0"
+                    aria-label="Close Tour"
                   >
                     <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-white group-hover:text-black">
                       Close
@@ -922,31 +956,33 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                   </button>
                 </div>
 
-                {/* Dropdowns */}
-                <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto w-full max-w-sm sm:max-w-md">
-                  {/* Project Dropdown */}
+                {/* Row 2: 3-Dropdown Bar (Project -> Tower -> Unit) */}
+                <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto w-full max-w-sm sm:max-w-xl">
+                  
+                  {/* 1. PROJECT DROPDOWN */}
                   <div className="relative flex-1 min-w-0">
                     <button
                       type="button"
                       onClick={() => {
                         setIsProjectDropdownOpen(!isProjectDropdownOpen);
+                        setIsTowerDropdownOpen(false);
                         setIsUnitDropdownOpen(false);
                       }}
-                      className="w-full bg-black/60 hover:bg-black/75 backdrop-blur-xl rounded-xl md:rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.37)] px-3 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 border border-white/15 flex flex-col justify-center text-left cursor-pointer transition-all duration-200 active:scale-95 outline-none"
+                      className="w-full bg-black/60 hover:bg-black/75 backdrop-blur-xl rounded-xl md:rounded-2xl px-3 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 border border-white/15 flex flex-col justify-center text-left cursor-pointer transition-all outline-none"
                     >
                       <span className="text-[8px] sm:text-[9px] md:text-[10px] font-semibold tracking-[0.14em] text-[#d4b26f] uppercase font-sans">
                         Project
                       </span>
-                      <div className="flex items-center justify-between gap-1.5 mt-0.5">
-                        <span className="text-xs sm:text-[13px] md:text-[15px] font-medium text-white font-sans tracking-tight truncate">
+                      <div className="flex items-center justify-between gap-1 mt-0.5">
+                        <span className="text-xs sm:text-[13px] md:text-[14px] font-medium text-white font-sans truncate">
                           {activeTourProject.name || activeTourProject.title}
                         </span>
-                        <ChevronDown size={14} className={`text-white/80 shrink-0 transition-transform duration-300 ${isProjectDropdownOpen ? 'rotate-180' : ''}`} />
+                        <ChevronDown size={14} className={`text-white/80 transition-transform duration-300 ${isProjectDropdownOpen ? 'rotate-180' : ''}`} />
                       </div>
                     </button>
 
                     {isProjectDropdownOpen && (
-                      <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[170px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.5)] border border-white/15 py-1 z-[70] animate-in fade-in zoom-in-95 duration-150">
+                      <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[170px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl border border-white/15 py-1 z-[70]">
                         {initialProjects
                           .filter((p: any) => (p.virtual_tours && p.virtual_tours.length > 0) || p.virtual_tour_url)
                           .map((p: any) => {
@@ -957,12 +993,20 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                                 type="button"
                                 onClick={() => {
                                   setActiveTourProject(p);
-                                  const units = p.virtual_tours || [];
-                                  if (units.length > 0) setActiveTourUnit(units[0]);
+                                  const tours = p.virtual_tours || [];
+                                  const towers = Array.from(new Set(tours.map((t: any) => t.tower_name?.trim()).filter(Boolean))).sort();
+                                  const firstTower: string | null = (towers[0] as string) || null;
+                                  setActiveTourTower(firstTower);
+
+                                  const units = firstTower 
+                                    ? tours.filter((t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === firstTower.toLowerCase())
+                                    : tours;
+
+                                  setActiveTourUnit(units[0] || tours[0] || null);
                                   setActiveRoomIndex(0);
                                   setIsProjectDropdownOpen(false);
                                 }}
-                                className={`w-full px-3 py-2 text-left text-xs sm:text-[13px] font-medium font-sans transition-colors flex items-center justify-between cursor-pointer ${
+                                className={`w-full px-3 py-2 text-left text-xs font-medium font-sans flex items-center justify-between cursor-pointer ${
                                   isSelected ? 'bg-white/15 text-[#d4b26f]' : 'text-white/85 hover:bg-white/10 hover:text-white'
                                 }`}
                               >
@@ -975,7 +1019,61 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                     )}
                   </div>
 
-                  {/* Unit Dropdown */}
+                  {/* 2. TOWER DROPDOWN */}
+                  {availableTowers.length > 0 && (
+                    <div className="relative flex-1 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsTowerDropdownOpen(!isTowerDropdownOpen);
+                          setIsProjectDropdownOpen(false);
+                          setIsUnitDropdownOpen(false);
+                        }}
+                        className="w-full bg-black/60 hover:bg-black/75 backdrop-blur-xl rounded-xl md:rounded-2xl px-3 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 border border-white/15 flex flex-col justify-center text-left cursor-pointer transition-all outline-none"
+                      >
+                        <span className="text-[8px] sm:text-[9px] md:text-[10px] font-semibold tracking-[0.14em] text-[#d4b26f] uppercase font-sans">
+                          Tower
+                        </span>
+                        <div className="flex items-center justify-between gap-1 mt-0.5">
+                          <span className="text-xs sm:text-[13px] md:text-[14px] font-medium text-white font-sans truncate">
+                            {activeTourTower || availableTowers[0]}
+                          </span>
+                          <ChevronDown size={14} className={`text-white/80 transition-transform duration-300 ${isTowerDropdownOpen ? 'rotate-180' : ''}`} />
+                        </div>
+                      </button>
+
+                      {isTowerDropdownOpen && (
+                        <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[140px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl border border-white/15 py-1 z-[70]">
+                          {availableTowers.map((tower) => {
+                            const isSelected = activeTourTower?.toLowerCase() === tower.toLowerCase();
+                            return (
+                              <button
+                                key={tower}
+                                type="button"
+                                onClick={() => {
+                                  setActiveTourTower(tower);
+                                  const towerUnits = allProjectTours.filter(
+                                    (t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === tower.toLowerCase()
+                                  );
+                                  setActiveTourUnit(towerUnits[0] || null);
+                                  setActiveRoomIndex(0);
+                                  setIsTowerDropdownOpen(false);
+                                }}
+                                className={`w-full px-3 py-2 text-left text-xs font-medium font-sans flex items-center justify-between cursor-pointer ${
+                                  isSelected ? 'bg-white/15 text-[#d4b26f]' : 'text-white/85 hover:bg-white/10 hover:text-white'
+                                }`}
+                              >
+                                <span className="truncate">{tower}</span>
+                                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#d4b26f] shrink-0" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 3. UNIT DROPDOWN */}
                   {availableUnits.length > 0 && (
                     <div className="relative flex-1 min-w-0">
                       <button
@@ -983,22 +1081,23 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                         onClick={() => {
                           setIsUnitDropdownOpen(!isUnitDropdownOpen);
                           setIsProjectDropdownOpen(false);
+                          setIsTowerDropdownOpen(false);
                         }}
-                        className="w-full bg-black/60 hover:bg-black/75 backdrop-blur-xl rounded-xl md:rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.37)] px-3 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 border border-white/15 flex flex-col justify-center text-left cursor-pointer transition-all duration-200 active:scale-95 outline-none"
+                        className="w-full bg-black/60 hover:bg-black/75 backdrop-blur-xl rounded-xl md:rounded-2xl px-3 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 border border-white/15 flex flex-col justify-center text-left cursor-pointer transition-all outline-none"
                       >
                         <span className="text-[8px] sm:text-[9px] md:text-[10px] font-semibold tracking-[0.14em] text-[#d4b26f] uppercase font-sans">
                           Unit
                         </span>
-                        <div className="flex items-center justify-between gap-1.5 mt-0.5">
-                          <span className="text-xs sm:text-[13px] md:text-[15px] font-medium text-white font-sans tracking-tight truncate">
+                        <div className="flex items-center justify-between gap-1 mt-0.5">
+                          <span className="text-xs sm:text-[13px] md:text-[14px] font-medium text-white font-sans truncate">
                             {activeTourUnit?.unit_name || activeTourUnit?.title || 'Standard Unit'}
                           </span>
-                          <ChevronDown size={14} className={`text-white/80 shrink-0 transition-transform duration-300 ${isUnitDropdownOpen ? 'rotate-180' : ''}`} />
+                          <ChevronDown size={14} className={`text-white/80 transition-transform duration-300 ${isUnitDropdownOpen ? 'rotate-180' : ''}`} />
                         </div>
                       </button>
 
                       {isUnitDropdownOpen && (
-                        <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[170px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.5)] border border-white/15 py-1 z-[70] animate-in fade-in zoom-in-95 duration-150">
+                        <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[170px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl border border-white/15 py-1 z-[70]">
                           {availableUnits.map((u: any) => {
                             const isSelected = String(u.id) === String(activeTourUnit?.id);
                             return (
@@ -1010,7 +1109,7 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                                   setActiveRoomIndex(0);
                                   setIsUnitDropdownOpen(false);
                                 }}
-                                className={`w-full px-3 py-2 text-left text-xs sm:text-[13px] font-medium font-sans transition-colors flex items-center justify-between cursor-pointer ${
+                                className={`w-full px-3 py-2 text-left text-xs font-medium font-sans flex items-center justify-between cursor-pointer ${
                                   isSelected ? 'bg-white/15 text-[#d4b26f]' : 'text-white/85 hover:bg-white/10 hover:text-white'
                                 }`}
                               >
@@ -1023,6 +1122,7 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                       )}
                     </div>
                   )}
+
                 </div>
               </div>
 
@@ -1050,6 +1150,7 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                       type="button"
                       onClick={() => setActiveRoomIndex((prev) => (prev - 1 + currentAreas.length) % currentAreas.length)}
                       className="p-1 sm:p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer shrink-0"
+                      aria-label="Previous view area"
                     >
                       <ChevronLeft size={18} className="md:w-[22px] md:h-[22px]" strokeWidth={2.5} />
                     </button>
@@ -1085,6 +1186,7 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                       type="button"
                       onClick={() => setActiveRoomIndex((prev) => (prev + 1) % currentAreas.length)}
                       className="p-1 sm:p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer shrink-0"
+                      aria-label="Next view area"
                     >
                       <ChevronRight size={18} className="md:w-[22px] md:h-[22px]" strokeWidth={2.5} />
                     </button>
