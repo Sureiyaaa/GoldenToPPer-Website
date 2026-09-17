@@ -9,21 +9,55 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY! 
 );
 
-// ==========================================
-// VIRTUAL TOURS ACTIONS
-// ==========================================
-// ==========================================
-// VIRTUAL TOURS ACTIONS
-// ==========================================
 export async function fetchAdminVirtualToursList() {
   const session = await getCustomSession();
   if (!session) throw new Error("Unauthorized");
+
+  // Fetch projects and their associated virtual tours
   const { data, error } = await supabaseAdmin
-    .from('virtual_tours')
-    .select('*, project_table(title)')
-    .order('id', { ascending: false });
-  if (error) throw error; 
-  return data;
+    .from('project_table')
+    .select(`
+      id,
+      title,
+      image,
+      virtual_tours (
+        id,
+        tower_name,
+        unit_name,
+        status,
+        view_areas
+      )
+    `)
+    .is('deleted_at', null)
+    .order('title', { ascending: true });
+
+  if (error) {
+    console.error("Fetch Virtual Tours Project List Error:", error);
+    throw new Error(error.message);
+  }
+
+  // Format one entry per project
+  return (data || []).map((project: any) => {
+    const tours = project.virtual_tours || [];
+    const hasActiveTours = tours.some((t: any) => t.status === 'Active');
+    const totalTours = tours.length;
+
+    // Count unique towers configured
+    const uniqueTowers = Array.from(
+      new Set(tours.map((t: any) => t.tower_name?.trim()).filter(Boolean))
+    );
+
+    return {
+      id: project.id,
+      project_id: project.id,
+      title: `${project.title} Virtual Tours`,
+      project_name: project.title,
+      image: project.image || '/images/placeholder.webp',
+      status: totalTours > 0 && hasActiveTours ? 'Active' : 'Draft',
+      total_units: totalTours,
+      total_towers: uniqueTowers.length,
+    };
+  });
 }
 
 export async function fetchProjectsForDropdown() {

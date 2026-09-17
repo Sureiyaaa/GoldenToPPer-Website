@@ -38,23 +38,32 @@ export default async function HomePage() {
     .order('date', { ascending: false })
     .limit(4);
 
-  // 2. Fetch virtual tours directly
-  const { data: virtualTours, error: toursError } = await supabase
-    .from('virtual_tours')
-    .select('*')
-    .eq('status', 'Active');
+  // 2. Fetch projects with joined virtual tours
+  const { data: projectsData, error: projectsError } = await supabase
+    .from('project_table')
+    .select(`
+      id,
+      title,
+      slug,
+      virtual_tours (*)
+    `)
+    .is('deleted_at', null)
+    .eq('is_active', true)
+    .order('id', { ascending: true });
 
-  if (toursError) {
-    console.error("Failed to fetch virtual tours:", toursError.message);
+  if (projectsError) {
+    console.error("Failed to fetch projects with tours:", projectsError.message);
   }
 
-  // Structure tours into the project format expected by the modal
-  const formattedProjects = (virtualTours || []).map((tour: any) => ({
-    id: tour.id,
-    name: tour.title?.replace(/ units$/i, '').trim(),
-    title: tour.title,
-    slug: tour.title?.toLowerCase().replace(/\s+/g, '-'),
-    virtual_tours: [tour],
+  // Format projects with their active virtual tours
+  const formattedProjects = (projectsData || []).map((project: any) => ({
+    id: project.id,
+    name: project.title,
+    title: project.title,
+    slug: project.slug,
+    virtual_tours: (project.virtual_tours || []).filter(
+      (tour: any) => tour.status === 'Active'
+    ),
   }));
   
   return (
