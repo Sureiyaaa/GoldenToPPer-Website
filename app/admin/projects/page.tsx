@@ -6,7 +6,9 @@ import { useState, useEffect, Suspense } from 'react';
 import {
   saveProjectAction,
   fetchProjectForEdit,
-  createBasicProjectAction
+  createBasicProjectAction,
+  getProjectTowerUsageAction,
+  deleteProjectTowerAction,
 } from '@/app/actions/projects';
 import {
   createAuditLogAction
@@ -15,7 +17,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { ArrowLeft, Save, Loader2, PlusCircle, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, PlusCircle, Trash2, CheckCircle2, AlertCircle, GripVertical } from 'lucide-react';
 import PreviewSkeleton, {
   ProjectEditorRegion
 } from './PreviewSkeleton';
@@ -43,6 +45,33 @@ const projectSchema = z.object({
   amenities_title: z.string().optional(),
   amenities_title_gold: z.string().optional(),
   tags: z.array(z.object({ tag_name: z.string().min(1, "Tag cannot be empty") })),
+      towers: z.array(
+      z.object({
+        id: z
+          .union([
+            z.number(),
+            z.string()
+          ])
+          .optional()
+          .nullable(),
+
+        name: z
+          .string()
+          .trim()
+          .min(
+            1,
+            'Tower name is required'
+          ),
+
+        sort_order: z
+          .union([
+            z.number(),
+            z.string()
+          ])
+          .optional()
+          .nullable(),
+      })
+    ),
   unit_layouts: z.array(z.object({
     id: z.union([z.number(), z.string()]).optional().nullable(),
     title: z.string().min(1, "Title required"), 
@@ -55,10 +84,18 @@ const projectSchema = z.object({
     show_on_map_card: z.boolean().optional(),
     map_card_order: z.string().optional(),
     show_on_project_page: z.boolean().optional(),
-    project_page_order: z.string().optional()
+    project_page_order: z.string().optional(),
+    sort_order: z
+      .union([z.number(), z.string()])
+      .optional()
+      .nullable()
   })),
   amenities: z.array(z.object({
-    title: z.string().min(1, "Title required"), description: z.string(), thumbnail: z.string(), tower: z.string().nullable().optional()
+    id: z.union([z.number(), z.string()]).optional().nullable(),
+    title: z.string().min(1, "Title required"),
+    description: z.string(),
+    thumbnail: z.string(),
+    tower: z.string().nullable().optional()
   })),
   map_latitude: z.string(),
   map_longitude: z.string(),
@@ -229,6 +266,121 @@ function ProjectManager() {
   const [successMsg, setSuccessMsg] = useState('');
   const [createError, setCreateError] = useState('');
 
+  const [newTowerName, setNewTowerName] =
+  useState('');
+
+  const [towerError, setTowerError] =
+    useState('');
+
+    const [
+  towerToDelete,
+  setTowerToDelete
+] = useState<{
+  index: number;
+  id: number;
+  name: string;
+} | null>(null);
+
+
+const [
+  towerUsage,
+  setTowerUsage
+] = useState<{
+  amenityCount: number;
+  layoutCount: number;
+
+  otherTowers: Array<{
+    id: number;
+    name: string;
+    sort_order:
+      | number
+      | null;
+  }>;
+} | null>(null);
+
+
+const [
+  deleteAmenityTarget,
+  setDeleteAmenityTarget
+] = useState('');
+
+
+const [
+  deleteLayoutTarget,
+  setDeleteLayoutTarget
+] = useState('');
+
+
+const [
+  isCheckingTowerUsage,
+  setIsCheckingTowerUsage
+] = useState(false);
+
+
+const [
+  isDeletingTower,
+  setIsDeletingTower
+] = useState(false);
+
+
+const [
+  towerDeleteError,
+  setTowerDeleteError
+] = useState('');
+
+  const [
+    editingTowerIndex,
+    setEditingTowerIndex
+  ] =
+    useState<number | null>(
+      null
+    );
+
+  const [
+    editingTowerName,
+    setEditingTowerName
+  ] =
+    useState('');
+
+  const [
+    towerRenameError,
+    setTowerRenameError
+  ] =
+    useState('');  
+
+  const [
+    amenityToRemove,
+    setAmenityToRemove
+  ] = useState<{
+    index: number;
+    title: string;
+  } | null>(null);
+
+  const [
+    layoutToRemove,
+    setLayoutToRemove
+  ] = useState<{
+    index: number;
+    title: string;
+  } | null>(null);
+
+  const [
+    layoutEditorError,
+    setLayoutEditorError
+  ] = useState('');
+
+  const [
+    dragState,
+    setDragState
+  ] = useState<{
+    type:
+      | 'tower'
+      | 'tower-layout'
+      | 'map-card'
+      | 'projects-page';
+    index: number;
+  } | null>(null);
+
   type EditorSelection =
   | ProjectEditorRegion
   | 'page-settings'
@@ -293,7 +445,7 @@ const [
     return () => Object.values(previews).forEach(url => URL.revokeObjectURL(url));
   }, [previews]);
 
-  const { register, control, watch, handleSubmit, setValue, reset, formState: {
+  const { register, control, watch, handleSubmit, setValue, reset, getValues, formState: {
       errors,
       isSubmitting,
       isDirty
@@ -305,7 +457,7 @@ const [
       editorial_title: "", editorial_long: "", editorial_img: "",
       editorial_title_color: "#132243", editorial_desc_color: "#4B5563", editorial_bg_color: "transparent",
       amenities_title: "Experience A Fresh", amenities_title_gold: "Way Of Living in this project.",
-      tags: [], unit_layouts: [], amenities: [], map_latitude: "", map_longitude: "", map_icon: "", child_markers: [], map_subtitle: "Everything you need, strategically positioned right around your sanctuary.", 
+      tags: [], towers: [], unit_layouts: [], amenities: [], map_latitude: "", map_longitude: "", map_icon: "", child_markers: [], map_subtitle: "Everything you need, strategically positioned right around your sanctuary.", 
      
     }
   });
@@ -333,7 +485,26 @@ const [
 });
 
   const { fields: tagFields, append: appendTag, remove: removeTag } = useFieldArray({ control, name: "tags" });
-  const { fields: amenityFields, append: appendAmenity, remove: removeAmenity } = useFieldArray({ control, name: "amenities" });
+  const {
+    fields: amenityFields,
+    append: appendAmenity,
+    remove: removeAmenity
+  } = useFieldArray({
+    control,
+    name: "amenities",
+    keyName: "fieldKey"
+  });
+  const {
+      fields: towerFields,
+      append: appendTower,
+      remove: removeTower,
+      move: moveTower,
+      update: updateTower,
+    } = useFieldArray({
+      control,
+      name: 'towers',
+      keyName: 'fieldKey',
+    });
   const {
     fields: layoutFields,
     append: appendLayout,
@@ -381,21 +552,38 @@ const [
           amenities_title: data.extData?.amenities_title || "Experience A Fresh",
           amenities_title_gold: data.extData?.amenities_title_gold || `Way Of Living in ${data.projData.title || ''}.`,
           tags: currentTags,
+                  towers: (data.towerData || []).map(
+          (tower: any) => ({
+            id: tower.id,
+            name: tower.name,
+            sort_order:
+              tower.sort_order ?? null,
+          })
+        ),
           unit_layouts: data.layoutData.map((l: any) => ({ 
             ...l, 
-            tower_name: l.tower_name || "Tower A - Residential",
+            tower_name:
+            typeof l.tower_name === 'string'
+              ? l.tower_name.trim()
+              : '',
             bg_color: l.bg_color || "#051431",
             min_sqm: l.min_sqm ? String(l.min_sqm) : "", 
             max_sqm: l.max_sqm ? String(l.max_sqm) : "",
             show_on_map_card: Boolean(l.show_on_map_card),
             map_card_order: l.map_card_order != null ? String(l.map_card_order) : "",
             show_on_project_page: Boolean(l.show_on_project_page),
-            project_page_order: l.project_page_order != null ? String(l.project_page_order) : ""
+            project_page_order: l.project_page_order != null ? String(l.project_page_order) : "",
+            sort_order: l.sort_order ?? null
           })),
 
           amenities: data.amenityData.map((a: any) => ({
             ...a,
-            tower: formatTowerToLetter(a.tower) || null
+            tower:
+        a.tower
+          ? formatTowerToLetter(
+              a.tower.trim()
+            )
+          : null
           })),
           
           child_markers: data.markerData.map((m: any) => ({
@@ -441,18 +629,36 @@ const [
 
   const formData = watch();
 
-  const availableTowerOptions = Array.from(
-    new Set([
-      'Tower A',
-      'Tower B',
-      'Tower C',
-      ...(formData.unit_layouts || []).map((l) => formatTowerToLetter(l.tower_name)),
-      ...(formData.amenities || []).map((a) => formatTowerToLetter(a.tower))
-    ].filter((name): name is string => Boolean(name)))
-  );
+  const availableTowerOptions =
+    (formData.towers || [])
+      .map((tower) => tower.name?.trim())
+      .filter(
+        (name): name is string =>
+          Boolean(name)
+      );
+
+      const validTowerNames =
+      new Set(
+        availableTowerOptions.map(
+          (tower) =>
+            tower.toLowerCase()
+        )
+      );
+
+      const isValidTowerAssignment = (
+      tower?: string | null
+    ) => {
+      if (!tower) return true;
+
+      return availableTowerOptions.some(
+        (option) =>
+          option.toLowerCase() ===
+          tower.trim().toLowerCase()
+      );
+    };
   
   const hasErrors = Object.keys(errors).length > 0;
-
+  
   const mapCardLayoutCount =
     formData.unit_layouts?.filter((layout) => layout.show_on_map_card).length || 0;
 
@@ -506,10 +712,153 @@ const onCreateBasicProject = async (
   }
 };
 
+const normalizeTowerAssignments = (
+  data: ProjectFormData
+): ProjectFormData => {
+  const invalidAmenity =
+    (data.amenities || []).find((amenity) => {
+      const tower = amenity.tower?.trim();
+      return (
+        Boolean(tower) &&
+        !validTowerNames.has(
+          String(tower).toLowerCase()
+        )
+      );
+    });
+
+  if (invalidAmenity?.tower) {
+    throw new Error(
+      `Amenity "${invalidAmenity.title || 'Untitled amenity'}" is assigned to "${invalidAmenity.tower}", which is no longer a valid project tower. Choose a valid tower or All Towers / Shared before saving.`
+    );
+  }
+
+  const invalidLayout =
+    (data.unit_layouts || []).find((layout) => {
+      const tower = layout.tower_name?.trim();
+      return (
+        !tower ||
+        !validTowerNames.has(
+          tower.toLowerCase()
+        )
+      );
+    });
+
+  if (invalidLayout) {
+    throw new Error(
+      `Unit layout "${invalidLayout.title || 'Untitled layout'}" must be assigned to a valid project tower before saving.`
+    );
+  }
+
+  const normalizedLayouts =
+    (data.unit_layouts || []).map(
+      (layout) => ({
+        ...layout,
+        tower_name:
+          layout.tower_name.trim(),
+      })
+    );
+
+  const parseOrder = (
+    value: unknown
+  ) => {
+    const parsed = Number(value);
+
+    return Number.isFinite(parsed) &&
+      parsed > 0
+      ? parsed
+      : Number.MAX_SAFE_INTEGER;
+  };
+
+  (data.towers || []).forEach(
+    (tower) => {
+      const indices =
+        normalizedLayouts
+          .map(
+            (
+              layout,
+              index
+            ) => ({
+              layout,
+              index,
+            })
+          )
+          .filter(
+            ({ layout }) =>
+              layout.tower_name
+                .trim()
+                .toLowerCase() ===
+              tower.name
+                .trim()
+                .toLowerCase()
+          )
+          .sort((a, b) => {
+            const orderDiff =
+              parseOrder(
+                a.layout.sort_order
+              ) -
+              parseOrder(
+                b.layout.sort_order
+              );
+
+            if (
+              orderDiff !== 0
+            ) {
+              return orderDiff;
+            }
+
+            return (
+              a.index - b.index
+            );
+          })
+          .map(
+            ({ index }) =>
+              index
+          );
+
+      indices.forEach(
+        (
+          layoutIndex,
+          position
+        ) => {
+          normalizedLayouts[
+            layoutIndex
+          ] = {
+            ...normalizedLayouts[
+              layoutIndex
+            ],
+            sort_order:
+              position + 1,
+          };
+        }
+      );
+    }
+  );
+
+  return {
+    ...data,
+
+    amenities:
+      (data.amenities || []).map((amenity) => {
+        const tower = amenity.tower?.trim();
+
+        return {
+          ...amenity,
+          tower: tower || null,
+        };
+      }),
+
+    unit_layouts:
+      normalizedLayouts,
+  };
+};
+
   const onSubmit = async (data: ProjectFormData) => {
     setIsSaving(true);
     try {
-      let finalData = { ...data };
+      let finalData =
+      normalizeTowerAssignments(
+        data
+      );
 
       // 1. UPLOAD IMAGES TO BUCKET (Kept on the client)
       for (const [path, file] of Object.entries(pendingFiles)) {
@@ -560,7 +909,97 @@ const onCreateBasicProject = async (
         throw new Error(result.error);
       }
 
-      reset(finalData);
+      const savedFormData = {
+        ...finalData,
+
+        towers:
+          result.towerData?.map(
+            (tower: any) => ({
+              id: tower.id,
+              name: tower.name,
+              sort_order:
+                tower.sort_order,
+            })
+          ) ??
+          finalData.towers ??
+          [],
+
+        amenities:
+          result.amenityData?.map(
+            (amenity: any) => ({
+              id: amenity.id,
+              title: amenity.title || '',
+              description:
+                amenity.description || '',
+              thumbnail:
+                amenity.thumbnail || '',
+              tower:
+                amenity.tower || null,
+            })
+          ) ??
+          finalData.amenities ??
+          [],
+
+        unit_layouts:
+          result.layoutData?.map(
+            (layout: any) => ({
+              id: layout.id,
+              title:
+                layout.title || '',
+              tower_name:
+                typeof layout.tower_name ===
+                'string'
+                  ? layout.tower_name.trim()
+                  : '',
+              bg_color:
+                layout.bg_color ||
+                '#051431',
+              description:
+                layout.description || '',
+              min_sqm:
+                layout.min_sqm != null
+                  ? String(
+                      layout.min_sqm
+                    )
+                  : '',
+              max_sqm:
+                layout.max_sqm != null
+                  ? String(
+                      layout.max_sqm
+                    )
+                  : '',
+              thumbnail:
+                layout.thumbnail || '',
+              show_on_map_card:
+                Boolean(
+                  layout.show_on_map_card
+                ),
+              map_card_order:
+                layout.map_card_order != null
+                  ? String(
+                      layout.map_card_order
+                    )
+                  : '',
+              show_on_project_page:
+                Boolean(
+                  layout.show_on_project_page
+                ),
+              project_page_order:
+                layout.project_page_order != null
+                  ? String(
+                      layout.project_page_order
+                    )
+                  : '',
+              sort_order:
+                layout.sort_order ??
+                null,
+            })
+          ) ??
+          finalData.unit_layouts ??
+          [],
+      };
+
+      reset(savedFormData);
 
       setPendingFiles({});
       setPreviews({});
@@ -592,6 +1031,7 @@ const onCreateBasicProject = async (
     image: previews['image'] || formData.image || BLANK_IMAGE,
     img_awards: previews['img_awards'] || formData.img_awards || '',
     project_tag: formData.tags?.map((t) => ({ tags: { tag_name: t.tag_name } })) || [],
+    towers: formData.towers || [],
     extended_description: [{
       editorial_title: formData.editorial_title || 'Editorial Headline',
       editorial_long: formData.editorial_long || 'Write your project description here...',
@@ -603,16 +1043,21 @@ const onCreateBasicProject = async (
       amenities_title_gold: formData.amenities_title_gold || `Way Of Living in ${formData.title || 'this project'}.`
     }],
     amenities: formData.amenities?.length > 0 ? formData.amenities.map((a, i) => ({
-      id: i + 1, 
-      title: a.title || `Amenity ${i + 1}`, 
+      id: a.id ?? i + 1,
+      editorIndex: i,
+      title: a.title || `Amenity ${i + 1}`,
       description: a.description || 'Description...',
       tower: a.tower || null,
       thumbnail: previews[`amenities.${i}.thumbnail`] || a.thumbnail || BLANK_IMAGE
     })) : [],
     unit_layout: formData.unit_layouts?.length > 0 ? formData.unit_layouts.map((l, i) => ({
-    id: l.id ?? i + 1, 
+    id: l.id ?? i + 1,
+    editorIndex: i,
     title: l.title || `Layout ${i + 1}`, 
-    tower_name: l.tower_name || "Tower A - Residential",
+    tower_name:
+    typeof l.tower_name === 'string'
+      ? l.tower_name.trim()
+      : '',
     bg_color: l.bg_color || "#051431",
     description: l.description || 'Description...', 
     min_sqm: l.min_sqm || '0', 
@@ -621,7 +1066,8 @@ const onCreateBasicProject = async (
     show_on_map_card: l.show_on_map_card || false,
     map_card_order: l.map_card_order || "",
     show_on_project_page: l.show_on_project_page || false,
-    project_page_order: l.project_page_order || ""
+    project_page_order: l.project_page_order || "",
+    sort_order: l.sort_order ?? null
   })) : []
   };
 
@@ -640,6 +1086,1345 @@ const onCreateBasicProject = async (
 
     reset();
   };
+
+      const handleAddTower = () => {
+      const name = newTowerName.trim();
+
+      if (!name) {
+        setTowerError(
+          'Enter a tower name first.'
+        );
+        return;
+      }
+
+      
+      const alreadyExists =
+        (formData.towers || []).some(
+          (tower) =>
+            tower.name
+              .trim()
+              .toLowerCase() ===
+            name.toLowerCase()
+        );
+
+      if (alreadyExists) {
+        setTowerError(
+          'That tower already exists in this project.'
+        );
+        return;
+      }
+
+      appendTower({
+        id: null,
+        name,
+        sort_order:
+          towerFields.length + 1,
+      });
+
+      setNewTowerName('');
+      setTowerError('');
+    };
+
+    const handleStartRenameTower = (
+  index: number
+) => {
+  const currentTower =
+    formData.towers?.[index];
+
+  if (!currentTower) return;
+
+  setEditingTowerIndex(index);
+
+  setEditingTowerName(
+    currentTower.name
+  );
+
+  setTowerRenameError('');
+};
+
+const handleCancelRenameTower =
+  () => {
+    setEditingTowerIndex(null);
+    setEditingTowerName('');
+    setTowerRenameError('');
+  };
+
+
+const handleApplyRenameTower =
+  () => {
+    if (editingTowerIndex === null) {
+      return;
+    }
+
+    const name = editingTowerName.trim();
+    const currentTower =
+      formData.towers?.[editingTowerIndex];
+    const oldName = currentTower?.name?.trim();
+
+    if (!name) {
+      setTowerRenameError(
+        'Tower name cannot be empty.'
+      );
+      return;
+    }
+
+    const duplicate =
+      (formData.towers || []).some(
+        (tower, index) =>
+          index !== editingTowerIndex &&
+          tower.name.trim().toLowerCase() ===
+            name.toLowerCase()
+      );
+
+    if (duplicate) {
+      setTowerRenameError(
+        'That tower already exists in this project.'
+      );
+      return;
+    }
+
+    setValue(
+      `towers.${editingTowerIndex}.name`,
+      name,
+      {
+        shouldDirty: true,
+        shouldValidate: true,
+      }
+    );
+
+    // Keep local Amenity and Unit Layout assignments in sync
+    // with the tower rename before the project is saved.
+    if (
+      oldName &&
+      oldName.toLowerCase() !== name.toLowerCase()
+    ) {
+      (formData.amenities || []).forEach(
+        (amenity, index) => {
+          if (
+            amenity.tower?.trim().toLowerCase() ===
+            oldName.toLowerCase()
+          ) {
+            setValue(
+              `amenities.${index}.tower`,
+              name,
+              {
+                shouldDirty: true,
+                shouldValidate: true,
+              }
+            );
+          }
+        }
+      );
+
+      (formData.unit_layouts || []).forEach(
+        (layout, index) => {
+          if (
+            layout.tower_name?.trim().toLowerCase() ===
+            oldName.toLowerCase()
+          ) {
+            setValue(
+              `unit_layouts.${index}.tower_name`,
+              name,
+              {
+                shouldDirty: true,
+                shouldValidate: true,
+              }
+            );
+          }
+        }
+      );
+    }
+
+    setEditingTowerIndex(null);
+    setEditingTowerName('');
+    setTowerRenameError('');
+  };
+
+    const handleConfirmDeleteTower =
+  async () => {
+
+    if (
+      !towerToDelete ||
+      !towerUsage ||
+      !editId
+    ) {
+      return;
+    }
+
+
+    if (
+      towerUsage.layoutCount > 0 &&
+      !deleteLayoutTarget
+    ) {
+      setTowerDeleteError(
+        'Choose where the unit layouts should move before deleting this tower.'
+      );
+
+      return;
+    }
+
+
+    const amenityTarget =
+      towerUsage.amenityCount > 0
+        ? deleteAmenityTarget ===
+          '__shared__'
+          ? null
+          : deleteAmenityTarget ||
+            null
+        : null;
+
+
+    const layoutTarget =
+      towerUsage.layoutCount > 0
+        ? deleteLayoutTarget
+        : null;
+
+
+    setIsDeletingTower(true);
+    setTowerDeleteError('');
+
+
+    try {
+      const result =
+        await deleteProjectTowerAction({
+          projectId:
+            Number(editId),
+
+          towerId:
+            towerToDelete.id,
+
+          amenityTarget,
+
+          layoutTarget,
+        });
+
+
+      /*
+       * Update the local editor state
+       * so a future Project Save cannot
+       * accidentally restore the old
+       * tower assignment.
+       */
+
+      const current =
+        getValues();
+
+
+      const deletedName =
+        towerToDelete.name;
+
+
+      const nextAmenities =
+        current.amenities.map(
+          (amenity) => {
+
+            const matches =
+              amenity.tower
+                ?.trim() ===
+              deletedName.trim();
+
+            if (!matches) {
+              return amenity;
+            }
+
+            return {
+              ...amenity,
+
+              tower:
+                amenityTarget,
+            };
+          }
+        );
+
+
+      const nextLayouts =
+        current.unit_layouts.map(
+          (layout) => {
+
+            const matches =
+              layout.tower_name
+                ?.trim() ===
+              deletedName.trim();
+
+            if (!matches) {
+              return layout;
+            }
+
+            return {
+              ...layout,
+
+              tower_name:
+                layoutTarget ||
+                layout.tower_name,
+            };
+          }
+        );
+
+
+      const nextTowers =
+        (result.towerData || [])
+          .map(
+            (tower: any) => ({
+              id: tower.id,
+
+              name:
+                tower.name,
+
+              sort_order:
+                tower.sort_order,
+            })
+          );
+
+      nextTowers.forEach(
+        (tower: any) => {
+          const matchingIndices =
+            nextLayouts
+              .map(
+                (
+                  layout,
+                  index
+                ) => ({
+                  layout,
+                  index,
+                })
+              )
+              .filter(
+                ({ layout }) =>
+                  normalizeTowerName(
+                    layout.tower_name
+                  ) ===
+                  normalizeTowerName(
+                    tower.name
+                  )
+              )
+              .sort((a, b) => {
+                const orderDiff =
+                  numericOrder(
+                    a.layout.sort_order
+                  ) -
+                  numericOrder(
+                    b.layout.sort_order
+                  );
+
+                if (
+                  orderDiff !== 0
+                ) {
+                  return orderDiff;
+                }
+
+                return (
+                  a.index -
+                  b.index
+                );
+              });
+
+          matchingIndices.forEach(
+            (
+              item,
+              position
+            ) => {
+              nextLayouts[
+                item.index
+              ] = {
+                ...nextLayouts[
+                  item.index
+                ],
+                sort_order:
+                  position + 1,
+              };
+            }
+          );
+        }
+      );
+
+
+      /*
+       * We only allow persisted tower
+       * deletion when there are no
+       * unrelated unsaved changes,
+       * therefore reset() is safe here.
+       *
+       * It establishes the updated DB
+       * state as the new editor baseline.
+       */
+      reset({
+        ...current,
+
+        towers:
+          nextTowers,
+
+        amenities:
+          nextAmenities,
+
+        unit_layouts:
+          nextLayouts,
+      });
+
+
+      setTowerToDelete(null);
+      setTowerUsage(null);
+
+      setDeleteAmenityTarget('');
+      setDeleteLayoutTarget('');
+
+    } catch (error: any) {
+
+      setTowerDeleteError(
+        error.message ||
+        'Unable to delete tower.'
+      );
+
+    } finally {
+
+      setIsDeletingTower(false);
+    }
+  };
+
+  const handleRequestDeleteTower =
+    async (index: number) => {
+
+      const tower =
+        formData.towers?.[index];
+
+      if (!tower) return;
+
+
+      // A brand-new tower that has not
+      // been saved yet can simply be
+      // removed locally.
+      if (!tower.id) {
+        removeTower(index);
+        return;
+      }
+
+
+    /*
+     * Existing towers are already
+     * persisted database entities.
+     *
+     * Don't combine an immediate
+     * destructive action with other
+     * unsaved editor changes.
+     */
+    if (isDirty) {
+      setTowerDeleteError(
+        'Save or reset your current changes before deleting an existing tower.'
+      );
+      return;
+    }
+
+
+    if (!editId) return;
+
+
+    setTowerDeleteError('');
+    setIsCheckingTowerUsage(
+      true
+    );
+
+
+    try {
+      const usage =
+        await getProjectTowerUsageAction(
+          Number(editId),
+          Number(tower.id)
+        );
+
+
+      setTowerToDelete({
+        index,
+        id: Number(tower.id),
+        name: tower.name,
+      });
+
+
+      setTowerUsage({
+        amenityCount:
+          usage.amenityCount,
+
+        layoutCount:
+          usage.layoutCount,
+
+        otherTowers:
+          usage.otherTowers || [],
+      });
+
+
+      /*
+       * Amenities may safely become
+       * shared.
+       */
+      setDeleteAmenityTarget(
+        usage.amenityCount > 0
+          ? '__shared__'
+          : ''
+      );
+
+
+      /*
+       * Unit layouts require an
+       * actual replacement tower.
+       */
+      setDeleteLayoutTarget(
+        ''
+      );
+
+    } catch (error: any) {
+
+      setTowerDeleteError(
+        error.message ||
+        'Unable to check tower usage.'
+      );
+
+    } finally {
+
+      setIsCheckingTowerUsage(
+        false
+      );
+    }
+  };
+
+    const handleCloseTowerDelete =
+  () => {
+    if (isDeletingTower) {
+      return;
+    }
+
+    setTowerToDelete(null);
+    setTowerUsage(null);
+
+    setDeleteAmenityTarget('');
+    setDeleteLayoutTarget('');
+
+    setTowerDeleteError('');
+  };
+
+  const selectedAmenityIndex =
+  typeof selectedEditorRegion ===
+    'string' &&
+  selectedEditorRegion.startsWith(
+    'amenity:'
+  )
+    ? Number(
+        selectedEditorRegion.split(
+          ':'
+        )[1]
+      )
+    : null;
+
+
+const selectedAmenity =
+  selectedAmenityIndex !== null &&
+  Number.isInteger(
+    selectedAmenityIndex
+  )
+    ? formData.amenities?.[
+        selectedAmenityIndex
+      ]
+    : null;
+
+
+const handleAddAmenity = () => {
+  const newIndex = amenityFields.length;
+
+  appendAmenity({
+    id: null,
+    title: '',
+    description: '',
+    thumbnail: '',
+    tower: null,
+  });
+
+  setSelectedEditorRegion(
+    `amenity:${newIndex}`
+  );
+};
+
+const handleRequestRemoveAmenity = (
+  index: number
+) => {
+  const amenity =
+    formData.amenities?.[index];
+
+  if (!amenity) return;
+
+  setAmenityToRemove({
+    index,
+    title:
+      amenity.title?.trim() ||
+      `Amenity ${index + 1}`,
+  });
+};
+
+const handleCancelRemoveAmenity = () => {
+  setAmenityToRemove(null);
+};
+
+const handleConfirmRemoveAmenity = () => {
+  if (!amenityToRemove) return;
+
+  removeNestedFieldFiles(
+    'amenities',
+    amenityToRemove.index
+  );
+
+  removeAmenity(
+    amenityToRemove.index
+  );
+
+  setAmenityToRemove(null);
+  setSelectedEditorRegion(
+    'amenities'
+  );
+};
+
+
+const amenityRemoveModal =
+  amenityToRemove ? (
+    <div
+      className="
+        fixed inset-0 z-[260]
+        flex items-center justify-center
+        bg-brand-blue/55
+        backdrop-blur-sm
+        p-4
+      "
+      onMouseDown={
+        handleCancelRemoveAmenity
+      }
+    >
+      <div
+        className="
+          w-full max-w-md
+          overflow-hidden
+          rounded-2xl
+          bg-white
+          shadow-2xl
+        "
+        onMouseDown={(e) =>
+          e.stopPropagation()
+        }
+      >
+        <div
+          className="
+            border-b border-gray-100
+            px-6 py-5
+          "
+        >
+          <p
+            className="
+              text-[10px]
+              font-bold uppercase
+              tracking-widest
+              text-red-500
+            "
+          >
+            Remove Amenity
+          </p>
+
+          <h3
+            className="
+              mt-1
+              text-xl
+              font-semibold
+              text-brand-blue
+            "
+          >
+            Remove {amenityToRemove.title}?
+          </h3>
+        </div>
+
+        <div className="px-6 py-5">
+          <p
+            className="
+              text-sm
+              leading-relaxed
+              text-gray-500
+            "
+          >
+            This amenity will be removed from
+            the project when you save your
+            changes. You can still use Reset
+            before saving to restore it.
+          </p>
+        </div>
+
+        <div
+          className="
+            flex justify-end gap-3
+            border-t border-gray-100
+            bg-gray-50
+            px-6 py-4
+          "
+        >
+          <button
+            type="button"
+            onClick={
+              handleCancelRemoveAmenity
+            }
+            className="
+              rounded-lg
+              px-4 py-2.5
+              text-xs font-bold
+              text-gray-500
+              hover:bg-gray-100
+            "
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={
+              handleConfirmRemoveAmenity
+            }
+            className="
+              inline-flex
+              items-center
+              justify-center
+              gap-2
+              rounded-lg
+              bg-red-600
+              px-4 py-2.5
+              text-xs font-bold
+              text-white
+              hover:bg-red-700
+            "
+          >
+            <Trash2 size={14} />
+            Remove Amenity
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+
+  const selectedLayoutIndex =
+    typeof selectedEditorRegion === 'string' &&
+    selectedEditorRegion.startsWith('unit-layout:')
+      ? Number(
+          selectedEditorRegion.split(':')[1]
+        )
+      : null;
+
+  const selectedLayout =
+    selectedLayoutIndex !== null &&
+    Number.isInteger(selectedLayoutIndex)
+      ? formData.unit_layouts?.[
+          selectedLayoutIndex
+        ]
+      : null;
+
+  const normalizeTowerName = (
+    value?: string | null
+  ) =>
+    String(value || '')
+      .trim()
+      .toLowerCase();
+
+  const numericOrder = (
+    value: unknown
+  ) => {
+    const parsed = Number(value);
+
+    return Number.isFinite(parsed) &&
+      parsed > 0
+      ? parsed
+      : Number.MAX_SAFE_INTEGER;
+  };
+
+  const getOrderedLayoutIndicesForTower = (
+    towerName: string
+  ) =>
+    (formData.unit_layouts || [])
+      .map((layout, index) => ({
+        layout,
+        index,
+      }))
+      .filter(
+        ({ layout }) =>
+          normalizeTowerName(
+            layout.tower_name
+          ) ===
+          normalizeTowerName(
+            towerName
+          )
+      )
+      .sort((a, b) => {
+        const orderDiff =
+          numericOrder(
+            a.layout.sort_order
+          ) -
+          numericOrder(
+            b.layout.sort_order
+          );
+
+        if (orderDiff !== 0) {
+          return orderDiff;
+        }
+
+        return a.index - b.index;
+      })
+      .map(({ index }) => index);
+
+  const getOrderedPlacementIndices = (
+    type:
+      | 'map-card'
+      | 'projects-page'
+  ) => {
+    const enabledField =
+      type === 'map-card'
+        ? 'show_on_map_card'
+        : 'show_on_project_page';
+
+    const orderField =
+      type === 'map-card'
+        ? 'map_card_order'
+        : 'project_page_order';
+
+    return (formData.unit_layouts || [])
+      .map((layout, index) => ({
+        layout,
+        index,
+      }))
+      .filter(
+        ({ layout }) =>
+          Boolean(
+            layout[
+              enabledField
+            ]
+          )
+      )
+      .sort((a, b) => {
+        const orderDiff =
+          numericOrder(
+            a.layout[orderField]
+          ) -
+          numericOrder(
+            b.layout[orderField]
+          );
+
+        if (orderDiff !== 0) {
+          return orderDiff;
+        }
+
+        return a.index - b.index;
+      })
+      .map(({ index }) => index);
+  };
+
+  const handleAddLayout = () => {
+    if (
+      availableTowerOptions.length ===
+      0
+    ) {
+      setLayoutEditorError(
+        'Add a project tower in Page Settings before creating a unit layout.'
+      );
+      setSelectedEditorRegion(
+        'unit-layouts'
+      );
+      return;
+    }
+
+    const defaultTower =
+      availableTowerOptions[0];
+
+    const existingCount =
+      getOrderedLayoutIndicesForTower(
+        defaultTower
+      ).length;
+
+    const newIndex =
+      layoutFields.length;
+
+    appendLayout({
+      id: null,
+      title: '',
+      tower_name:
+        defaultTower,
+      bg_color: '#051431',
+      description: '',
+      min_sqm: '',
+      max_sqm: '',
+      thumbnail: '',
+      show_on_map_card: false,
+      map_card_order: '',
+      show_on_project_page: false,
+      project_page_order: '',
+      sort_order:
+        existingCount + 1,
+    });
+
+    setLayoutEditorError('');
+
+    setSelectedEditorRegion(
+      `unit-layout:${newIndex}`
+    );
+  };
+
+  const handleRequestRemoveLayout = (
+    index: number
+  ) => {
+    const layout =
+      formData.unit_layouts?.[
+        index
+      ];
+
+    if (!layout) return;
+
+    setLayoutToRemove({
+      index,
+      title:
+        layout.title?.trim() ||
+        `Unit Layout ${index + 1}`,
+    });
+  };
+
+  const handleCancelRemoveLayout =
+    () => {
+      setLayoutToRemove(null);
+    };
+
+  const handleConfirmRemoveLayout =
+    () => {
+      if (!layoutToRemove) {
+        return;
+      }
+
+      removeNestedFieldFiles(
+        'unit_layouts',
+        layoutToRemove.index
+      );
+
+      removeLayout(
+        layoutToRemove.index
+      );
+
+      setLayoutToRemove(null);
+      setSelectedEditorRegion(
+        'unit-layouts'
+      );
+    };
+
+  const handleTowerDrop = (
+    targetIndex: number
+  ) => {
+    if (
+      dragState?.type !== 'tower'
+    ) {
+      return;
+    }
+
+    const sourceIndex =
+      dragState.index;
+
+    if (
+      sourceIndex !== targetIndex
+    ) {
+      moveTower(
+        sourceIndex,
+        targetIndex
+      );
+    }
+
+    setDragState(null);
+  };
+
+  const handleTowerLayoutDrop = (
+    targetIndex: number
+  ) => {
+    if (
+      dragState?.type !==
+      'tower-layout'
+    ) {
+      return;
+    }
+
+    const sourceIndex =
+      dragState.index;
+
+    const source =
+      formData.unit_layouts?.[
+        sourceIndex
+      ];
+
+    const target =
+      formData.unit_layouts?.[
+        targetIndex
+      ];
+
+    if (
+      !source ||
+      !target ||
+      normalizeTowerName(
+        source.tower_name
+      ) !==
+        normalizeTowerName(
+          target.tower_name
+        )
+    ) {
+      setDragState(null);
+      return;
+    }
+
+    const ordered =
+      getOrderedLayoutIndicesForTower(
+        source.tower_name
+      );
+
+    const fromPosition =
+      ordered.indexOf(
+        sourceIndex
+      );
+
+    const toPosition =
+      ordered.indexOf(
+        targetIndex
+      );
+
+    if (
+      fromPosition === -1 ||
+      toPosition === -1
+    ) {
+      setDragState(null);
+      return;
+    }
+
+    const next = [
+      ...ordered,
+    ];
+
+    const [moved] =
+      next.splice(
+        fromPosition,
+        1
+      );
+
+    next.splice(
+      toPosition,
+      0,
+      moved
+    );
+
+    next.forEach(
+      (
+        layoutIndex,
+        position
+      ) => {
+        setValue(
+          `unit_layouts.${layoutIndex}.sort_order`,
+          position + 1,
+          {
+            shouldDirty: true,
+          }
+        );
+      }
+    );
+
+    setDragState(null);
+  };
+
+  const handlePlacementDrop = (
+    type:
+      | 'map-card'
+      | 'projects-page',
+    targetIndex: number
+  ) => {
+    if (
+      dragState?.type !== type
+    ) {
+      return;
+    }
+
+    const sourceIndex =
+      dragState.index;
+
+    const ordered =
+      getOrderedPlacementIndices(
+        type
+      );
+
+    const fromPosition =
+      ordered.indexOf(
+        sourceIndex
+      );
+
+    const toPosition =
+      ordered.indexOf(
+        targetIndex
+      );
+
+    if (
+      fromPosition === -1 ||
+      toPosition === -1
+    ) {
+      setDragState(null);
+      return;
+    }
+
+    const next = [
+      ...ordered,
+    ];
+
+    const [moved] =
+      next.splice(
+        fromPosition,
+        1
+      );
+
+    next.splice(
+      toPosition,
+      0,
+      moved
+    );
+
+    const orderField =
+      type === 'map-card'
+        ? 'map_card_order'
+        : 'project_page_order';
+
+    next.forEach(
+      (
+        layoutIndex,
+        position
+      ) => {
+        setValue(
+          `unit_layouts.${layoutIndex}.${orderField}` as any,
+          String(position + 1),
+          {
+            shouldDirty: true,
+          }
+        );
+      }
+    );
+
+    setDragState(null);
+  };
+
+  const handleLayoutTowerChange = (
+    index: number,
+    nextTower: string
+  ) => {
+    const currentLayout =
+      formData.unit_layouts?.[
+        index
+      ];
+
+    if (!currentLayout) {
+      return;
+    }
+
+    const nextOrder =
+      getOrderedLayoutIndicesForTower(
+        nextTower
+      ).filter(
+        (layoutIndex) =>
+          layoutIndex !== index
+      ).length + 1;
+
+    setValue(
+      `unit_layouts.${index}.tower_name`,
+      nextTower,
+      {
+        shouldDirty: true,
+        shouldValidate: true,
+      }
+    );
+
+    setValue(
+      `unit_layouts.${index}.sort_order`,
+      nextOrder,
+      {
+        shouldDirty: true,
+      }
+    );
+  };
+
+  const handleLayoutPlacementToggle = (
+    index: number,
+    type:
+      | 'map-card'
+      | 'projects-page'
+  ) => {
+    const layout =
+      formData.unit_layouts?.[
+        index
+      ];
+
+    if (!layout) return;
+
+    const enabledField =
+      type === 'map-card'
+        ? 'show_on_map_card'
+        : 'show_on_project_page';
+
+    const orderField =
+      type === 'map-card'
+        ? 'map_card_order'
+        : 'project_page_order';
+
+    const isEnabled =
+      Boolean(
+        layout[
+          enabledField
+        ]
+      );
+
+    setValue(
+      `unit_layouts.${index}.${enabledField}` as any,
+      !isEnabled,
+      {
+        shouldDirty: true,
+        shouldValidate: true,
+      }
+    );
+
+    if (isEnabled) {
+      setValue(
+        `unit_layouts.${index}.${orderField}` as any,
+        '',
+        {
+          shouldDirty: true,
+        }
+      );
+
+      return;
+    }
+
+    const nextOrder =
+      getOrderedPlacementIndices(
+        type
+      ).length + 1;
+
+    setValue(
+      `unit_layouts.${index}.${orderField}` as any,
+      String(nextOrder),
+      {
+        shouldDirty: true,
+      }
+    );
+  };
+
+  const layoutRemoveModal =
+    layoutToRemove ? (
+      <div
+        className="
+          fixed inset-0 z-[260]
+          flex items-center justify-center
+          bg-brand-blue/55
+          backdrop-blur-sm
+          p-4
+        "
+        onMouseDown={
+          handleCancelRemoveLayout
+        }
+      >
+        <div
+          className="
+            w-full max-w-md
+            overflow-hidden
+            rounded-2xl
+            bg-white
+            shadow-2xl
+          "
+          onMouseDown={(e) =>
+            e.stopPropagation()
+          }
+        >
+          <div
+            className="
+              border-b border-gray-100
+              px-6 py-5
+            "
+          >
+            <p
+              className="
+                text-[10px]
+                font-bold uppercase
+                tracking-widest
+                text-red-500
+              "
+            >
+              Remove Unit Layout
+            </p>
+
+            <h3
+              className="
+                mt-1
+                text-xl
+                font-semibold
+                text-brand-blue
+              "
+            >
+              Remove {layoutToRemove.title}?
+            </h3>
+          </div>
+
+          <div className="px-6 py-5">
+            <p
+              className="
+                text-sm
+                leading-relaxed
+                text-gray-500
+              "
+            >
+              This unit layout will be removed
+              when you save your changes. Reset
+              will restore it until then.
+            </p>
+          </div>
+
+          <div
+            className="
+              flex justify-end gap-3
+              border-t border-gray-100
+              bg-gray-50
+              px-6 py-4
+            "
+          >
+            <button
+              type="button"
+              onClick={
+                handleCancelRemoveLayout
+              }
+              className="
+                rounded-lg
+                px-4 py-2.5
+                text-xs font-bold
+                text-gray-500
+                hover:bg-gray-100
+              "
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={
+                handleConfirmRemoveLayout
+              }
+              className="
+                inline-flex
+                items-center
+                justify-center
+                gap-2
+                rounded-lg
+                bg-red-600
+                px-4 py-2.5
+                text-xs font-bold
+                text-white
+                hover:bg-red-700
+              "
+            >
+              <Trash2 size={14} />
+              Remove Layout
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null;
 
   const labelStyles = "text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1 mt-4";
   const inputStyles = "w-full border border-gray-200 rounded-lg p-3 text-sm focus:border-brand-gold outline-none transition-colors bg-gray-50 focus:bg-white";
@@ -1375,6 +3160,8 @@ if (
         font-sans
       "
     >
+      {amenityRemoveModal}
+      {layoutRemoveModal}
 
       {/* SUCCESS TOAST */}
       {successMsg && (
@@ -1558,10 +3345,8 @@ if (
             Page Settings
           </button>
 
-
           {/* DIVIDER */}
           <div className="hidden lg:block h-6 w-px bg-gray-200 mx-1" />
-
 
           {/* CHANGE STATUS */}
           {isDirty && (
@@ -1580,8 +3365,7 @@ if (
               Unsaved changes
             </span>
           )}
-
-
+          
           {/* RESET */}
           <button
             type="button"
@@ -1605,7 +3389,6 @@ if (
           >
             Reset
           </button>
-
 
           {/* SAVE */}
           <button
@@ -1685,6 +3468,12 @@ if (
             onSelectRegion={
               setSelectedEditorRegion
             }
+            onAddAmenity={
+              handleAddAmenity
+            }
+            onAddLayout={
+              handleAddLayout
+            }
           />
         </div>
 
@@ -1745,6 +3534,22 @@ if (
               ? 'Tags & Stats'
               : selectedEditorRegion === 'editorial'
               ? 'Editorial Section'
+              : selectedEditorRegion ===
+                'amenities'
+              ? 'Amenities Section'
+              : selectedEditorRegion?.startsWith(
+                  'amenity:'
+                )
+              ? selectedAmenity?.title ||
+                'Amenity'
+              : selectedEditorRegion ===
+                'unit-layouts'
+              ? 'Unit Layouts'
+              : selectedEditorRegion?.startsWith(
+                  'unit-layout:'
+                )
+              ? selectedLayout?.title ||
+                'Unit Layout'
               : selectedEditorRegion === 'page-settings'
               ? 'Page Settings'
               : 'Select Content'}
@@ -2183,220 +3988,1473 @@ if (
             )}
 
             {/* EDITORIAL */}
-{selectedEditorRegion ===
-  'editorial' && (
-  <div className="space-y-6">
+            {selectedEditorRegion ===
+              'editorial' && (
+              <div className="space-y-6">
 
-    {/* IMAGE */}
-    <div>
-      <ImageDropzone
-        fieldPath="editorial_img"
-        label="Editorial Image"
-        height="h-52"
-        watch={watch}
-        setValue={setValue}
-        errors={errors}
-        setPendingFiles={
-          setPendingFiles
-        }
-        setPreviews={
-          setPreviews
-        }
-        previews={previews}
-      />
+                {/* IMAGE */}
+                <div>
+                  <ImageDropzone
+                    fieldPath="editorial_img"
+                    label="Editorial Image"
+                    height="h-52"
+                    watch={watch}
+                    setValue={setValue}
+                    errors={errors}
+                    setPendingFiles={
+                      setPendingFiles
+                    }
+                    setPreviews={
+                      setPreviews
+                    }
+                    previews={previews}
+                  />
 
-      <p
-        className="
-          mt-2
-          text-[10px]
-          leading-relaxed
-          text-gray-400
-        "
-      >
-        This image appears beside the
-        editorial headline and description.
-      </p>
-    </div>
-
-
-    <div
-      className="
-        border-t
-        border-gray-100
-        pt-6
-      "
-    >
-      {/* HEADLINE */}
-      <label
-        className="
-          block
-          text-[10px]
-          font-bold
-          uppercase
-          tracking-widest
-          text-gray-500
-          mb-2
-        "
-      >
-        Headline
-      </label>
-
-      <textarea
-        {...register(
-          'editorial_title'
-        )}
-        rows={3}
-        placeholder="Editorial headline"
-        className="
-          w-full
-          resize-none
-          rounded-xl
-          border
-          border-gray-200
-          px-4 py-3
-          text-sm
-          text-brand-blue
-          outline-none
-          transition-all
-          focus:border-brand-gold
-          focus:ring-2
-          focus:ring-brand-gold/10
-        "
-      />
-
-      {errors.editorial_title && (
-        <p
-          className="
-            mt-1.5
-            text-xs
-            text-red-500
-          "
-        >
-          {
-            errors.editorial_title
-              .message
-          }
-        </p>
-      )}
-    </div>
+                  <p
+                    className="
+                      mt-2
+                      text-[10px]
+                      leading-relaxed
+                      text-gray-400
+                    "
+                  >
+                    This image appears beside the
+                    editorial headline and description.
+                  </p>
+                </div>
 
 
-    {/* DESCRIPTION */}
-    <div>
-      <label
-        className="
-          block
-          text-[10px]
-          font-bold
-          uppercase
-          tracking-widest
-          text-gray-500
-          mb-2
-        "
-      >
-        Description
-      </label>
+                <div
+                  className="
+                    border-t
+                    border-gray-100
+                    pt-6
+                  "
+                >
+                  {/* HEADLINE */}
+                  <label
+                    className="
+                      block
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      tracking-widest
+                      text-gray-500
+                      mb-2
+                    "
+                  >
+                    Headline
+                  </label>
 
-      <textarea
-        {...register(
-          'editorial_long'
-        )}
-        rows={8}
-        placeholder="Project description"
-        className="
-          w-full
-          resize-y
-          rounded-xl
-          border
-          border-gray-200
-          px-4 py-3
-          text-sm
-          leading-relaxed
-          text-brand-blue
-          outline-none
-          transition-all
-          focus:border-brand-gold
-          focus:ring-2
-          focus:ring-brand-gold/10
-        "
-      />
-    </div>
+                  <textarea
+                    {...register(
+                      'editorial_title'
+                    )}
+                    rows={3}
+                    placeholder="Editorial headline"
+                    className="
+                      w-full
+                      resize-none
+                      rounded-xl
+                      border
+                      border-gray-200
+                      px-4 py-3
+                      text-sm
+                      text-brand-blue
+                      outline-none
+                      transition-all
+                      focus:border-brand-gold
+                      focus:ring-2
+                      focus:ring-brand-gold/10
+                    "
+                  />
 
-
-    {/* COLORS */}
-    <div
-      className="
-        border-t
-        border-gray-100
-        pt-6
-      "
-    >
-      <div className="mb-4">
-        <p
-          className="
-            text-xs
-            font-bold
-            text-brand-blue
-          "
-        >
-          Appearance
-        </p>
-
-        <p
-          className="
-            mt-1
-            text-[10px]
-            leading-relaxed
-            text-gray-400
-          "
-        >
-          Adjust the colors used by this
-          editorial section.
-        </p>
-      </div>
+                  {errors.editorial_title && (
+                    <p
+                      className="
+                        mt-1.5
+                        text-xs
+                        text-red-500
+                      "
+                    >
+                      {
+                        errors.editorial_title
+                          .message
+                      }
+                    </p>
+                  )}
+                </div>
 
 
-      <div
-        className="
-          grid
-          grid-cols-1
-          gap-4
-        "
-      >
-        <ColorInputSync
-          label="Headline Color"
-          fieldName="editorial_title_color"
-          register={register}
-          watch={watch}
-          setValue={setValue}
-          inputStyles={inputStyles}
-          labelStyles={labelStyles}
-        />
+                {/* DESCRIPTION */}
+                <div>
+                  <label
+                    className="
+                      block
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      tracking-widest
+                      text-gray-500
+                      mb-2
+                    "
+                  >
+                    Description
+                  </label>
 
-        <ColorInputSync
-          label="Text Color"
-          fieldName="editorial_desc_color"
-          register={register}
-          watch={watch}
-          setValue={setValue}
-          inputStyles={inputStyles}
-          labelStyles={labelStyles}
-        />
+                  <textarea
+                    {...register(
+                      'editorial_long'
+                    )}
+                    rows={8}
+                    placeholder="Project description"
+                    className="
+                      w-full
+                      resize-y
+                      rounded-xl
+                      border
+                      border-gray-200
+                      px-4 py-3
+                      text-sm
+                      leading-relaxed
+                      text-brand-blue
+                      outline-none
+                      transition-all
+                      focus:border-brand-gold
+                      focus:ring-2
+                      focus:ring-brand-gold/10
+                    "
+                  />
+                </div>
 
-        <ColorInputSync
-          label="Background Color"
-          fieldName="editorial_bg_color"
-          register={register}
-          watch={watch}
-          setValue={setValue}
-          inputStyles={inputStyles}
-          labelStyles={labelStyles}
-        />
-      </div>
-    </div>
 
-  </div>
-)}
+                {/* COLORS */}
+                <div
+                  className="
+                    border-t
+                    border-gray-100
+                    pt-6
+                  "
+                >
+                  <div className="mb-4">
+                    <p
+                      className="
+                        text-xs
+                        font-bold
+                        text-brand-blue
+                      "
+                    >
+                      Appearance
+                    </p>
+
+                    <p
+                      className="
+                        mt-1
+                        text-[10px]
+                        leading-relaxed
+                        text-gray-400
+                      "
+                    >
+                      Adjust the colors used by this
+                      editorial section.
+                    </p>
+                  </div>
+
+
+                  <div
+                    className="
+                      grid
+                      grid-cols-1
+                      gap-4
+                    "
+                  >
+                    <ColorInputSync
+                      label="Headline Color"
+                      fieldName="editorial_title_color"
+                      register={register}
+                      watch={watch}
+                      setValue={setValue}
+                      inputStyles={inputStyles}
+                      labelStyles={labelStyles}
+                    />
+
+                    <ColorInputSync
+                      label="Text Color"
+                      fieldName="editorial_desc_color"
+                      register={register}
+                      watch={watch}
+                      setValue={setValue}
+                      inputStyles={inputStyles}
+                      labelStyles={labelStyles}
+                    />
+
+                    <ColorInputSync
+                      label="Background Color"
+                      fieldName="editorial_bg_color"
+                      register={register}
+                      watch={watch}
+                      setValue={setValue}
+                      inputStyles={inputStyles}
+                      labelStyles={labelStyles}
+                    />
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* AMENITIES SECTION */}
+            {selectedEditorRegion ===
+              'amenities' && (
+              <div className="space-y-6">
+
+                <div>
+                  <p
+                    className="
+                      text-xs
+                      font-bold
+                      text-brand-blue
+                    "
+                  >
+                    Section Headline
+                  </p>
+
+                  <p
+                    className="
+                      mt-1
+                      text-[10px]
+                      leading-relaxed
+                      text-gray-400
+                    "
+                  >
+                    Edit the heading displayed
+                    above the amenities carousel.
+                  </p>
+                </div>
+
+
+                {/* WHITE HEADLINE */}
+                <div>
+                  <label
+                    className="
+                      block
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      tracking-widest
+                      text-gray-500
+                      mb-2
+                    "
+                  >
+                    Headline
+                  </label>
+
+                  <input
+                    {...register(
+                      'amenities_title'
+                    )}
+                    placeholder="Experience A Fresh"
+                    className="
+                      w-full
+                      rounded-xl
+                      border
+                      border-gray-200
+                      bg-white
+                      px-4 py-3
+                      text-sm
+                      text-brand-blue
+                      outline-none
+                      transition-all
+                      focus:border-brand-gold
+                      focus:ring-2
+                      focus:ring-brand-gold/10
+                    "
+                  />
+                </div>
+
+
+                {/* GOLD HEADLINE */}
+                <div>
+                  <label
+                    className="
+                      block
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      tracking-widest
+                      text-gray-500
+                      mb-2
+                    "
+                  >
+                    Highlighted Headline
+                  </label>
+
+                  <input
+                    {...register(
+                      'amenities_title_gold'
+                    )}
+                    placeholder="Way Of Living in City Clou."
+                    className="
+                      w-full
+                      rounded-xl
+                      border
+                      border-gray-200
+                      bg-white
+                      px-4 py-3
+                      text-sm
+                      text-brand-blue
+                      outline-none
+                      transition-all
+                      focus:border-brand-gold
+                      focus:ring-2
+                      focus:ring-brand-gold/10
+                    "
+                  />
+
+                  <p
+                    className="
+                      mt-1.5
+                      text-[10px]
+                      text-gray-400
+                    "
+                  >
+                    This portion appears in gold.
+                  </p>
+                </div>
+
+
+                <div
+                  className="
+                    border-t
+                    border-gray-100
+                    pt-6
+                  "
+                >
+                  <button
+                    type="button"
+                    onClick={
+                      handleAddAmenity
+                    }
+                    className="
+                      w-full
+                      inline-flex
+                      items-center
+                      justify-center
+                      gap-2
+                      rounded-xl
+                      bg-brand-blue
+                      px-4 py-3
+                      text-xs
+                      font-bold
+                      text-white
+                      hover:bg-brand-blue/90
+                      transition-colors
+                    "
+                  >
+                    <PlusCircle size={15} />
+                    Add Amenity
+                  </button>
+                </div>
+
+
+                <p
+                  className="
+                    text-[10px]
+                    text-gray-400
+                    leading-relaxed
+                  "
+                >
+                  Click an amenity card in the
+                  preview to edit that specific
+                  amenity.
+                </p>
+
+              </div>
+            )}
+
+            {/* INDIVIDUAL AMENITY */}
+            {selectedAmenityIndex !== null &&
+              selectedAmenity && (
+              <div className="space-y-6">
+
+                {/* NAME */}
+                <div>
+                  <label
+                    className="
+                      block
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      tracking-widest
+                      text-gray-500
+                      mb-2
+                    "
+                  >
+                    Amenity Name
+                  </label>
+
+                  <input
+                    {...register(
+                      `amenities.${selectedAmenityIndex}.title`
+                    )}
+                    className="
+                      w-full
+                      rounded-xl
+                      border border-gray-200
+                      px-4 py-3
+                      text-sm
+                      text-brand-blue
+                      outline-none
+                      focus:border-brand-gold
+                      focus:ring-2
+                      focus:ring-brand-gold/10
+                    "
+                  />
+
+                  {errors?.amenities?.[
+                    selectedAmenityIndex
+                  ]?.title && (
+                    <p
+                      className="
+                        mt-1.5
+                        text-xs
+                        text-red-500
+                      "
+                    >
+                      {
+                        errors.amenities[
+                          selectedAmenityIndex
+                        ]?.title?.message
+                      }
+                    </p>
+                  )}
+                </div>
+
+
+                {/* TOWER */}
+                <div>
+                  <label
+                    className="
+                      block
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      tracking-widest
+                      text-gray-500
+                      mb-2
+                    "
+                  >
+                    Assigned Tower
+                  </label>
+
+                  <select
+                    {...register(
+                      `amenities.${selectedAmenityIndex}.tower`
+                    )}
+                    className="
+                      w-full
+                      rounded-xl
+                      border border-gray-200
+                      bg-white
+                      px-4 py-3
+                      text-sm
+                      text-brand-blue
+                      outline-none
+                      cursor-pointer
+                      focus:border-brand-gold
+                    "
+                  >
+                    <option value="">
+                      All Towers / Shared
+                    </option>
+
+                    {selectedAmenity?.tower &&
+                      !isValidTowerAssignment(
+                        selectedAmenity.tower
+                      ) && (
+                        <option
+                          value={selectedAmenity.tower}
+                          disabled
+                        >
+                          {selectedAmenity.tower} — no longer exists
+                        </option>
+                      )}
+
+                    {availableTowerOptions.map(
+                      (option) => (
+                        <option
+                          key={option}
+                          value={option}
+                        >
+                          {option}
+                        </option>
+                      )
+                    )}
+                  </select>
+
+                  {isValidTowerAssignment(
+                    selectedAmenity?.tower
+                  ) ? (
+                    <p
+                      className="
+                        mt-1.5
+                        text-[10px]
+                        text-gray-400
+                      "
+                    >
+                      Select a tower, or choose All Towers / Shared.
+                    </p>
+                  ) : (
+                    <div
+                      className="
+                        mt-2
+                        rounded-lg
+                        border border-amber-200
+                        bg-amber-50
+                        px-3 py-2
+                      "
+                    >
+                      <p
+                        className="
+                          text-[10px]
+                          font-semibold
+                          leading-relaxed
+                          text-amber-700
+                        "
+                      >
+                        This amenity is assigned to a tower that no
+                        longer exists. Choose a valid tower or
+                        All Towers / Shared before saving.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+
+                {/* DESCRIPTION */}
+                <div>
+                  <label
+                    className="
+                      block
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      tracking-widest
+                      text-gray-500
+                      mb-2
+                    "
+                  >
+                    Description
+                  </label>
+
+                  <textarea
+                    {...register(
+                      `amenities.${selectedAmenityIndex}.description`
+                    )}
+                    rows={5}
+                    className="
+                      w-full
+                      resize-y
+                      rounded-xl
+                      border border-gray-200
+                      px-4 py-3
+                      text-sm
+                      leading-relaxed
+                      text-brand-blue
+                      outline-none
+                      focus:border-brand-gold
+                      focus:ring-2
+                      focus:ring-brand-gold/10
+                    "
+                  />
+                </div>
+
+
+                {/* IMAGE */}
+                <ImageDropzone
+                  fieldPath={`amenities.${selectedAmenityIndex}.thumbnail`}
+                  label="Amenity Image"
+                  height="h-52"
+                  watch={watch}
+                  setValue={setValue}
+                  errors={errors}
+                  setPendingFiles={
+                    setPendingFiles
+                  }
+                  setPreviews={
+                    setPreviews
+                  }
+                  previews={previews}
+                />
+
+
+                {/* DELETE */}
+                <div
+                  className="
+                    border-t
+                    border-gray-100
+                    pt-6
+                  "
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleRequestRemoveAmenity(
+                        selectedAmenityIndex
+                      )
+                    }
+                    className="
+                      w-full
+                      inline-flex
+                      items-center
+                      justify-center
+                      gap-2
+                      rounded-xl
+                      border
+                      border-red-200
+                      bg-red-50
+                      px-4 py-3
+                      text-xs
+                      font-bold
+                      text-red-600
+                      hover:bg-red-100
+                      transition-colors
+                    "
+                  >
+                    <Trash2 size={15} />
+                    Remove Amenity
+                  </button>
+                </div>
+
+              </div>
+            )}
+
+
+            {/* UNIT LAYOUTS SECTION */}
+            {selectedEditorRegion ===
+              'unit-layouts' && (
+              <div className="space-y-6">
+
+                <div>
+                  <p className="text-xs font-bold text-brand-blue">
+                    Blueprint display order
+                  </p>
+
+                  <p className="mt-1 text-[10px] leading-relaxed text-gray-400">
+                    Drag towers to choose which tower appears first, then drag
+                    layouts inside each tower to control their sequence.
+                  </p>
+                </div>
+
+                {layoutEditorError && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                    <p className="text-[10px] font-semibold leading-relaxed text-amber-700">
+                      {layoutEditorError}
+                    </p>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleAddLayout}
+                  disabled={availableTowerOptions.length === 0}
+                  className="
+                    w-full
+                    inline-flex
+                    items-center
+                    justify-center
+                    gap-2
+                    rounded-xl
+                    bg-brand-blue
+                    px-4 py-3
+                    text-xs
+                    font-bold
+                    text-white
+                    hover:bg-brand-blue/90
+                    disabled:cursor-not-allowed
+                    disabled:opacity-40
+                    transition-colors
+                  "
+                >
+                  <PlusCircle size={15} />
+                  Add Unit Layout
+                </button>
+
+                {/* TOWER ORDER */}
+                <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+                  <div className="border-b border-gray-100 px-4 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
+                      Tower Display Order
+                    </p>
+                    <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
+                      Drag a tower by its handle. This same order is used by the
+                      blueprint section and tower filters.
+                    </p>
+                  </div>
+
+                  <div className="p-3 space-y-2">
+                    {(formData.towers || []).length === 0 ? (
+                      <p className="rounded-lg bg-gray-50 px-3 py-4 text-center text-[10px] text-gray-400">
+                        Add a tower from Page Settings first.
+                      </p>
+                    ) : (
+                      (formData.towers || []).map(
+                        (tower, index) => (
+                          <div
+                            key={
+                              towerFields[index]?.fieldKey ||
+                              tower.id ||
+                              `${tower.name}-${index}`
+                            }
+                            draggable
+                            onDragStart={() =>
+                              setDragState({
+                                type: 'tower',
+                                index,
+                              })
+                            }
+                            onDragEnd={() =>
+                              setDragState(null)
+                            }
+                            onDragOver={(e) =>
+                              e.preventDefault()
+                            }
+                            onDrop={() =>
+                              handleTowerDrop(index)
+                            }
+                            className={`
+                              flex items-center gap-3
+                              rounded-xl
+                              border
+                              px-3 py-3
+                              transition-all
+                              ${
+                                dragState?.type === 'tower' &&
+                                dragState.index === index
+                                  ? 'border-brand-gold bg-brand-gold/10 opacity-70'
+                                  : 'border-gray-200 bg-gray-50 hover:border-brand-gold/50'
+                              }
+                            `}
+                          >
+                            <GripVertical
+                              size={16}
+                              className="shrink-0 cursor-grab text-gray-400 active:cursor-grabbing"
+                            />
+
+                            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-brand-blue">
+                              {tower.name}
+                            </span>
+                          </div>
+                        )
+                      )
+                    )}
+                  </div>
+                </div>
+
+                {/* LAYOUT ORDER BY TOWER */}
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
+                      Layout Sequence
+                    </p>
+                    <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
+                      Layouts can be reordered within their assigned tower.
+                      Change the Assigned Tower inside a layout to move it to
+                      another tower.
+                    </p>
+                  </div>
+
+                  {availableTowerOptions.map(
+                    (towerName) => {
+                      const orderedIndices =
+                        getOrderedLayoutIndicesForTower(
+                          towerName
+                        );
+
+                      return (
+                        <div
+                          key={towerName}
+                          className="rounded-xl border border-gray-200 bg-white overflow-hidden"
+                        >
+                          <div className="flex items-center justify-between gap-3 border-b border-gray-100 bg-gray-50/70 px-4 py-3">
+                            <span className="truncate text-xs font-bold text-brand-blue">
+                              {towerName}
+                            </span>
+
+                            <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[9px] font-bold text-gray-400 border border-gray-200">
+                              {orderedIndices.length}{' '}
+                              {orderedIndices.length === 1
+                                ? 'layout'
+                                : 'layouts'}
+                            </span>
+                          </div>
+
+                          <div className="p-3 space-y-2">
+                            {orderedIndices.length === 0 ? (
+                              <p className="px-2 py-3 text-center text-[10px] text-gray-400">
+                                No layouts assigned to this tower.
+                              </p>
+                            ) : (
+                              orderedIndices.map(
+                                (layoutIndex) => {
+                                  const layout =
+                                    formData.unit_layouts?.[
+                                      layoutIndex
+                                    ];
+
+                                  if (!layout) {
+                                    return null;
+                                  }
+
+                                  return (
+                                    <div
+                                      key={
+                                        layoutFields[
+                                          layoutIndex
+                                        ]?.fieldKey ||
+                                        layout.id ||
+                                        layoutIndex
+                                      }
+                                      draggable
+                                      onDragStart={() =>
+                                        setDragState({
+                                          type:
+                                            'tower-layout',
+                                          index:
+                                            layoutIndex,
+                                        })
+                                      }
+                                      onDragEnd={() =>
+                                        setDragState(
+                                          null
+                                        )
+                                      }
+                                      onDragOver={(e) =>
+                                        e.preventDefault()
+                                      }
+                                      onDrop={() =>
+                                        handleTowerLayoutDrop(
+                                          layoutIndex
+                                        )
+                                      }
+                                      className={`
+                                        flex items-center gap-3
+                                        rounded-xl border
+                                        px-3 py-3
+                                        transition-all
+                                        ${
+                                          dragState?.type ===
+                                            'tower-layout' &&
+                                          dragState.index ===
+                                            layoutIndex
+                                            ? 'border-brand-gold bg-brand-gold/10 opacity-70'
+                                            : 'border-gray-200 bg-gray-50 hover:border-brand-gold/50'
+                                        }
+                                      `}
+                                    >
+                                      <GripVertical
+                                        size={16}
+                                        className="shrink-0 cursor-grab text-gray-400 active:cursor-grabbing"
+                                      />
+
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setSelectedEditorRegion(
+                                            `unit-layout:${layoutIndex}`
+                                          )
+                                        }
+                                        className="min-w-0 flex-1 text-left"
+                                      >
+                                        <span className="block truncate text-xs font-bold text-brand-blue">
+                                          {layout.title ||
+                                            `Untitled Layout`}
+                                        </span>
+
+                                        <span className="mt-0.5 block truncate text-[9px] text-gray-400">
+                                          {layout.min_sqm ||
+                                            '—'}
+                                          {layout.max_sqm &&
+                                          layout.max_sqm !==
+                                            layout.min_sqm
+                                            ? `–${layout.max_sqm}`
+                                            : ''}{' '}
+                                          SQM
+                                        </span>
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setSelectedEditorRegion(
+                                            `unit-layout:${layoutIndex}`
+                                          )
+                                        }
+                                        className="shrink-0 text-[9px] font-bold uppercase tracking-wider text-gray-400 hover:text-brand-blue"
+                                      >
+                                        Edit
+                                      </button>
+                                    </div>
+                                  );
+                                }
+                              )
+                            )}
+                          </div>
+                        </div>
+                      );
+                    }
+                  )}
+                </div>
+
+                {/* ADVANCED PLACEMENT ORDER */}
+                <details className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+                  <summary className="cursor-pointer select-none px-4 py-4 text-[10px] font-bold uppercase tracking-widest text-brand-blue">
+                    Other Display Placement Order
+                  </summary>
+
+                  <div className="space-y-5 border-t border-gray-100 p-4">
+                    <div>
+                      <p className="text-[10px] font-bold text-brand-blue">
+                        Map Card
+                      </p>
+                      <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
+                        Drag layouts that are enabled for the project map card.
+                      </p>
+
+                      <div className="mt-3 space-y-2">
+                        {getOrderedPlacementIndices(
+                          'map-card'
+                        ).length === 0 ? (
+                          <p className="rounded-lg bg-gray-50 px-3 py-3 text-[10px] text-gray-400">
+                            No layouts are currently shown on the map card.
+                          </p>
+                        ) : (
+                          getOrderedPlacementIndices(
+                            'map-card'
+                          ).map(
+                            (layoutIndex) => {
+                              const layout =
+                                formData.unit_layouts?.[
+                                  layoutIndex
+                                ];
+
+                              if (!layout) {
+                                return null;
+                              }
+
+                              return (
+                                <div
+                                  key={`map-${layout.id || layoutIndex}`}
+                                  draggable
+                                  onDragStart={() =>
+                                    setDragState({
+                                      type:
+                                        'map-card',
+                                      index:
+                                        layoutIndex,
+                                    })
+                                  }
+                                  onDragEnd={() =>
+                                    setDragState(
+                                      null
+                                    )
+                                  }
+                                  onDragOver={(e) =>
+                                    e.preventDefault()
+                                  }
+                                  onDrop={() =>
+                                    handlePlacementDrop(
+                                      'map-card',
+                                      layoutIndex
+                                    )
+                                  }
+                                  className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5"
+                                >
+                                  <GripVertical
+                                    size={14}
+                                    className="cursor-grab text-gray-400"
+                                  />
+                                  <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-brand-blue">
+                                    {layout.title ||
+                                      'Untitled Layout'}
+                                  </span>
+                                </div>
+                              );
+                            }
+                          )
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="border-t border-gray-100 pt-5">
+                      <p className="text-[10px] font-bold text-brand-blue">
+                        Projects Page
+                      </p>
+                      <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
+                        Drag layouts that are enabled for the public projects listing.
+                      </p>
+
+                      <div className="mt-3 space-y-2">
+                        {getOrderedPlacementIndices(
+                          'projects-page'
+                        ).length === 0 ? (
+                          <p className="rounded-lg bg-gray-50 px-3 py-3 text-[10px] text-gray-400">
+                            No layouts are currently shown on the Projects page.
+                          </p>
+                        ) : (
+                          getOrderedPlacementIndices(
+                            'projects-page'
+                          ).map(
+                            (layoutIndex) => {
+                              const layout =
+                                formData.unit_layouts?.[
+                                  layoutIndex
+                                ];
+
+                              if (!layout) {
+                                return null;
+                              }
+
+                              return (
+                                <div
+                                  key={`projects-${layout.id || layoutIndex}`}
+                                  draggable
+                                  onDragStart={() =>
+                                    setDragState({
+                                      type:
+                                        'projects-page',
+                                      index:
+                                        layoutIndex,
+                                    })
+                                  }
+                                  onDragEnd={() =>
+                                    setDragState(
+                                      null
+                                    )
+                                  }
+                                  onDragOver={(e) =>
+                                    e.preventDefault()
+                                  }
+                                  onDrop={() =>
+                                    handlePlacementDrop(
+                                      'projects-page',
+                                      layoutIndex
+                                    )
+                                  }
+                                  className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5"
+                                >
+                                  <GripVertical
+                                    size={14}
+                                    className="cursor-grab text-gray-400"
+                                  />
+                                  <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-brand-blue">
+                                    {layout.title ||
+                                      'Untitled Layout'}
+                                  </span>
+                                </div>
+                              );
+                            }
+                          )
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </details>
+
+                <p className="text-[10px] leading-relaxed text-gray-400">
+                  All ordering changes are staged until Save Changes is pressed.
+                  Reset restores the previously saved sequence.
+                </p>
+              </div>
+            )}
+
+            {/* INDIVIDUAL UNIT LAYOUT */}
+            {selectedLayoutIndex !== null &&
+              selectedLayout && (
+              <div className="space-y-6">
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelectedEditorRegion(
+                      'unit-layouts'
+                    )
+                  }
+                  className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-gray-400 hover:text-brand-blue"
+                >
+                  <ArrowLeft size={13} />
+                  Layout Order
+                </button>
+
+                {/* TOWER */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                    Assigned Tower
+                  </label>
+
+                  <select
+                    value={
+                      selectedLayout.tower_name ||
+                      ''
+                    }
+                    onChange={(e) =>
+                      handleLayoutTowerChange(
+                        selectedLayoutIndex,
+                        e.target.value
+                      )
+                    }
+                    className="
+                      w-full
+                      rounded-xl
+                      border border-gray-200
+                      bg-white
+                      px-4 py-3
+                      text-sm
+                      text-brand-blue
+                      outline-none
+                      cursor-pointer
+                      focus:border-brand-gold
+                    "
+                  >
+                    <option value="" disabled>
+                      Select tower...
+                    </option>
+
+                    {selectedLayout.tower_name &&
+                      !isValidTowerAssignment(
+                        selectedLayout.tower_name
+                      ) && (
+                        <option
+                          value={
+                            selectedLayout.tower_name
+                          }
+                          disabled
+                        >
+                          {
+                            selectedLayout.tower_name
+                          }{' '}
+                          — no longer exists
+                        </option>
+                      )}
+
+                    {availableTowerOptions.map(
+                      (tower) => (
+                        <option
+                          key={tower}
+                          value={tower}
+                        >
+                          {tower}
+                        </option>
+                      )
+                    )}
+                  </select>
+
+                  {!isValidTowerAssignment(
+                    selectedLayout.tower_name
+                  ) && (
+                    <p className="mt-1.5 text-[10px] font-medium leading-relaxed text-amber-600">
+                      Choose a valid tower before saving.
+                    </p>
+                  )}
+                </div>
+
+                {/* TITLE */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                    Layout Title
+                  </label>
+
+                  <input
+                    {...register(
+                      `unit_layouts.${selectedLayoutIndex}.title`
+                    )}
+                    placeholder="e.g. Studio Unit"
+                    className="
+                      w-full rounded-xl
+                      border border-gray-200
+                      px-4 py-3
+                      text-sm text-brand-blue
+                      outline-none
+                      focus:border-brand-gold
+                      focus:ring-2
+                      focus:ring-brand-gold/10
+                    "
+                  />
+
+                  {errors?.unit_layouts?.[
+                    selectedLayoutIndex
+                  ]?.title && (
+                    <p className="mt-1.5 text-xs text-red-500">
+                      {
+                        errors.unit_layouts[
+                          selectedLayoutIndex
+                        ]?.title?.message
+                      }
+                    </p>
+                  )}
+                </div>
+
+                {/* SIZE */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                      Min SQM
+                    </label>
+
+                    <input
+                      {...register(
+                        `unit_layouts.${selectedLayoutIndex}.min_sqm`
+                      )}
+                      inputMode="decimal"
+                      className="
+                        w-full rounded-xl
+                        border border-gray-200
+                        px-4 py-3
+                        text-sm text-brand-blue
+                        outline-none
+                        focus:border-brand-gold
+                      "
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                      Max SQM
+                    </label>
+
+                    <input
+                      {...register(
+                        `unit_layouts.${selectedLayoutIndex}.max_sqm`
+                      )}
+                      inputMode="decimal"
+                      className="
+                        w-full rounded-xl
+                        border border-gray-200
+                        px-4 py-3
+                        text-sm text-brand-blue
+                        outline-none
+                        focus:border-brand-gold
+                      "
+                    />
+                  </div>
+                </div>
+
+                {/* DESCRIPTION */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                    Description
+                  </label>
+
+                  <textarea
+                    {...register(
+                      `unit_layouts.${selectedLayoutIndex}.description`
+                    )}
+                    rows={5}
+                    className="
+                      w-full
+                      resize-y
+                      rounded-xl
+                      border border-gray-200
+                      px-4 py-3
+                      text-sm
+                      leading-relaxed
+                      text-brand-blue
+                      outline-none
+                      focus:border-brand-gold
+                      focus:ring-2
+                      focus:ring-brand-gold/10
+                    "
+                  />
+                </div>
+
+                {/* COLOR */}
+                <ColorInputSync
+                  label="Card Background Color"
+                  fieldName={`unit_layouts.${selectedLayoutIndex}.bg_color`}
+                  register={register}
+                  watch={watch}
+                  setValue={setValue}
+                  inputStyles={inputStyles}
+                  labelStyles={labelStyles}
+                />
+
+                {/* IMAGE */}
+                <ImageDropzone
+                  fieldPath={`unit_layouts.${selectedLayoutIndex}.thumbnail`}
+                  label="Floorplan Image"
+                  height="h-52"
+                  watch={watch}
+                  setValue={setValue}
+                  errors={errors}
+                  setPendingFiles={
+                    setPendingFiles
+                  }
+                  setPreviews={
+                    setPreviews
+                  }
+                  previews={previews}
+                />
+
+                {/* DISPLAY PLACEMENT */}
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
+                    Other Display Placements
+                  </p>
+
+                  <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
+                    Turn placements on or off here. Reorder enabled layouts from
+                    the Unit Layouts inspector—no order numbers required.
+                  </p>
+
+                  <div className="mt-4 space-y-3">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleLayoutPlacementToggle(
+                          selectedLayoutIndex,
+                          'map-card'
+                        )
+                      }
+                      className={`
+                        w-full
+                        flex items-center
+                        justify-between
+                        gap-4
+                        rounded-xl
+                        border
+                        px-4 py-3
+                        text-left
+                        transition-all
+                        ${
+                          selectedLayout.show_on_map_card
+                            ? 'border-brand-gold/50 bg-brand-gold/10'
+                            : 'border-gray-200 bg-white'
+                        }
+                      `}
+                    >
+                      <span>
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-brand-blue">
+                          Show on Map Card
+                        </span>
+                        <span className="mt-0.5 block text-[9px] text-gray-400">
+                          Makes this layout available on the project map popup.
+                        </span>
+                      </span>
+
+                      <span
+                        className={`
+                          relative h-5 w-9 shrink-0 rounded-full transition-colors
+                          ${
+                            selectedLayout.show_on_map_card
+                              ? 'bg-brand-gold'
+                              : 'bg-gray-300'
+                          }
+                        `}
+                      >
+                        <span
+                          className={`
+                            absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform
+                            ${
+                              selectedLayout.show_on_map_card
+                                ? 'translate-x-[18px]'
+                                : 'translate-x-0.5'
+                            }
+                          `}
+                        />
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleLayoutPlacementToggle(
+                          selectedLayoutIndex,
+                          'projects-page'
+                        )
+                      }
+                      className={`
+                        w-full
+                        flex items-center
+                        justify-between
+                        gap-4
+                        rounded-xl
+                        border
+                        px-4 py-3
+                        text-left
+                        transition-all
+                        ${
+                          selectedLayout.show_on_project_page
+                            ? 'border-brand-gold/50 bg-brand-gold/10'
+                            : 'border-gray-200 bg-white'
+                        }
+                      `}
+                    >
+                      <span>
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-brand-blue">
+                          Show on Projects Page
+                        </span>
+                        <span className="mt-0.5 block text-[9px] text-gray-400">
+                          Includes this layout in the public projects listing.
+                        </span>
+                      </span>
+
+                      <span
+                        className={`
+                          relative h-5 w-9 shrink-0 rounded-full transition-colors
+                          ${
+                            selectedLayout.show_on_project_page
+                              ? 'bg-brand-gold'
+                              : 'bg-gray-300'
+                          }
+                        `}
+                      >
+                        <span
+                          className={`
+                            absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform
+                            ${
+                              selectedLayout.show_on_project_page
+                                ? 'translate-x-[18px]'
+                                : 'translate-x-0.5'
+                            }
+                          `}
+                        />
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* DELETE */}
+                <div className="border-t border-gray-100 pt-6">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleRequestRemoveLayout(
+                        selectedLayoutIndex
+                      )
+                    }
+                    className="
+                      w-full
+                      inline-flex
+                      items-center
+                      justify-center
+                      gap-2
+                      rounded-xl
+                      border border-red-200
+                      bg-red-50
+                      px-4 py-3
+                      text-xs
+                      font-bold
+                      text-red-600
+                      hover:bg-red-100
+                      transition-colors
+                    "
+                  >
+                    <Trash2 size={15} />
+                    Remove Unit Layout
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* PAGE SETTINGS */}
             {selectedEditorRegion ===
@@ -2437,7 +5495,845 @@ if (
                   </p>
                 </div>
 
+                {/* PROJECT TOWERS */}
+                <div
+                  className="
+                    rounded-xl
+                    border
+                    border-gray-200
+                    bg-white
+                    overflow-hidden
+                  "
+                >
+                  <div
+                    className="
+                      px-4 py-4
+                      border-b
+                      border-gray-100
+                    "
+                  >
+                    <div
+                      className="
+                        flex
+                        items-start
+                        justify-between
+                        gap-4
+                      "
+                    >
+                      <div>
+                        <p
+                          className="
+                            text-sm
+                            font-bold
+                            text-brand-blue
+                          "
+                        >
+                          Project Towers
+                        </p>
 
+                        <p
+                          className="
+                            mt-1
+                            text-[10px]
+                            leading-relaxed
+                            text-gray-400
+                          "
+                        >
+                          Towers available for amenities
+                          and unit layouts.
+                        </p>
+                      </div>
+
+                      <span
+                        className="
+                          shrink-0
+                          rounded-full
+                          bg-gray-100
+                          px-2.5 py-1
+                          text-[10px]
+                          font-bold
+                          text-gray-500
+                        "
+                      >
+                        {towerFields.length}
+                        {' '}
+                        {towerFields.length === 1
+                          ? 'tower'
+                          : 'towers'}
+                      </span>
+                    </div>
+                  </div>
+
+
+                {/* EXISTING TOWERS */}
+                <div>
+                  {towerFields.length === 0 ? (
+                    <div
+                      className="
+                        px-4 py-6
+                        text-center
+                      "
+                    >
+                      <p
+                        className="
+                          text-xs
+                          font-medium
+                          text-gray-400
+                        "
+                      >
+                        No towers added yet.
+                      </p>
+                    </div>
+                  ) : (
+                    towerFields.map(
+                    (tower, index) => (
+                      <div
+                        key={tower.fieldKey}
+                        className="
+                          flex
+                          items-center
+                          justify-between
+                          gap-3
+                          px-4 py-3
+                          border-b
+                          border-gray-100
+                          last:border-b-0
+                        "
+                      >
+                        {editingTowerIndex === index ? (
+                          <div className="flex flex-1 items-center gap-2 min-w-0">
+                            <input
+                              type="text"
+                              value={editingTowerName}
+                              onChange={(e) => {
+                                setEditingTowerName(e.target.value);
+
+                                if (towerRenameError) {
+                                  setTowerRenameError('');
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleApplyRenameTower();
+                                }
+
+                                if (e.key === 'Escape') {
+                                  e.preventDefault();
+                                  handleCancelRenameTower();
+                                }
+                              }}
+                              autoFocus
+                              className="
+                                min-w-0
+                                flex-1
+                                rounded-lg
+                                border
+                                border-brand-gold
+                                bg-white
+                                px-3 py-2
+                                text-sm
+                                text-brand-blue
+                                outline-none
+                                ring-2
+                                ring-brand-gold/10
+                              "
+                            />
+
+                            <button
+                              type="button"
+                              onClick={handleApplyRenameTower}
+                              className="
+                                rounded-lg
+                                bg-brand-blue
+                                px-3 py-2
+                                text-[10px]
+                                font-bold
+                                text-white
+                              "
+                            >
+                              Apply
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={handleCancelRenameTower}
+                              className="
+                                rounded-lg
+                                px-2 py-2
+                                text-[10px]
+                                font-bold
+                                text-gray-400
+                                hover:text-brand-blue
+                              "
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <div
+                                className="
+                                  flex
+                                  h-8 w-8
+                                  shrink-0
+                                  items-center
+                                  justify-center
+                                  rounded-lg
+                                  bg-brand-blue/5
+                                  text-[10px]
+                                  font-bold
+                                  text-brand-blue
+                                "
+                              >
+                                {index + 1}
+                              </div>
+
+                              <span
+                                className="
+                                  truncate
+                                  text-sm
+                                  font-medium
+                                  text-brand-blue
+                                "
+                              >
+                                {watch(`towers.${index}.name`)}
+                              </span>
+                            </div>
+
+                            <div
+  className="
+    flex
+    items-center
+    gap-3
+    shrink-0
+  "
+>
+  <button
+    type="button"
+    onClick={() =>
+      handleStartRenameTower(
+        index
+      )
+    }
+    className="
+      text-[9px]
+      font-bold
+      uppercase
+      tracking-wider
+      text-gray-400
+      hover:text-brand-blue
+      transition-colors
+    "
+  >
+    Rename
+  </button>
+
+  <button
+    type="button"
+    disabled={
+      isCheckingTowerUsage
+    }
+    onClick={() =>
+      handleRequestDeleteTower(
+        index
+      )
+    }
+    className="
+      text-[9px]
+      font-bold
+      uppercase
+      tracking-wider
+      text-gray-300
+      hover:text-red-500
+      disabled:opacity-40
+      transition-colors
+    "
+  >
+    Delete
+  </button>
+</div>
+                          </>
+                        )}
+                      </div>
+                    )
+                  )
+                  )}
+                </div>
+
+                {towerRenameError && (
+                <div
+                  className="
+                    border-t
+                    border-red-100
+                    bg-red-50
+                    px-4 py-2
+                  "
+                >
+                  <p className="text-[10px] font-medium text-red-500">
+                    {towerRenameError}
+                  </p>
+                </div>
+              )}
+
+  {/* ADD TOWER */}
+  <div
+    className="
+      border-t
+      border-gray-100
+      bg-gray-50/60
+      p-4
+    "
+  >
+    <label
+      className="
+        block
+        text-[10px]
+        font-bold
+        uppercase
+        tracking-widest
+        text-gray-500
+        mb-2
+      "
+    >
+      Add New Tower
+    </label>
+
+    <div
+      className="
+        flex
+        gap-2
+      "
+    >
+      <input
+        type="text"
+        value={newTowerName}
+        onChange={(e) => {
+          setNewTowerName(
+            e.target.value
+          );
+
+          if (towerError) {
+            setTowerError('');
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAddTower();
+          }
+        }}
+        placeholder="e.g. Tower D"
+        className="
+          min-w-0
+          flex-1
+          rounded-xl
+          border
+          border-gray-200
+          bg-white
+          px-3 py-2.5
+          text-sm
+          text-brand-blue
+          outline-none
+          transition-all
+          focus:border-brand-gold
+          focus:ring-2
+          focus:ring-brand-gold/10
+        "
+      />
+
+      <button
+        type="button"
+        onClick={
+          handleAddTower
+        }
+        className="
+          inline-flex
+          shrink-0
+          items-center
+          justify-center
+          gap-1.5
+          rounded-xl
+          bg-brand-blue
+          px-3
+          text-[10px]
+          font-bold
+          text-white
+          transition-colors
+          hover:bg-brand-blue/90
+        "
+      >
+        <PlusCircle size={14} />
+        Add
+      </button>
+    </div>
+
+    {towerError && (
+      <p
+        className="
+          mt-2
+          text-[10px]
+          font-medium
+          text-red-500
+        "
+      >
+        {towerError}
+      </p>
+    )}
+
+    <p
+      className="
+        mt-2
+        text-[10px]
+        leading-relaxed
+        text-gray-400
+      "
+    >
+      New towers become available
+      after you save the project.
+    </p>
+  </div>
+</div>
+{/* DELETE TOWER MODAL */}
+{towerToDelete &&
+  towerUsage && (
+
+  <div
+    className="
+      fixed
+      inset-0
+      z-[200]
+      flex
+      items-center
+      justify-center
+      bg-brand-blue/55
+      backdrop-blur-sm
+      p-4
+    "
+    onMouseDown={
+      handleCloseTowerDelete
+    }
+  >
+
+    <div
+      onMouseDown={(e) =>
+        e.stopPropagation()
+      }
+      className="
+        w-full
+        max-w-md
+        overflow-hidden
+        rounded-2xl
+        bg-white
+        shadow-2xl
+      "
+    >
+
+      {/* HEADER */}
+      <div
+        className="
+          border-b
+          border-gray-100
+          px-6 py-5
+        "
+      >
+        <p
+          className="
+            text-[10px]
+            font-bold
+            uppercase
+            tracking-widest
+            text-red-500
+          "
+        >
+          Delete Tower
+        </p>
+
+        <h3
+          className="
+            mt-1
+            text-xl
+            font-semibold
+            text-brand-blue
+          "
+        >
+          Delete{' '}
+          {towerToDelete.name}?
+        </h3>
+      </div>
+
+
+      <div
+        className="
+          space-y-5
+          px-6 py-5
+        "
+      >
+
+        {/* USAGE SUMMARY */}
+        {towerUsage.amenityCount ===
+          0 &&
+        towerUsage.layoutCount ===
+          0 ? (
+
+          <div
+            className="
+              rounded-xl
+              bg-gray-50
+              p-4
+            "
+          >
+            <p
+              className="
+                text-sm
+                leading-relaxed
+                text-gray-500
+              "
+            >
+              This tower is not
+              currently used by any
+              amenities or unit
+              layouts.
+            </p>
+          </div>
+
+        ) : (
+
+          <div
+            className="
+              rounded-xl
+              border
+              border-amber-200
+              bg-amber-50
+              p-4
+            "
+          >
+            <p
+              className="
+                text-xs
+                font-bold
+                text-amber-800
+              "
+            >
+              This tower is currently
+              in use.
+            </p>
+
+            <div
+              className="
+                mt-3
+                space-y-1
+                text-sm
+                text-amber-700
+              "
+            >
+              <p>
+                {
+                  towerUsage.amenityCount
+                }{' '}
+                {
+                  towerUsage.amenityCount ===
+                  1
+                    ? 'amenity'
+                    : 'amenities'
+                }
+              </p>
+
+              <p>
+                {
+                  towerUsage.layoutCount
+                }{' '}
+                {
+                  towerUsage.layoutCount ===
+                  1
+                    ? 'unit layout'
+                    : 'unit layouts'
+                }
+              </p>
+            </div>
+          </div>
+        )}
+
+
+        {/* AMENITY REASSIGNMENT */}
+        {towerUsage.amenityCount >
+          0 && (
+
+          <div>
+            <label
+              className="
+                mb-2
+                block
+                text-[10px]
+                font-bold
+                uppercase
+                tracking-widest
+                text-gray-500
+              "
+            >
+              Move Amenities To
+            </label>
+
+            <select
+              value={
+                deleteAmenityTarget
+              }
+              onChange={(e) =>
+                setDeleteAmenityTarget(
+                  e.target.value
+                )
+              }
+              className="
+                w-full
+                rounded-xl
+                border
+                border-gray-200
+                bg-white
+                px-4 py-3
+                text-sm
+                text-brand-blue
+                outline-none
+                focus:border-brand-gold
+              "
+            >
+              <option
+                value="__shared__"
+              >
+                All Towers / Shared
+              </option>
+
+              {towerUsage.otherTowers.map(
+                (tower) => (
+                  <option
+                    key={
+                      tower.id
+                    }
+                    value={
+                      tower.name
+                    }
+                  >
+                    {
+                      tower.name
+                    }
+                  </option>
+                )
+              )}
+            </select>
+          </div>
+        )}
+
+
+        {/* UNIT LAYOUT REASSIGNMENT */}
+        {towerUsage.layoutCount >
+          0 && (
+
+          <div>
+            <label
+              className="
+                mb-2
+                block
+                text-[10px]
+                font-bold
+                uppercase
+                tracking-widest
+                text-gray-500
+              "
+            >
+              Move Unit Layouts To
+            </label>
+
+            {towerUsage.otherTowers
+              .length > 0 ? (
+
+              <select
+                value={
+                  deleteLayoutTarget
+                }
+                onChange={(e) =>
+                  setDeleteLayoutTarget(
+                    e.target.value
+                  )
+                }
+                className="
+                  w-full
+                  rounded-xl
+                  border
+                  border-gray-200
+                  bg-white
+                  px-4 py-3
+                  text-sm
+                  text-brand-blue
+                  outline-none
+                  focus:border-brand-gold
+                "
+              >
+                <option value="">
+                  Select replacement tower
+                </option>
+
+                {towerUsage.otherTowers.map(
+                  (tower) => (
+                    <option
+                      key={
+                        tower.id
+                      }
+                      value={
+                        tower.name
+                      }
+                    >
+                      {
+                        tower.name
+                      }
+                    </option>
+                  )
+                )}
+              </select>
+
+            ) : (
+
+              <div
+                className="
+                  rounded-xl
+                  border
+                  border-red-200
+                  bg-red-50
+                  p-3
+                "
+              >
+                <p
+                  className="
+                    text-xs
+                    leading-relaxed
+                    text-red-600
+                  "
+                >
+                  This is the only
+                  project tower.
+                  Add another tower
+                  before deleting it
+                  because unit layouts
+                  require a tower.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+
+        {towerDeleteError && (
+          <p
+            className="
+              text-xs
+              font-medium
+              text-red-500
+            "
+          >
+            {towerDeleteError}
+          </p>
+        )}
+
+      </div>
+
+
+      {/* ACTIONS */}
+      <div
+        className="
+          flex
+          justify-end
+          gap-3
+          border-t
+          border-gray-100
+          bg-gray-50
+          px-6 py-4
+        "
+      >
+        <button
+          type="button"
+          disabled={
+            isDeletingTower
+          }
+          onClick={
+            handleCloseTowerDelete
+          }
+          className="
+            rounded-lg
+            px-4 py-2.5
+            text-xs
+            font-bold
+            text-gray-500
+            hover:bg-gray-100
+          "
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          disabled={
+            isDeletingTower ||
+            (
+              towerUsage.layoutCount >
+                0 &&
+              (
+                !deleteLayoutTarget ||
+                towerUsage
+                  .otherTowers
+                  .length === 0
+              )
+            )
+          }
+          onClick={
+            handleConfirmDeleteTower
+          }
+          className="
+            inline-flex
+            min-w-[120px]
+            items-center
+            justify-center
+            gap-2
+            rounded-lg
+            bg-red-600
+            px-4 py-2.5
+            text-xs
+            font-bold
+            text-white
+            hover:bg-red-700
+            disabled:cursor-not-allowed
+            disabled:opacity-40
+          "
+        >
+          {isDeletingTower ? (
+            <>
+              <Loader2
+                size={14}
+                className="
+                  animate-spin
+                "
+              />
+
+              Deleting...
+            </>
+          ) : (
+            <>
+              <Trash2
+                size={14}
+              />
+
+              {towerUsage.amenityCount >
+                0 ||
+              towerUsage.layoutCount >
+                0
+                ? 'Move & Delete'
+                : 'Delete Tower'}
+            </>
+          )}
+        </button>
+      </div>
+
+    </div>
+  </div>
+)}
                 <div>
                   <label
                     className="
@@ -2535,7 +6431,6 @@ if (
               </div>
             )}
 
-
             {/* NOTHING SELECTED */}
             {!selectedEditorRegion && (
               <div
@@ -2569,7 +6464,6 @@ if (
             )}
 
           </div>
-
 
           {/* TEMPORARY FALLBACK */}
           <div
@@ -2626,6 +6520,8 @@ if (
 
   return (
     <div className="flex h-screen w-full bg-[#E7E7E7] font-sans text-gray-900 overflow-hidden relative">
+      {amenityRemoveModal}
+      {layoutRemoveModal}
       
       {successMsg && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
@@ -2811,7 +6707,7 @@ if (
           <div>
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="text-xs font-bold text-brand-gold uppercase tracking-widest">Amenities</h3>
-              <button type="button" onClick={() => appendAmenity({ title: "", description: "", thumbnail: "", tower: null })} className="text-[10px] text-brand-blue font-bold uppercase flex items-center gap-1"><PlusCircle size={12}/> Add Amenity</button>
+              <button type="button" onClick={() => appendAmenity({ id: null, title: "", description: "", thumbnail: "", tower: null })} className="text-[10px] text-brand-blue font-bold uppercase flex items-center gap-1"><PlusCircle size={12}/> Add Amenity</button>
             </div>
 
             <div className="grid grid-cols-2 gap-4 mt-4 mb-6 p-4 bg-brand-blue/5 rounded-xl border border-brand-blue/10">
@@ -2826,37 +6722,68 @@ if (
             </div>
             
             {amenityFields.map((field, index) => (
-              <div key={field.id} className="p-4 mt-4 bg-gray-50 border border-gray-100 rounded-lg relative group">
+              <div key={field.fieldKey} className="p-4 mt-4 bg-gray-50 border border-gray-100 rounded-lg relative group">
                 <button 
                   type="button" 
-                  onClick={() => {
-                    removeNestedFieldFiles("amenities", index);
-                    removeAmenity(index);
-                  }} 
+                  onClick={() =>
+                    handleRequestRemoveAmenity(
+                      index
+                    )
+                  } 
                   className="absolute top-4 right-4 text-gray-300 hover:text-red-500"
                 >
                   <Trash2 size={16} />
                 </button>
                 
-                <label className={labelStyles}>Amenity Name</label>
-                <input {...register(`amenities.${index}.title`)} className={inputStyles} />
-                {errors?.amenities?.[index]?.title && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.amenities[index]?.title?.message}</p>}
-                
-                <label className={labelStyles}>Assigned Tower (Optional / Shared)</label>
-                <div className="flex gap-2">
-                  <input 
-                    {...register(`amenities.${index}.tower`)} 
-                    placeholder="e.g. Tower D (or leave blank for all)" 
-                    className={inputStyles} 
-                    list={`tower-list-${index}`}
-                  />
-                  <datalist id={`tower-list-${index}`}>
-                    <option value="">All Towers (Shared)</option>
-                    {availableTowerOptions.map((opt) => (
-                      <option key={opt} value={opt} />
-                    ))}
-                  </datalist>
-                </div>
+                <label className={labelStyles}>
+                  Assigned Tower
+                </label>
+
+                <select
+                  {...register(`amenities.${index}.tower`)}
+                  className={`${inputStyles} cursor-pointer`}
+                >
+                  <option value="">
+                    All Towers / Shared
+                  </option>
+
+                  {watch(`amenities.${index}.tower`) &&
+                    !isValidTowerAssignment(
+                      watch(`amenities.${index}.tower`)
+                    ) && (
+                      <option
+                        value={
+                          watch(`amenities.${index}.tower`) || ''
+                        }
+                        disabled
+                      >
+                        {watch(`amenities.${index}.tower`)} — no longer exists
+                      </option>
+                    )}
+
+                  {availableTowerOptions.map((tower) => (
+                    <option
+                      key={tower}
+                      value={tower}
+                    >
+                      {tower}
+                    </option>
+                  ))}
+                </select>
+
+                {isValidTowerAssignment(
+                  watch(`amenities.${index}.tower`)
+                ) ? (
+                  <p className="mt-1 text-[10px] text-gray-400">
+                    Select a tower, or choose All Towers / Shared.
+                    Manage project towers from Page Settings.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[10px] font-medium text-amber-600">
+                    This amenity is assigned to a tower that no longer exists.
+                    Choose a valid tower or All Towers / Shared before saving.
+                  </p>
+                )}
                 
                 <label className={labelStyles}>Description</label>
                 <textarea {...register(`amenities.${index}.description`)} rows={2} className={`${inputStyles} resize-none`} />
@@ -2892,7 +6819,7 @@ if (
                 onClick={() =>
                   appendLayout({
                     title: "",
-                    tower_name: "Tower A - Residential",
+                    tower_name: availableTowerOptions[0] || "",
                     bg_color: "#051431",
                     description: "",
                     min_sqm: "",
@@ -2901,7 +6828,8 @@ if (
                     show_on_map_card: false,
                     map_card_order: "",
                     show_on_project_page: false,
-                    project_page_order: ""
+                    project_page_order: "",
+                    sort_order: null
                   })
                 }
                 className="text-[10px] text-brand-blue hover:text-brand-gold font-bold uppercase flex items-center gap-1 transition-colors"
@@ -2940,11 +6868,47 @@ if (
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className={labelStyles}>Tower Name</label>
-                        <input
+                        <select
                           {...register(`unit_layouts.${index}.tower_name`)}
-                          placeholder="e.g. Tower A - Residential"
-                          className={inputStyles}
-                        />
+                          className={`${inputStyles} cursor-pointer`}
+                        >
+                          <option value="">
+                            Select tower...
+                          </option>
+
+                          {watch(`unit_layouts.${index}.tower_name`) &&
+                            !isValidTowerAssignment(
+                              watch(`unit_layouts.${index}.tower_name`)
+                            ) && (
+                              <option
+                                value={
+                                  watch(`unit_layouts.${index}.tower_name`) || ''
+                                }
+                                disabled
+                              >
+                                {watch(`unit_layouts.${index}.tower_name`)} — no longer exists
+                              </option>
+                            )}
+
+                          {availableTowerOptions.map((tower) => (
+                            <option
+                              key={tower}
+                              value={tower}
+                            >
+                              {tower}
+                            </option>
+                          ))}
+                        </select>
+
+                        {!isValidTowerAssignment(
+                          watch(`unit_layouts.${index}.tower_name`)
+                        ) && (
+                          <p className="text-amber-600 text-[10px] font-medium mt-1">
+                            This layout is assigned to a tower that no longer exists.
+                            Choose a valid tower before saving.
+                          </p>
+                        )}
+
                         {errors?.unit_layouts?.[index]?.tower_name && (
                           <p className="text-red-500 text-[10px] font-bold mt-1">
                             {errors.unit_layouts[index]?.tower_name?.message}

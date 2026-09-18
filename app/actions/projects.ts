@@ -267,13 +267,24 @@ export async function saveProjectAction(payload: any) {
     const newLayoutRows: any[] = [];
 
     const buildLayoutValues = (item: any) => ({
-      tower_name: item.tower_name || 'Tower A - Residential',
+      tower_name:
+      typeof item.tower_name === 'string' && item.tower_name.trim()
+        ? item.tower_name.trim()
+        : 'Tower A - Residential',
       bg_color: item.bg_color || '#051431',
       title: item.title,
       description: item.description || '',
       thumbnail: item.thumbnail || '',
       min_sqm: item.min_sqm ? parseFloat(item.min_sqm) : null,
       max_sqm: item.max_sqm ? parseFloat(item.max_sqm) : null,
+
+      // Order inside the project's tower blueprint group
+      sort_order:
+        item.sort_order !== undefined &&
+        item.sort_order !== null &&
+        item.sort_order !== ''
+          ? parseInt(String(item.sort_order), 10)
+          : null,
 
       // Map popup placement
       show_on_map_card: Boolean(item.show_on_map_card),
@@ -382,71 +393,493 @@ export async function saveProjectAction(payload: any) {
       }
     }
 
-// 6. Amenities (Handle Storage Cleanup server-side)
+// 6. Amenities
+// Preserve existing amenity IDs instead of deleting/recreating every row.
+//
+// Existing row with a valid ID -> UPDATE
+// New form row without an ID     -> INSERT
+// Existing DB row removed in UI  -> DELETE
+//
+// This keeps amenity identity stable and makes visual-editor deletes predictable.
 const amenities = Array.isArray(finalData.amenities)
   ? finalData.amenities
   : [];
 
-const { data: oldAmenities } = await supabaseAdmin
+const {
+  data: oldAmenities,
+  error: oldAmenitiesError,
+} = await supabaseAdmin
   .from('amenities')
-  .select('thumbnail')
+  .select('id, thumbnail')
   .eq('project_id', targetProjectId);
 
+if (oldAmenitiesError) {
+  throw new Error(
+    `Amenity fetch error: ${oldAmenitiesError.message}`
+  );
+}
+
+const existingAmenityIds = new Set(
+  (oldAmenities || []).map(
+    (amenity: any) =>
+      Number(amenity.id)
+  )
+);
+
+const retainedAmenityIds =
+  new Set<number>();
+
+const savedAmenityData: any[] = [];
+
+const buildAmenityValues = (
+  item: any
+) => ({
+  title:
+    typeof item.title === 'string'
+      ? item.title.trim()
+      : '',
+
+  description:
+    item.description || '',
+
+  thumbnail:
+    item.thumbnail || '',
+
+  tower:
+    typeof item.tower === 'string' &&
+    item.tower.trim()
+      ? item.tower.trim()
+      : null,
+});
+
+for (const item of amenities) {
+  const parsedId =
+    item.id !== undefined &&
+    item.id !== null &&
+    item.id !== ''
+      ? Number(item.id)
+      : null;
+
+  const isExistingAmenity =
+    parsedId !== null &&
+    Number.isInteger(parsedId) &&
+    existingAmenityIds.has(parsedId);
+
+  const amenityValues =
+    buildAmenityValues(item);
+
+  if (isExistingAmenity) {
+    const {
+      data: updatedAmenity,
+      error: updateAmenityError,
+    } = await supabaseAdmin
+      .from('amenities')
+      .update(amenityValues)
+      .eq(
+        'project_id',
+        targetProjectId
+      )
+      .eq(
+        'id',
+        parsedId
+      )
+      .select(
+        'id, project_id, title, description, thumbnail, tower'
+      )
+      .single();
+
+    if (updateAmenityError) {
+      throw new Error(
+        `Amenity update error (${parsedId}): ${updateAmenityError.message}`
+      );
+    }
+
+    retainedAmenityIds.add(
+      parsedId
+    );
+
+    if (updatedAmenity) {
+      savedAmenityData.push(
+        updatedAmenity
+      );
+    }
+  } else {
+    const {
+      data: insertedAmenity,
+      error: insertAmenityError,
+    } = await supabaseAdmin
+      .from('amenities')
+      .insert({
+        project_id:
+          targetProjectId,
+        ...amenityValues,
+      })
+      .select(
+        'id, project_id, title, description, thumbnail, tower'
+      )
+      .single();
+
+    if (insertAmenityError) {
+      throw new Error(
+        `Amenity insert error: ${insertAmenityError.message}`
+      );
+    }
+
+    if (insertedAmenity) {
+      savedAmenityData.push(
+        insertedAmenity
+      );
+    }
+  }
+}
+
+// Delete only amenities that existed before but were removed in the editor.
+const removedAmenityIds =
+  (oldAmenities || [])
+    .map(
+      (amenity: any) =>
+        Number(amenity.id)
+    )
+    .filter(
+      (id: number) =>
+        !retainedAmenityIds.has(id)
+    );
+
+if (removedAmenityIds.length > 0) {
+  const {
+    error: deleteAmenityError,
+  } = await supabaseAdmin
+    .from('amenities')
+    .delete()
+    .eq(
+      'project_id',
+      targetProjectId
+    )
+    .in(
+      'id',
+      removedAmenityIds
+    );
+
+  if (deleteAmenityError) {
+    throw new Error(
+      `Amenity delete error: ${deleteAmenityError.message}`
+    );
+  }
+}
+
+// Clean up replaced or removed amenity images only after DB mutations succeed.
 const newAmenityUrls = amenities
-  .map((amenity: any) => amenity.thumbnail)
+  .map(
+    (amenity: any) =>
+      amenity.thumbnail
+  )
   .filter(Boolean);
 
-if (oldAmenities) {
-  for (const amenity of oldAmenities) {
-    if (
-      amenity.thumbnail &&
-      !newAmenityUrls.includes(amenity.thumbnail) &&
-      amenity.thumbnail.includes('/storage/v1/object/public/images/')
-    ) {
-      const oldStoragePath =
-        amenity.thumbnail.split('/storage/v1/object/public/images/')[1];
+for (
+  const oldAmenity of
+    oldAmenities || []
+) {
+  if (
+    oldAmenity.thumbnail &&
+    !newAmenityUrls.includes(
+      oldAmenity.thumbnail
+    ) &&
+    oldAmenity.thumbnail.includes(
+      '/storage/v1/object/public/images/'
+    )
+  ) {
+    const oldStoragePath =
+      oldAmenity.thumbnail.split(
+        '/storage/v1/object/public/images/'
+      )[1];
 
-      if (oldStoragePath) {
-        const { error: deleteError } = await supabaseAdmin.storage
+    if (oldStoragePath) {
+      const {
+        error:
+          storageCleanupError,
+      } =
+        await supabaseAdmin.storage
           .from('images')
-          .remove([oldStoragePath]);
+          .remove([
+            oldStoragePath
+          ]);
 
-        if (deleteError) {
-          console.warn(
-            'Failed to delete old amenity image from storage:',
-            deleteError
-          );
-        }
+      if (storageCleanupError) {
+        console.warn(
+          `Failed to clean up old amenity image for amenity ${oldAmenity.id}:`,
+          storageCleanupError
+        );
       }
     }
   }
 }
 
-await supabaseAdmin
-  .from('amenities')
-  .delete()
-  .eq('project_id', targetProjectId);
+        // ==========================================
+        // PROJECT TOWERS
+        // ==========================================
 
-if (amenities.length > 0) {
-  const amenityRows = amenities.map((item: any) => ({
-    project_id: targetProjectId,
-    title: item.title,
-    description: item.description || '',
-    thumbnail: item.thumbnail || '',
-    tower:
-      typeof item.tower === 'string' && item.tower.trim()
-        ? item.tower.trim()
-        : null,
-  }));
+        if (Array.isArray(finalData.towers)) {
+          const cleanTowers = finalData.towers
+            .map(
+              (
+                tower: any,
+                index: number
+              ) => ({
+                id:
+                  tower?.id !== null &&
+                  tower?.id !== undefined &&
+                  !Number.isNaN(
+                    Number(tower.id)
+                  )
+                    ? Number(tower.id)
+                    : null,
 
-  const { error: amenityError } = await supabaseAdmin
-    .from('amenities')
-    .insert(amenityRows);
+                name:
+                  typeof tower?.name ===
+                  'string'
+                    ? tower.name.trim()
+                    : '',
 
-  if (amenityError) {
-    throw new Error(`Amenity error: ${amenityError.message}`);
-  }
-}
+                sort_order: index + 1,
+              })
+            )
+            .filter(
+              (tower: any) =>
+                tower.name.length > 0
+            );
+
+
+          // ------------------------------------------
+          // SERVER-SIDE DUPLICATE PROTECTION
+          // ------------------------------------------
+
+          const normalizedNames =
+            cleanTowers.map(
+              (tower: any) =>
+                tower.name.toLowerCase()
+            );
+
+          const hasDuplicate =
+            normalizedNames.some(
+              (
+                name: string,
+                index: number
+              ) =>
+                normalizedNames.indexOf(
+                  name
+                ) !== index
+            );
+
+          if (hasDuplicate) {
+            throw new Error(
+              'Tower names must be unique within a project.'
+            );
+          }
+
+
+          // ------------------------------------------
+          // CURRENT DATABASE TOWERS
+          // ------------------------------------------
+
+          const {
+            data: existingTowers,
+            error: existingTowersError,
+          } = await supabaseAdmin
+            .from('project_towers')
+            .select(
+              'id, project_id, name, sort_order'
+            )
+            .eq(
+              'project_id',
+              targetProjectId
+            );
+
+          if (existingTowersError) {
+            throw new Error(
+              `Tower fetch error: ${existingTowersError.message}`
+            );
+          }
+
+
+          const existingTowerMap =
+            new Map(
+              (existingTowers || []).map(
+                (tower: any) => [
+                  Number(tower.id),
+                  tower,
+                ]
+              )
+            );
+
+
+          // ------------------------------------------
+          // UPDATE / RENAME EXISTING TOWERS
+          // ------------------------------------------
+
+          for (const tower of cleanTowers) {
+            if (!tower.id) continue;
+
+            const existingTower =
+              existingTowerMap.get(
+                tower.id
+              );
+
+            if (!existingTower) {
+              continue;
+            }
+
+            const oldName =
+              String(
+                existingTower.name
+              ).trim();
+
+            const newName =
+              tower.name.trim();
+
+
+            // If the tower was renamed,
+            // synchronize all existing content.
+            if (oldName !== newName) {
+              const {
+                error:
+                  amenityRenameError,
+              } = await supabaseAdmin
+                .from('amenities')
+                .update({
+                  tower: newName,
+                })
+                .eq(
+                  'project_id',
+                  targetProjectId
+                )
+                .eq(
+                  'tower',
+                  oldName
+                );
+
+              if (amenityRenameError) {
+                throw new Error(
+                  `Amenity tower rename failed: ${amenityRenameError.message}`
+                );
+              }
+
+
+              const {
+                error:
+                  layoutRenameError,
+              } = await supabaseAdmin
+                .from('unit_layout')
+                .update({
+                  tower_name:
+                    newName,
+                })
+                .eq(
+                  'project_id',
+                  targetProjectId
+                )
+                .eq(
+                  'tower_name',
+                  oldName
+                );
+
+              if (layoutRenameError) {
+                throw new Error(
+                  `Unit layout tower rename failed: ${layoutRenameError.message}`
+                );
+              }
+            }
+
+
+            // Update the tower registry itself.
+            const {
+              error: towerUpdateError,
+            } = await supabaseAdmin
+              .from('project_towers')
+              .update({
+                name: newName,
+
+                sort_order:
+                  tower.sort_order,
+
+                updated_at:
+                  new Date()
+                    .toISOString(),
+              })
+              .eq(
+                'id',
+                tower.id
+              )
+              .eq(
+                'project_id',
+                targetProjectId
+              );
+
+            if (towerUpdateError) {
+              throw new Error(
+                `Tower update error: ${towerUpdateError.message}`
+              );
+            }
+          }
+
+
+          // ------------------------------------------
+          // INSERT NEW TOWERS
+          // ------------------------------------------
+
+          const newTowers =
+            cleanTowers.filter(
+              (tower: any) =>
+                !tower.id
+            );
+
+          if (newTowers.length > 0) {
+            const {
+              error: towerInsertError,
+            } = await supabaseAdmin
+              .from('project_towers')
+              .upsert(
+                newTowers.map(
+                  (tower: any) => ({
+                    project_id:
+                      targetProjectId,
+
+                    name:
+                      tower.name,
+
+                    sort_order:
+                      tower.sort_order,
+
+                    updated_at:
+                      new Date()
+                        .toISOString(),
+                  })
+                ),
+                {
+                  onConflict:
+                    'project_id,name',
+                }
+              );
+
+            if (towerInsertError) {
+              throw new Error(
+                `Tower insert error: ${towerInsertError.message}`
+              );
+            }
+          }
+
+
+          /*
+          * IMPORTANT:
+          *
+          * Do NOT automatically delete missing
+          * project_towers here.
+          *
+          * Tower deletion will be handled by a
+          * dedicated safe-delete workflow because
+          * amenities and unit layouts may still
+          * depend on that tower.
+          */
+        }
 
 // 7. Map Markers
 if (finalData.map_latitude && finalData.map_longitude) {
@@ -515,13 +948,616 @@ if (finalData.map_latitude && finalData.map_longitude) {
       }
     }
 
-    return { success: true };
+    const {
+  data: savedTowerData,
+  error: savedTowerFetchError,
+} = await supabaseAdmin
+  .from('project_towers')
+  .select(
+    'id, project_id, name, sort_order'
+  )
+  .eq(
+    'project_id',
+    targetProjectId
+  )
+  .order(
+    'sort_order',
+    {
+      ascending: true
+    }
+  )
+  .order(
+    'id',
+    {
+      ascending: true
+    }
+  );
+
+if (savedTowerFetchError) {
+  throw new Error(
+    `Tower refresh error: ${savedTowerFetchError.message}`
+  );
+}
+
+const {
+  data: savedLayoutData,
+  error: savedLayoutFetchError,
+} = await supabaseAdmin
+  .from('unit_layout')
+  .select('*')
+  .eq(
+    'project_id',
+    targetProjectId
+  )
+  .order(
+    'id',
+    {
+      ascending: true,
+    }
+  );
+
+if (savedLayoutFetchError) {
+  throw new Error(
+    `Layout refresh error: ${savedLayoutFetchError.message}`
+  );
+}
+
+    return {
+  success: true,
+  towerData:
+    savedTowerData || [],
+  amenityData:
+    savedAmenityData || [],
+  layoutData:
+    savedLayoutData || [],
+};
   } catch (error: any) {
     console.error('Server Action Failed:', error);
     return { success: false, error: error.message };
   }
 }
 
+export async function getProjectTowerUsageAction(
+  projectId: number,
+  towerId: number
+) {
+  const session = await getCustomSession();
+
+  if (!session) {
+    throw new Error('Unauthorized');
+  }
+
+  const {
+    data: tower,
+    error: towerError,
+  } = await supabaseAdmin
+    .from('project_towers')
+    .select('id, project_id, name, sort_order')
+    .eq('id', towerId)
+    .eq('project_id', projectId)
+    .single();
+
+  if (towerError || !tower) {
+    throw new Error(
+      towerError?.message ||
+        'Tower not found.'
+    );
+  }
+
+  const [
+  amenityResult,
+  layoutResult,
+  otherTowersResult,
+] = await Promise.all([
+  supabaseAdmin
+    .from('amenities')
+    .select('id, tower')
+    .eq('project_id', projectId),
+
+  supabaseAdmin
+    .from('unit_layout')
+    .select('id, tower_name')
+    .eq('project_id', projectId),
+
+  supabaseAdmin
+    .from('project_towers')
+    .select(
+      'id, name, sort_order'
+    )
+    .eq('project_id', projectId)
+    .neq('id', towerId)
+    .order(
+      'sort_order',
+      { ascending: true }
+    ),
+]);
+
+if (amenityResult.error) {
+  throw amenityResult.error;
+}
+
+if (layoutResult.error) {
+  throw layoutResult.error;
+}
+
+if (otherTowersResult.error) {
+  throw otherTowersResult.error;
+}
+
+const normalizedTowerName =
+  tower.name
+    .trim()
+    .toLowerCase();
+    
+const matchingAmenities =
+  (amenityResult.data || [])
+    .filter((amenity: any) =>
+      String(
+        amenity.tower || ''
+      )
+        .trim()
+        .toLowerCase() ===
+      normalizedTowerName
+    );
+
+
+    const matchingLayouts =
+      (layoutResult.data || [])
+        .filter((layout: any) =>
+          String(
+            layout.tower_name || ''
+          )
+            .trim()
+            .toLowerCase() ===
+          normalizedTowerName
+        );
+
+    return {
+      tower,
+
+      amenityCount:
+        matchingAmenities.length,
+
+      layoutCount:
+        matchingLayouts.length,
+
+      otherTowers:
+        otherTowersResult.data || [],
+    };
+}
+
+export async function deleteProjectTowerAction({
+  projectId,
+  towerId,
+  amenityTarget,
+  layoutTarget,
+}: {
+  projectId: number;
+  towerId: number;
+
+  // null = All Towers / Shared
+  amenityTarget:
+    | string
+    | null;
+
+  // Required when layouts exist.
+  layoutTarget:
+    | string
+    | null;
+}) {
+  const session =
+    await getCustomSession();
+
+  if (!session) {
+    throw new Error(
+      'Unauthorized'
+    );
+  }
+
+
+  const {
+    data: tower,
+    error: towerError,
+  } = await supabaseAdmin
+    .from('project_towers')
+    .select(
+      'id, project_id, name'
+    )
+    .eq('id', towerId)
+    .eq(
+      'project_id',
+      projectId
+    )
+    .single();
+
+
+  if (
+    towerError ||
+    !tower
+  ) {
+    throw new Error(
+      towerError?.message ||
+        'Tower not found.'
+    );
+  }
+
+// ----------------------------------
+// CHECK CURRENT USAGE
+// ----------------------------------
+
+const [
+  amenityUsage,
+  layoutUsage,
+] = await Promise.all([
+  supabaseAdmin
+    .from('amenities')
+    .select('id, tower')
+    .eq(
+      'project_id',
+      projectId
+    ),
+
+  supabaseAdmin
+    .from('unit_layout')
+    .select('id, tower_name')
+    .eq(
+      'project_id',
+      projectId
+    ),
+]);
+
+
+if (amenityUsage.error) {
+  throw amenityUsage.error;
+}
+
+if (layoutUsage.error) {
+  throw layoutUsage.error;
+}
+
+
+const normalizedTowerName =
+  tower.name
+    .trim()
+    .toLowerCase();
+
+
+const matchingAmenities =
+  (amenityUsage.data || [])
+    .filter((amenity: any) =>
+      String(
+        amenity.tower || ''
+      )
+        .trim()
+        .toLowerCase() ===
+      normalizedTowerName
+    );
+
+
+const matchingLayouts =
+  (layoutUsage.data || [])
+    .filter((layout: any) =>
+      String(
+        layout.tower_name || ''
+      )
+        .trim()
+        .toLowerCase() ===
+      normalizedTowerName
+    );
+
+
+const amenityCount =
+  matchingAmenities.length;
+
+const layoutCount =
+  matchingLayouts.length;
+
+  // Unit layouts cannot become
+  // "shared", so they need another
+  // real tower.
+  if (
+    layoutCount > 0 &&
+    !layoutTarget
+  ) {
+    throw new Error(
+      'Choose a replacement tower for the unit layouts before deleting this tower.'
+    );
+  }
+
+
+  // Prevent assigning content back
+  // to the tower being deleted.
+  if (
+    amenityTarget ===
+      tower.name ||
+    layoutTarget ===
+      tower.name
+  ) {
+    throw new Error(
+      'Replacement tower must be different from the tower being deleted.'
+    );
+  }
+
+
+  // ----------------------------------
+  // VALIDATE REPLACEMENT TOWERS
+  // ----------------------------------
+
+  const targets = [
+    amenityTarget,
+    layoutTarget,
+  ].filter(
+    (
+      value
+    ): value is string =>
+      Boolean(value)
+  );
+
+
+  for (
+    const targetName of targets
+  ) {
+    const {
+      data: targetTower,
+      error: targetError,
+    } = await supabaseAdmin
+      .from('project_towers')
+      .select('id')
+      .eq(
+        'project_id',
+        projectId
+      )
+      .eq(
+        'name',
+        targetName
+      )
+      .maybeSingle();
+
+
+    if (
+      targetError ||
+      !targetTower
+    ) {
+      throw new Error(
+        `Replacement tower "${targetName}" does not exist in this project.`
+      );
+    }
+  }
+
+
+        // ----------------------------------
+        // REASSIGN AMENITIES
+        // ----------------------------------
+
+        if (matchingAmenities.length > 0) {
+          const amenityIds =
+            matchingAmenities.map(
+              (amenity: any) =>
+                amenity.id
+            );
+
+          const {
+            error:
+              amenityUpdateError,
+          } = await supabaseAdmin
+            .from('amenities')
+            .update({
+              tower:
+                amenityTarget ||
+                null,
+            })
+            .eq(
+              'project_id',
+              projectId
+            )
+            .in(
+              'id',
+              amenityIds
+            );
+
+
+          if (amenityUpdateError) {
+            throw new Error(
+              `Amenity reassignment failed: ${amenityUpdateError.message}`
+            );
+          }
+        }
+
+        // ----------------------------------
+        // REASSIGN UNIT LAYOUTS
+        // ----------------------------------
+
+        if (matchingLayouts.length > 0) {
+          const layoutIds =
+            matchingLayouts.map(
+              (layout: any) =>
+                layout.id
+            );
+
+          const {
+            error:
+              layoutUpdateError,
+          } = await supabaseAdmin
+            .from('unit_layout')
+            .update({
+              tower_name:
+                layoutTarget,
+            })
+            .eq(
+              'project_id',
+              projectId
+            )
+            .in(
+              'id',
+              layoutIds
+            );
+
+
+          if (layoutUpdateError) {
+            throw new Error(
+              `Unit layout reassignment failed: ${layoutUpdateError.message}`
+            );
+          }
+
+          if (layoutTarget) {
+            const {
+              data: targetLayouts,
+              error: targetLayoutsError,
+            } = await supabaseAdmin
+              .from('unit_layout')
+              .select('id, sort_order')
+              .eq('project_id', projectId)
+              .eq('tower_name', layoutTarget)
+              .order('sort_order', {
+                ascending: true,
+                nullsFirst: false,
+              })
+              .order('id', {
+                ascending: true,
+              });
+
+            if (targetLayoutsError) {
+              throw new Error(
+                `Unit layout reorder fetch failed: ${targetLayoutsError.message}`
+              );
+            }
+
+            for (
+              let index = 0;
+              index <
+              (targetLayouts || []).length;
+              index++
+            ) {
+              const row =
+                targetLayouts![index];
+
+              const {
+                error:
+                  layoutOrderError,
+              } = await supabaseAdmin
+                .from('unit_layout')
+                .update({
+                  sort_order:
+                    index + 1,
+                })
+                .eq('project_id', projectId)
+                .eq('id', row.id);
+
+              if (layoutOrderError) {
+                throw new Error(
+                  `Unit layout reorder failed: ${layoutOrderError.message}`
+                );
+              }
+            }
+          }
+        }
+
+  // ----------------------------------
+  // DELETE REGISTRY ENTRY
+  // ----------------------------------
+
+  const {
+    error: deleteError,
+  } = await supabaseAdmin
+    .from('project_towers')
+    .delete()
+    .eq('id', towerId)
+    .eq(
+      'project_id',
+      projectId
+    );
+
+
+if (deleteError) {
+  throw new Error(
+    `Tower delete failed: ${deleteError.message}`
+  );
+}
+
+
+// ----------------------------------
+// RE-SEQUENCE REMAINING TOWERS
+// ----------------------------------
+
+const {
+  data: remainingTowers,
+  error: remainingTowersError,
+} = await supabaseAdmin
+  .from('project_towers')
+  .select(
+    'id, project_id, name, sort_order'
+  )
+  .eq(
+    'project_id',
+    projectId
+  )
+  .order(
+    'sort_order',
+    { ascending: true }
+  )
+  .order(
+    'id',
+    { ascending: true }
+  );
+
+if (remainingTowersError) {
+  throw new Error(
+    `Tower refresh failed: ${remainingTowersError.message}`
+  );
+}
+
+
+for (
+  let index = 0;
+  index < (remainingTowers || []).length;
+  index++
+) {
+  const currentTower =
+    remainingTowers![index];
+
+  const newOrder =
+    index + 1;
+
+  if (
+    currentTower.sort_order !==
+    newOrder
+  ) {
+    const {
+      error: orderError,
+    } = await supabaseAdmin
+      .from('project_towers')
+      .update({
+        sort_order: newOrder,
+        updated_at:
+          new Date().toISOString(),
+      })
+      .eq(
+        'id',
+        currentTower.id
+      );
+
+    if (orderError) {
+      throw new Error(
+        `Tower reorder failed: ${orderError.message}`
+      );
+    }
+
+    currentTower.sort_order =
+      newOrder;
+  }
+}
+
+
+return {
+  success: true,
+
+  deletedTower:
+    tower.name,
+
+  towerData:
+    remainingTowers || [],
+};
+}
 /**
  * Fetches all related project data for the Edit Page, bypassing RLS.
  * This prevents hidden (is_active = false) projects from returning empty data.
@@ -531,15 +1567,16 @@ export async function fetchProjectForEdit(editId: string | number) {
 
   if (!session) throw new Error('Unauthorized');
 
-  const [
-    projRes,
-    extRes,
-    layoutRes,
-    amenityRes,
-    parentRes,
-    markerRes,
-    tagRes,
-  ] = await Promise.all([
+      const [
+      projRes,
+      extRes,
+      layoutRes,
+      amenityRes,
+      towerRes,
+      parentRes,
+      markerRes,
+      tagRes,
+    ] = await Promise.all([
     supabaseAdmin
       .from('project_table')
       .select('*')
@@ -556,12 +1593,20 @@ export async function fetchProjectForEdit(editId: string | number) {
     supabaseAdmin
       .from('unit_layout')
       .select('*')
-      .eq('project_id', editId),
+      .eq('project_id', editId)
+      .order('id', { ascending: true }),
 
     supabaseAdmin
       .from('amenities')
       .select('*')
       .eq('project_id', editId),
+
+      supabaseAdmin
+      .from('project_towers')
+      .select('id, project_id, name, sort_order')
+      .eq('project_id', editId)
+      .order('sort_order', { ascending: true })
+      .order('id', { ascending: true }),
 
     supabaseAdmin
       .from('parent_marker')
@@ -584,6 +1629,7 @@ export async function fetchProjectForEdit(editId: string | number) {
   if (extRes.error) throw extRes.error;
   if (layoutRes.error) throw layoutRes.error;
   if (amenityRes.error) throw amenityRes.error;
+  if (towerRes.error) throw towerRes.error;
   if (parentRes.error) throw parentRes.error;
   if (markerRes.error) throw markerRes.error;
   if (tagRes.error) throw tagRes.error;
@@ -593,6 +1639,7 @@ export async function fetchProjectForEdit(editId: string | number) {
     extData: extRes.data?.[0] || null,
     layoutData: layoutRes.data || [],
     amenityData: amenityRes.data || [],
+    towerData: towerRes.data || [],
     parentData: parentRes.data?.[0] || null,
     markerData: markerRes.data || [],
     tagData: tagRes.data || [],

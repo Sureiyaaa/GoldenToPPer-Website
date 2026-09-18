@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo } from 'react';
 import Image from "next/image";
-import { Layers, Target, Key, MapPin, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Layers, Target, Key, MapPin, ArrowRight, ChevronLeft, ChevronRight, PlusCircle } from 'lucide-react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
@@ -13,7 +13,8 @@ if (typeof window !== 'undefined') {
 const BLANK_IMAGE = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
 
 interface Amenity {
-  id: number;
+  id: number | string;
+  editorIndex?: number;
   title: string;
   description: string;
   thumbnail: string;
@@ -26,13 +27,19 @@ export type ProjectEditorRegion =
   | 'location'
   | 'awards'
   | 'tags'
-  | 'editorial';
+  | 'editorial'
+  | 'amenities'
+  | `amenity:${number}`
+  | 'unit-layouts'
+  | `unit-layout:${number}`;
 
 interface PreviewSkeletonProps {
   data: any;
   editorMode?: boolean;
   selectedRegion?: ProjectEditorRegion | null;
   onSelectRegion?: (region: ProjectEditorRegion) => void;
+  onAddAmenity?: () => void;
+  onAddLayout?: () => void;
 }
 
 function formatTowerName(raw?: string | null): string {
@@ -75,6 +82,8 @@ export default function PreviewSkeleton({
   editorMode = false,
   selectedRegion = null,
   onSelectRegion,
+  onAddAmenity,
+  onAddLayout,
 }: PreviewSkeletonProps) {
   const blueprintSectionRef = useRef<HTMLElement>(null);
   
@@ -82,6 +91,7 @@ export default function PreviewSkeleton({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const startX = useRef(0);
+  const didDrag = useRef(false);
   const targetScroll = useRef(0);
   const currentScroll = useRef(0);
   const rafId = useRef<number | null>(null);
@@ -115,23 +125,42 @@ const regionStyle = (region: ProjectEditorRegion) => {
   `;
 };
 
- const availableTowers = useMemo<string[]>(() => {
-    const amenities = data.amenities ?? [];
-    const uniqueTowers: string[] = Array.from(
-      new Set<string>(
-        amenities
-          .map((item: any) => (item.tower ? String(item.tower).trim() : ''))
-          .filter((tower: string) => Boolean(tower))
-      )
-    );
-    return uniqueTowers.sort((a: string, b: string) =>
-      a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
-    );
-  }, [data.amenities]);
+    const availableTowers = useMemo<string[]>(() => {
+      const towers = data.towers ?? [];
+
+      return towers
+        .map((tower: any) =>
+          String(tower.name || '').trim()
+        )
+        .filter(Boolean);
+    }, [data.towers]);
 
   const [selectedTower, setSelectedTower] = useState<string | null>(
     () => availableTowers[0] ?? null
   );
+
+  useEffect(() => {
+    if (availableTowers.length === 0) {
+      if (selectedTower !== null) {
+        setSelectedTower(null);
+      }
+      return;
+    }
+
+    const stillExists =
+      selectedTower &&
+      availableTowers.some(
+        (tower) =>
+          tower.toLowerCase() ===
+          selectedTower.toLowerCase()
+      );
+
+    if (!stillExists) {
+      setSelectedTower(
+        availableTowers[0]
+      );
+    }
+  }, [availableTowers, selectedTower]);
 
   const filteredAmenities = useMemo(() => {
     const amenities = data.amenities ?? [];
@@ -175,24 +204,68 @@ const regionStyle = (region: ProjectEditorRegion) => {
   }, [selectedTower]);
 
   // 2. DRAG HANDLERS
-  const onDragStart = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!scrollContainerRef.current) return;
-    isDragging.current = true; setIsGrabbing(true);
-    const pageX = 'touches' in e ? e.touches[0].pageX : e.pageX;
-    startX.current = pageX;
-    targetScroll.current = scrollContainerRef.current.scrollLeft;
-    currentScroll.current = scrollContainerRef.current.scrollLeft;
-  };
+  const onDragStart = (
+          e: React.MouseEvent | React.TouchEvent
+        ) => {
+          if (!scrollContainerRef.current) return;
 
-  const onDragMove = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDragging.current || !scrollContainerRef.current) return;
-    const pageX = 'touches' in e ? e.touches[0].pageX : e.pageX;
-    const delta = (startX.current - pageX) * 2;
-    targetScroll.current += delta;
-    startX.current = pageX;
-    const maxScroll = scrollContainerRef.current.scrollWidth - scrollContainerRef.current.clientWidth;
-    targetScroll.current = Math.max(0, Math.min(targetScroll.current, maxScroll));
-  };
+          isDragging.current = true;
+          didDrag.current = false;
+          setIsGrabbing(true);
+
+          const pageX =
+            'touches' in e
+              ? e.touches[0].pageX
+              : e.pageX;
+
+          startX.current = pageX;
+
+          targetScroll.current =
+            scrollContainerRef.current.scrollLeft;
+
+          currentScroll.current =
+            scrollContainerRef.current.scrollLeft;
+        };
+
+  const onDragMove = (
+        e: React.MouseEvent | React.TouchEvent
+      ) => {
+        if (
+          !isDragging.current ||
+          !scrollContainerRef.current
+        ) {
+          return;
+        }
+
+        const pageX =
+          'touches' in e
+            ? e.touches[0].pageX
+            : e.pageX;
+
+        const rawMovement =
+          startX.current - pageX;
+
+        if (Math.abs(rawMovement) > 3) {
+          didDrag.current = true;
+        }
+
+        const delta = rawMovement * 2;
+
+        targetScroll.current += delta;
+        startX.current = pageX;
+
+        const maxScroll =
+          scrollContainerRef.current.scrollWidth -
+          scrollContainerRef.current.clientWidth;
+
+        targetScroll.current = Math.max(
+          0,
+          Math.min(
+            targetScroll.current,
+            maxScroll
+          )
+        );
+      };
 
   const onDragEnd = () => { isDragging.current = false; setIsGrabbing(false); };
 
@@ -249,31 +322,163 @@ const regionStyle = (region: ProjectEditorRegion) => {
     { label: data.unit_total, icon: <Key size={16} /> },
   ].filter(tag => tag.label && tag.label !== '0-0 SQM' && tag.label !== '0 Units');
 
-  const groupedLayouts = useMemo<Record<string, any[]>>(() => {
-    if (!data?.unit_layout || !Array.isArray(data.unit_layout)) return {};
+  const groupedLayouts = useMemo<
+    Array<{
+      towerName: string;
+      plans: any[];
+    }>
+  >(() => {
+    if (
+      !data?.unit_layout ||
+      !Array.isArray(data.unit_layout)
+    ) {
+      return [];
+    }
 
-    const cleanName = (val: string) =>
+    const cleanName = (
+      val: string
+    ) =>
       val
-        .replace(/[\u2013\u2014]/g, '-')
+        .replace(
+          /[\u2013\u2014]/g,
+          '-'
+        )
         .replace(/\s+/g, ' ')
         .trim();
 
-    return data.unit_layout.reduce((acc: Record<string, any[]>, item: any) => {
-      const rawTower = item?.tower_name ? cleanName(String(item.tower_name)) : 'Tower A - Residential';
-      const fallbackTower = rawTower || 'Tower A - Residential';
+    const normalize = (
+      val: string
+    ) =>
+      cleanName(val).toLowerCase();
 
-      const matchKey = Object.keys(acc).find(
-        (key) => cleanName(key).toLowerCase() === fallbackTower.toLowerCase()
+    const towerOrder =
+      (data.towers || [])
+        .map((tower: any) =>
+          cleanName(
+            String(
+              tower?.name || ''
+            )
+          )
+        )
+        .filter(Boolean);
+
+    const groups = new Map<
+      string,
+      {
+        towerName: string;
+        plans: any[];
+      }
+    >();
+
+    data.unit_layout.forEach(
+      (item: any) => {
+        const towerName =
+          item?.tower_name
+            ? cleanName(
+                String(
+                  item.tower_name
+                )
+              )
+            : 'Unassigned';
+
+        const key =
+          normalize(towerName);
+
+        if (!groups.has(key)) {
+          groups.set(key, {
+            towerName,
+            plans: [],
+          });
+        }
+
+        groups.get(key)!.plans.push(
+          item
+        );
+      }
+    );
+
+    groups.forEach((group) => {
+      group.plans.sort(
+        (a: any, b: any) => {
+          const parseOrder = (
+            value: unknown
+          ) => {
+            const parsed =
+              Number(value);
+
+            return Number.isFinite(
+              parsed
+            ) && parsed > 0
+              ? parsed
+              : Number.MAX_SAFE_INTEGER;
+          };
+
+          const orderDiff =
+            parseOrder(
+              a.sort_order
+            ) -
+            parseOrder(
+              b.sort_order
+            );
+
+          if (orderDiff !== 0) {
+            return orderDiff;
+          }
+
+          return (
+            Number(
+              a.editorIndex ?? 0
+            ) -
+            Number(
+              b.editorIndex ?? 0
+            )
+          );
+        }
+      );
+    });
+
+    const ordered: Array<{
+      towerName: string;
+      plans: any[];
+    }> = [];
+
+    towerOrder.forEach(
+      (towerName: string) => {
+        const key =
+          normalize(towerName);
+
+        const group =
+          groups.get(key);
+
+        if (group) {
+          ordered.push(group);
+          groups.delete(key);
+        }
+      }
+    );
+
+    const remaining =
+      Array.from(
+        groups.values()
+      ).sort((a, b) =>
+        a.towerName.localeCompare(
+          b.towerName,
+          undefined,
+          {
+            numeric: true,
+            sensitivity: 'base',
+          }
+        )
       );
 
-      const resolvedKey = matchKey || fallbackTower;
-      if (!acc[resolvedKey]) {
-        acc[resolvedKey] = [];
-      }
-      acc[resolvedKey].push(item);
-      return acc;
-    }, {});
-  }, [data?.unit_layout]);
+    return [
+      ...ordered,
+      ...remaining,
+    ];
+  }, [
+    data?.unit_layout,
+    data?.towers,
+  ]);
 
   return (
     <div className="relative font-sans text-gray-900 bg-[#E7E7E7] overflow-x-hidden">
@@ -908,9 +1113,76 @@ const regionStyle = (region: ProjectEditorRegion) => {
       )}
       
       {/* --- AMENITIES DRAGGABLE CAROUSEL SECTION --- */}
-      {data.amenities?.length > 0 && (
-        <section className="relative w-full bg-[#132243] flex flex-col justify-center py-24 md:py-32 overflow-hidden group/amenities">
-          <div className="max-w-[90rem] px-6 md:px-12 w-full mx-auto mb-8 md:mb-10 shrink-0 pointer-events-none">
+      {(
+          data.amenities?.length > 0 ||
+          editorMode
+        ) && (
+              <section
+        className={`
+          relative
+          w-full
+          bg-[#132243]
+          flex
+          flex-col
+          justify-center
+          py-24 md:py-32
+          overflow-hidden
+          group/amenities
+          transition-all
+          ${
+            editorMode &&
+            selectedRegion === 'amenities'
+              ? 'ring-2 ring-inset ring-brand-gold'
+              : ''
+          }
+        `}
+      >
+                {editorMode &&
+          selectedRegion === 'amenities' && (
+            <span
+              className="
+                absolute
+                top-5 left-5
+                z-40
+                rounded-md
+                bg-brand-gold
+                px-3 py-1.5
+                text-[10px]
+                font-bold
+                uppercase
+                tracking-wider
+                text-brand-blue
+                shadow-lg
+              "
+            >
+              Amenities Section
+            </span>
+          )}
+                      <div
+              onClick={(e) =>
+                selectRegion(e, 'amenities')
+              }
+              className={`
+                max-w-[90rem]
+                px-6 md:px-12
+                w-full
+                mx-auto
+                mb-8 md:mb-10
+                shrink-0
+                rounded-sm
+                transition-all
+                ${
+                  editorMode
+                    ? `
+                      pointer-events-auto
+                      cursor-pointer
+                      hover:ring-2
+                      hover:ring-white/50
+                    `
+                    : 'pointer-events-none'
+                }
+              `}
+            >
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 w-full text-white">
               <div>
                 <div className="text-xs tracking-[0.25em] uppercase text-brand-gold font-bold mb-2 md:mb-4 flex items-center gap-3">
@@ -991,8 +1263,76 @@ const regionStyle = (region: ProjectEditorRegion) => {
             >
               <style dangerouslySetInnerHTML={{ __html: `::-webkit-scrollbar { display: none; }` }} />
               
-              {filteredAmenities.map((item: any, index: number) => (
-                <div key={item.id || index} className="shrink-0 w-[82vw] sm:w-[50vw] md:w-[40vw] lg:w-[30vw] flex flex-col group pointer-events-none select-none">
+              {filteredAmenities.map(
+              (item: any, index: number) => (
+                <div
+                  key={item.id || index}
+
+                  onClick={(e) => {
+                    if (
+                      !editorMode ||
+                      didDrag.current
+                    ) {
+                      return;
+                    }
+
+                    const sourceIndex =
+                      Number.isInteger(
+                        item.editorIndex
+                      )
+                        ? item.editorIndex
+                        : index;
+
+                    selectRegion(
+                      e,
+                      `amenity:${sourceIndex}` as ProjectEditorRegion
+                    );
+                  }}
+
+                  className={`
+                    shrink-0
+                    w-[82vw]
+                    sm:w-[50vw]
+                    md:w-[40vw]
+                    lg:w-[30vw]
+                    flex
+                    flex-col
+                    group
+                    select-none
+                    rounded-xl
+                    transition-all
+                    ${
+                      editorMode
+                        ? `
+                          pointer-events-auto
+                          cursor-pointer
+                          hover:ring-2
+                          hover:ring-white/60
+                          hover:ring-offset-4
+                          hover:ring-offset-[#132243]
+                        `
+                        : 'pointer-events-none'
+                    }
+
+                    ${
+                      selectedRegion ===
+                      `amenity:${
+                        Number.isInteger(
+                          item.editorIndex
+                        )
+                          ? item.editorIndex
+                          : index
+                      }`
+                        ? `
+                          ring-2
+                          ring-brand-gold
+                          ring-offset-4
+                          ring-offset-[#132243]
+                        `
+                        : ''
+                    }
+                  `}
+                >
                   <div className="relative h-[38vh] min-h-[240px] max-h-[380px] w-full overflow-hidden rounded-xl bg-gray-800 shadow-2xl pointer-events-auto">
                     <Image src={item.thumbnail || BLANK_IMAGE} alt={item.title} fill draggable="false" sizes="(max-width: 768px) 82vw, (max-width: 1024px) 40vw, 30vw" className="object-cover group-hover:scale-105 transition-transform duration-[1.5s] ease-out pointer-events-none select-none" />
                     <div className="absolute inset-0 bg-black/15 group-hover:bg-transparent transition-colors duration-500 pointer-events-none" />
@@ -1008,6 +1348,92 @@ const regionStyle = (region: ProjectEditorRegion) => {
                   </div>
                 </div>
               ))}
+
+              {editorMode &&
+                onAddAmenity && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+
+                      if (
+                        didDrag.current
+                      ) {
+                        return;
+                      }
+
+                      onAddAmenity();
+                    }}
+                    className="
+                      shrink-0
+                      w-[82vw]
+                      sm:w-[50vw]
+                      md:w-[40vw]
+                      lg:w-[30vw]
+                      min-h-[300px]
+                      rounded-xl
+                      border-2
+                      border-dashed
+                      border-white/20
+                      bg-white/[0.03]
+                      text-white/70
+                      hover:text-brand-gold
+                      hover:border-brand-gold/70
+                      hover:bg-white/[0.06]
+                      transition-all
+                      flex
+                      flex-col
+                      items-center
+                      justify-center
+                      gap-3
+                      cursor-pointer
+                      pointer-events-auto
+                    "
+                  >
+                    <span
+                      className="
+                        flex
+                        h-12 w-12
+                        items-center
+                        justify-center
+                        rounded-full
+                        border
+                        border-current
+                      "
+                    >
+                      <PlusCircle
+                        size={22}
+                      />
+                    </span>
+
+                    <span
+                      className="
+                        text-xs
+                        font-bold
+                        uppercase
+                        tracking-[0.2em]
+                      "
+                    >
+                      Add Amenity
+                    </span>
+
+                    <span
+                      className="
+                        max-w-[220px]
+                        text-center
+                        text-xs
+                        font-normal
+                        normal-case
+                        tracking-normal
+                        text-white/40
+                      "
+                    >
+                      Add a new amenity and edit it in the side panel.
+                    </span>
+                  </button>
+                )}
+
               <div className="w-[5vw] md:w-[10vw] shrink-0 pointer-events-none" />
             </div>
           </div>
@@ -1015,65 +1441,384 @@ const regionStyle = (region: ProjectEditorRegion) => {
       )}
 
       {/* --- ROOM BLUEPRINTS SECTION --- */}
-      {data.unit_layout?.length > 0 && (
-        <section id="blueprints" ref={blueprintSectionRef} className="relative w-full py-32 bg-transparent z-10">
+      {(
+        data.unit_layout?.length > 0 ||
+        editorMode
+      ) && (
+        <section
+          id="blueprints"
+          ref={blueprintSectionRef}
+          className={`
+            relative
+            w-full
+            py-32
+            bg-transparent
+            z-10
+            transition-all
+            ${
+              editorMode &&
+              selectedRegion ===
+                'unit-layouts'
+                ? 'ring-2 ring-inset ring-brand-gold'
+                : ''
+            }
+          `}
+        >
           <div className="max-w-[75rem] mx-auto px-6 md:px-12 relative">
-            <div className="mb-20 text-center">
+
+            {/* SECTION HEADING */}
+            <div
+              onClick={(e) =>
+                selectRegion(
+                  e,
+                  'unit-layouts'
+                )
+              }
+              className={`
+                relative
+                mb-20
+                text-center
+                rounded-sm
+                ${
+                  editorMode
+                    ? `
+                        pointer-events-auto
+                        cursor-pointer
+                        hover:ring-2
+                        hover:ring-brand-blue/30
+                      `
+                    : ''
+                }
+              `}
+            >
+              {editorMode &&
+                selectedRegion ===
+                  'unit-layouts' && (
+                  <span
+                    className="
+                      absolute
+                      -top-8
+                      left-1/2
+                      -translate-x-1/2
+                      z-30
+                      rounded-md
+                      bg-brand-gold
+                      px-3 py-1.5
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      tracking-wider
+                      text-brand-blue
+                      shadow-lg
+                    "
+                  >
+                    Unit Layouts
+                  </span>
+                )}
+
               <div className="text-xs tracking-widest uppercase text-brand-blue font-bold mb-4 flex items-center justify-center gap-4">
                 Room Blueprints
               </div>
+
               <h2 className="text-4xl md:text-5xl lg:text-7xl font-serif text-brand-blue leading-tight">
-                Design Your <span className="text-brand-gold">Sanctuary</span>
+                Design Your{' '}
+                <span className="text-brand-gold">
+                  Sanctuary
+                </span>
               </h2>
             </div>
 
-            {/* Grouped by Tower */}
-            {Object.entries(groupedLayouts).map(([towerName, plans]) => (
-              <div key={towerName} className="tower-group relative mb-32 last:mb-0">
-                
-                {/* Sticky Tower Header Pill */}
-                <div className="sticky top-20 md:top-24 z-20 pb-8 pt-2 flex justify-center pointer-events-none">
-                  <div className="inline-flex items-center gap-3 px-6 py-2.5 rounded-full bg-brand-blue backdrop-blur-md border border-brand-gold/40 shadow-xl pointer-events-auto">
-                    <span className="w-2 h-2 rounded-full bg-brand-gold animate-pulse" />
-                    <span className="text-xs md:text-sm uppercase tracking-[0.25em] font-serif text-white font-medium">
-                      {towerName}
-                    </span>
+            {/* EMPTY EDITOR STATE */}
+            {editorMode &&
+              groupedLayouts.length ===
+                0 && (
+                <div
+                  className="
+                    mb-16
+                    rounded-2xl
+                    border-2
+                    border-dashed
+                    border-brand-blue/20
+                    bg-white/70
+                    px-8 py-14
+                    text-center
+                    shadow-sm
+                  "
+                >
+                  <p className="text-lg font-serif text-brand-blue">
+                    No unit layouts yet
+                  </p>
+
+                  <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-gray-500">
+                    Add the first floorplan,
+                    then assign it to one of
+                    this project's towers.
+                  </p>
+
+                  {onAddLayout && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onAddLayout();
+                      }}
+                      className="
+                        mt-6
+                        inline-flex
+                        items-center
+                        justify-center
+                        rounded-xl
+                        bg-brand-blue
+                        px-5 py-3
+                        text-xs
+                        font-bold
+                        uppercase
+                        tracking-wider
+                        text-white
+                        shadow-md
+                        hover:bg-brand-gold
+                        hover:text-brand-blue
+                        transition-colors
+                      "
+                    >
+                      Add Unit Layout
+                    </button>
+                  )}
+                </div>
+              )}
+
+            {/* GROUPED BY TOWER */}
+            {groupedLayouts.map(
+              ({
+                towerName,
+                plans,
+              }) => (
+                <div
+                  key={towerName}
+                  className="
+                    tower-group
+                    relative
+                    mb-32
+                    last:mb-0
+                  "
+                >
+                  {/* STICKY TOWER HEADER */}
+                  <div className="sticky top-20 md:top-24 z-20 pb-8 pt-2 flex justify-center pointer-events-none">
+                    <div className="inline-flex items-center gap-3 px-6 py-2.5 rounded-full bg-brand-blue backdrop-blur-md border border-brand-gold/40 shadow-xl pointer-events-auto">
+                      <span className="w-2 h-2 rounded-full bg-brand-gold animate-pulse" />
+
+                      <span className="text-xs md:text-sm uppercase tracking-[0.25em] font-serif text-white font-medium">
+                        {towerName}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* STACKING CARDS */}
+                  <div className="relative">
+                    {plans.map(
+                      (
+                        plan: any,
+                        index: number
+                      ) => {
+                        const editorIndex =
+                          Number(
+                            plan.editorIndex
+                          );
+
+                        const region =
+                          Number.isInteger(
+                            editorIndex
+                          )
+                            ? (`unit-layout:${editorIndex}` as ProjectEditorRegion)
+                            : 'unit-layouts';
+
+                        const isSelected =
+                          editorMode &&
+                          selectedRegion ===
+                            region;
+
+                        return (
+                          <div
+                            key={
+                              plan.id ||
+                              `${towerName}-${index}`
+                            }
+                            onClick={(e) =>
+                              selectRegion(
+                                e,
+                                region
+                              )
+                            }
+                            className={`
+                              blueprint-card
+                              sticky
+                              top-[22vh]
+                              w-full
+                              min-h-[60vh]
+                              lg:h-[65vh]
+                              bg-white
+                              rounded-xl
+                              shadow-[0_-10px_40px_rgba(0,0,0,0.08)]
+                              border
+                              overflow-hidden
+                              flex
+                              flex-col
+                              lg:flex-row
+                              mb-12
+                              origin-top
+                              transition-all
+                              ${
+                                editorMode
+                                  ? `
+                                      pointer-events-auto
+                                      cursor-pointer
+                                      ${
+                                        isSelected
+                                          ? 'border-brand-gold ring-2 ring-brand-gold ring-offset-4 ring-offset-[#E7E7E7]'
+                                          : 'border-gray-100 hover:border-brand-gold/60 hover:shadow-xl'
+                                      }
+                                    `
+                                  : 'border-gray-100'
+                              }
+                            `}
+                            style={{
+                              zIndex:
+                                index + 1,
+                            }}
+                          >
+                            {editorMode &&
+                              isSelected && (
+                                <span
+                                  className="
+                                    absolute
+                                    top-4 left-4
+                                    z-30
+                                    rounded-md
+                                    bg-brand-gold
+                                    px-3 py-1.5
+                                    text-[10px]
+                                    font-bold
+                                    uppercase
+                                    tracking-wider
+                                    text-brand-blue
+                                    shadow-lg
+                                  "
+                                >
+                                  Unit Layout
+                                </span>
+                              )}
+
+                            <div
+                              className="w-full lg:w-2/5 text-white p-8 md:p-12 lg:p-16 flex flex-col justify-center border-b lg:border-b-0 lg:border-r border-white/10 transition-colors"
+                              style={{
+                                backgroundColor:
+                                  plan.bg_color ||
+                                  '#051431',
+                              }}
+                            >
+                              <div className="text-brand-gold font-mono text-sm mb-4">
+                                {String(
+                                  index + 1
+                                ).padStart(
+                                  2,
+                                  '0'
+                                )}
+                              </div>
+
+                              <h3 className="text-3xl md:text-4xl lg:text-5xl font-serif text-white mb-4">
+                                {plan.title}
+                              </h3>
+
+                              <p className="font-sans tracking-widest text-white/70 font-bold text-sm md:text-base mb-8 uppercase">
+                                {Number(
+                                  plan.min_sqm
+                                ) ===
+                                  Number(
+                                    plan.max_sqm
+                                  ) ||
+                                !plan.max_sqm
+                                  ? `± ${
+                                      plan.min_sqm ||
+                                      0
+                                    } SQM`
+                                  : `± ${
+                                      plan.min_sqm ||
+                                      0
+                                    } - ± ${
+                                      plan.max_sqm ||
+                                      0
+                                    } SQM`}
+                              </p>
+
+                              <p className="text-white/80 leading-relaxed text-sm md:text-base">
+                                {
+                                  plan.description
+                                }
+                              </p>
+                            </div>
+
+                            <div className="w-full lg:w-3/5 relative p-8 md:p-12 bg-white flex items-center justify-center group">
+                              <div className="relative w-full h-full min-h-[350px] lg:min-h-full transition-transform duration-700 ease-out group-hover:scale-105">
+                                <Image
+                                  src={
+                                    plan.thumbnail ||
+                                    BLANK_IMAGE
+                                  }
+                                  alt={
+                                    plan.title
+                                  }
+                                  fill
+                                  sizes="(max-width: 1024px) 100vw, 60vw"
+                                  className="object-contain drop-shadow-2xl"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+                    )}
                   </div>
                 </div>
+              )
+            )}
 
-                {/* Stacking Cards for this Tower */}
-                <div className="relative">
-                  {plans.map((plan: any, index: number) => (
-                    <div
-                      key={plan.id || index}
-                      className="blueprint-card sticky top-[22vh] w-full min-h-[60vh] lg:h-[65vh] bg-white rounded-xl shadow-[0_-10px_40px_rgba(0,0,0,0.08)] border border-gray-100 overflow-hidden flex flex-col lg:flex-row mb-12 origin-top"
-                      style={{ zIndex: index + 1 }}
-                    >
-                      <div 
-                        className="w-full lg:w-2/5 text-white p-8 md:p-12 lg:p-16 flex flex-col justify-center border-b lg:border-b-0 lg:border-r border-white/10 transition-colors"
-                        style={{ backgroundColor: plan.bg_color || '#051431' }}
-                      >
-                        <div className="text-brand-gold font-mono text-sm mb-4">0{index + 1}</div>
-                        <h3 className="text-3xl md:text-4xl lg:text-5xl font-serif text-white mb-4">{plan.title}</h3>
-                        <p className="font-sans tracking-widest text-white/70 font-bold text-sm md:text-base mb-8 uppercase">
-                          {Number(plan.min_sqm) === Number(plan.max_sqm) || !plan.max_sqm
-                            ? `± ${plan.min_sqm || 0} SQM`
-                            : `± ${plan.min_sqm || 0} - ± ${plan.max_sqm || 0} SQM`}
-                        </p>
-                        <p className="text-white/80 leading-relaxed text-sm md:text-base">{plan.description}</p>
-                      </div>
-
-                      <div className="w-full lg:w-3/5 relative p-8 md:p-12 bg-white flex items-center justify-center group">
-                        <div className="relative w-full h-full min-h-[350px] lg:min-h-full transition-transform duration-700 ease-out group-hover:scale-105">
-                          <Image src={plan.thumbnail || BLANK_IMAGE} alt={plan.title} fill sizes="(max-width: 1024px) 100vw, 60vw" className="object-contain drop-shadow-2xl" />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+            {/* ADD ANOTHER LAYOUT */}
+            {editorMode &&
+              groupedLayouts.length > 0 &&
+              onAddLayout && (
+                <div className="mt-10 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onAddLayout();
+                    }}
+                    className="
+                      inline-flex
+                      items-center
+                      justify-center
+                      rounded-xl
+                      border
+                      border-dashed
+                      border-brand-blue/30
+                      bg-white/70
+                      px-6 py-3
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      tracking-wider
+                      text-brand-blue
+                      hover:border-brand-gold
+                      hover:bg-brand-gold/10
+                      transition-colors
+                    "
+                  >
+                    + Add Unit Layout
+                  </button>
                 </div>
-
-              </div>
-            ))}
+              )}
           </div>
         </section>
       )}
