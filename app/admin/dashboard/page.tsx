@@ -8,7 +8,7 @@ import { z } from 'zod';
 import {
   LogOut, Building2, Landmark, LayoutDashboard, Search, Filter,
   Edit2, Trash2, Plus, Loader2, Eye, EyeOff, History, Move3d,
-  Bell, CheckCircle2, X, Mail, MailOpen, CornerUpLeft, Menu, UserCircle2, Megaphone, Settings, ShieldAlert, AlertCircle, BookOpen, Upload, ChevronDown
+  Bell, CheckCircle2, X, Mail, MailOpen, CornerUpLeft, Menu, UserCircle2, Megaphone, Settings, ShieldAlert, AlertCircle, BookOpen, Upload, ChevronDown, GripVertical
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { toggleActiveStatus, archiveRecord } from '@/app/actions/updates';
@@ -1671,13 +1671,28 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingData, setEditingData] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isReordering, setIsReordering] = useState(false);
+  const [draggedId, setDraggedId] = useState<number | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const [itemToArchive, setItemToArchive] = useState<{ id: number, nav_title: string } | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+
+  const showSuccess = (message: string) => {
+    setErrorMessage('');
+    setSuccessMessage(message);
+    window.setTimeout(() => setSuccessMessage(''), 2400);
+  };
+
+  const showError = (message: string) => {
+    setSuccessMessage('');
+    setErrorMessage(message);
+    window.setTimeout(() => setErrorMessage(''), 4000);
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -1703,7 +1718,12 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
 
   const handleImageUpload = async (file: File) => {
     if (!file.type.startsWith('image/')) {
-      alert('Please upload a valid image file (PNG, JPG, etc).');
+      showError('Please upload a valid image file such as PNG, JPG, or WEBP.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showError('Navigation images must be 5 MB or smaller.');
       return;
     }
 
@@ -1723,130 +1743,631 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
         .from('images')
         .getPublicUrl(filePath);
 
-      setEditingData({ ...editingData, nav_image_url: publicUrl });
-
+      setEditingData((current: any) => ({
+        ...current,
+        nav_image_url: publicUrl,
+      }));
     } catch (error: any) {
-      alert(`Error uploading image: ${error.message}`);
+      showError(`Image upload failed: ${error.message}`);
     } finally {
       setIsUploading(false);
     }
   };
 
   useEffect(() => {
-    const fetchNavProjects = async () => { setIsLoading(true); const { data } = await supabase.from('navbar_projects').select('*, project_table(title)').order('display_order', { ascending: true }); if (data) setNavProjects(data); setIsLoading(false); };
+    const fetchNavProjects = async () => {
+      setIsLoading(true);
+      setErrorMessage('');
+
+      const { data, error } = await supabase
+        .from('navbar_projects')
+        .select('*, project_table(title)')
+        .order('display_order', { ascending: true });
+
+      if (error) {
+        showError(`Unable to load navigation items: ${error.message}`);
+      } else if (data) {
+        setNavProjects(data);
+      }
+
+      setIsLoading(false);
+    };
+
     fetchNavProjects();
   }, [supabase]);
 
-  const handleEditClick = (item: any) => { setEditingData(item); setEditModalOpen(true); };
+  const handleEditClick = (item: any) => {
+    setEditingData({ ...item });
+    setEditModalOpen(true);
+  };
 
   const handleSave = async () => {
+    if (!editingData) return;
+
+    const trimmedTitle = String(editingData.nav_title || '').trim();
+    if (!trimmedTitle) {
+      showError('Navigation title is required.');
+      return;
+    }
+
     setIsSaving(true);
     try {
-      await supabase.from('navbar_projects').update({ nav_title: editingData.nav_title, tagline: editingData.tagline, nav_image_url: editingData.nav_image_url, display_order: parseInt(editingData.display_order) }).eq('id', editingData.id);
-      await createAuditLogAction('EDIT', 'Navbar Settings', editingData.nav_title, 'Updated navbar project details.');
-      setSuccessMessage('Updated successfully!');
+      const { error } = await supabase
+        .from('navbar_projects')
+        .update({
+          nav_title: trimmedTitle,
+          tagline: String(editingData.tagline || '').trim(),
+          nav_image_url: editingData.nav_image_url || null,
+          is_active: Boolean(editingData.is_active),
+        })
+        .eq('id', editingData.id);
+
+      if (error) throw error;
+
+      await createAuditLogAction(
+        'EDIT',
+        'Navigation Setup',
+        trimmedTitle,
+        'Updated navigation title, tagline, image, or visibility.'
+      );
+
+      setNavProjects(prev =>
+        prev.map(item =>
+          item.id === editingData.id
+            ? {
+                ...item,
+                nav_title: trimmedTitle,
+                tagline: String(editingData.tagline || '').trim(),
+                nav_image_url: editingData.nav_image_url || null,
+                is_active: Boolean(editingData.is_active),
+              }
+            : item
+        )
+      );
+
       setEditModalOpen(false);
-      setNavProjects(prev => prev.map(p => p.id === editingData.id ? { ...p, nav_image_url: editingData.nav_image_url, nav_title: editingData.nav_title, tagline: editingData.tagline, display_order: parseInt(editingData.display_order) } : p).sort((a,b) => a.display_order - b.display_order));
-      setTimeout(() => setSuccessMessage(''), 2500);
-    } catch (error: any) { alert(`Failed to update: ${error.message}`); } finally { setIsSaving(false); }
+      setEditingData(null);
+      showSuccess('Navigation item saved.');
+    } catch (error: any) {
+      showError(`Failed to save navigation item: ${error.message}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleToggleActive = async (id: number, currentStatus: boolean, title: string) => {
+    if (!checkPerm('edit_project', 'can_edit')) return;
+
     try {
       await toggleActiveStatus('navbar_projects', id, currentStatus);
-      await createAuditLogAction('EDIT', 'Navbar Setup', title, `Changed active status.`);
-      setNavProjects(prev => prev.map(p => p.id === id ? { ...p, is_active: !currentStatus } : p));
-    } catch (error: any) { alert(`Failed to toggle: ${error.message}`); }
+      await createAuditLogAction(
+        'EDIT',
+        'Navigation Setup',
+        title,
+        `Changed navigation visibility to ${currentStatus ? 'Hidden' : 'Visible'}.`
+      );
+
+      setNavProjects(prev =>
+        prev.map(item =>
+          item.id === id
+            ? { ...item, is_active: !currentStatus }
+            : item
+        )
+      );
+
+      showSuccess(`${title} is now ${currentStatus ? 'hidden' : 'visible'} in navigation.`);
+    } catch (error: any) {
+      showError(`Failed to update visibility: ${error.message}`);
+    }
   };
 
-  // ✅ THIS MISSING FUNCTION WAS CAUSING YOUR ERRORS!
+  const persistNavigationOrder = async (items: any[]) => {
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index];
+      const nextOrder = index + 1;
+
+      const { error } = await supabase
+        .from('navbar_projects')
+        .update({ display_order: nextOrder })
+        .eq('id', item.id);
+
+      if (error) throw error;
+    }
+  };
+
+  const handleDropOnItem = async (targetId: number) => {
+    if (
+      draggedId === null ||
+      draggedId === targetId ||
+      isReordering ||
+      !checkPerm('edit_project', 'can_edit')
+    ) {
+      setDraggedId(null);
+      return;
+    }
+
+    const previous = [...navProjects];
+    const fromIndex = previous.findIndex(item => item.id === draggedId);
+    const toIndex = previous.findIndex(item => item.id === targetId);
+
+    if (fromIndex < 0 || toIndex < 0) {
+      setDraggedId(null);
+      return;
+    }
+
+    const reordered = [...previous];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+
+    const normalized = reordered.map((item, index) => ({
+      ...item,
+      display_order: index + 1,
+    }));
+
+    setNavProjects(normalized);
+    setDraggedId(null);
+    setIsReordering(true);
+
+    try {
+      await persistNavigationOrder(normalized);
+      await createAuditLogAction(
+        'EDIT',
+        'Navigation Setup',
+        'Project Navigation',
+        'Reordered projects in the website navigation.'
+      );
+      showSuccess('Navigation order saved.');
+    } catch (error: any) {
+      setNavProjects(previous);
+      showError(`Failed to save navigation order: ${error.message}`);
+    } finally {
+      setIsReordering(false);
+    }
+  };
+
   const handleArchiveClick = (id: number, nav_title: string) => {
+    setEditModalOpen(false);
+    setEditingData(null);
     setItemToArchive({ id, nav_title });
   };
 
   const confirmArchive = async () => {
     if (!itemToArchive) return;
+
     setIsArchiving(true);
     try {
       await deleteRecordAction('navbar_projects', itemToArchive.id);
-      await createAuditLogAction('DELETE', 'Navbar Setup', itemToArchive.nav_title, 'Deleted navbar project item.');
-      setNavProjects(prev => prev.filter(p => p.id !== itemToArchive.id));
+      await createAuditLogAction(
+        'DELETE',
+        'Navigation Setup',
+        itemToArchive.nav_title,
+        'Removed project item from website navigation. The project itself was not deleted.'
+      );
+
+      const remaining = navProjects
+        .filter(item => item.id !== itemToArchive.id)
+        .map((item, index) => ({ ...item, display_order: index + 1 }));
+
+      setNavProjects(remaining);
       setItemToArchive(null);
-      setSuccessMessage(`Deleted successfully.`);
-      setTimeout(() => setSuccessMessage(''), 2500);
-    } catch (error: any) { alert(`Failed to delete: ${error.message}`); } finally { setIsArchiving(false); }
+
+      try {
+        await persistNavigationOrder(remaining);
+      } catch (reorderError) {
+        console.warn('Navigation item deleted, but order cleanup failed:', reorderError);
+      }
+
+      showSuccess('Navigation item removed.');
+    } catch (error: any) {
+      showError(`Failed to remove navigation item: ${error.message}`);
+    } finally {
+      setIsArchiving(false);
+    }
   };
 
-  if (isLoading) return <div className="flex justify-center items-center h-64"><Loader2 className="animate-spin text-brand-blue" size={40} /></div>;
+  const visibleCount = navProjects.filter(item => item.is_active).length;
+  const hiddenCount = navProjects.length - visibleCount;
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="animate-spin text-brand-blue" size={40} />
+      </div>
+    );
+  }
 
   return (
-    <div className="animate-in fade-in duration-300">
+    <div className="animate-in fade-in duration-300 max-w-6xl mx-auto">
+      {successMessage && (
+        <div className="fixed top-24 right-8 z-[120] flex items-center gap-2 rounded-xl border border-green-200 bg-white px-4 py-3 shadow-xl">
+          <CheckCircle2 size={17} className="text-green-500" />
+          <span className="text-xs font-semibold text-brand-blue">{successMessage}</span>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="fixed top-24 right-8 z-[120] flex max-w-md items-start gap-2 rounded-xl border border-red-200 bg-white px-4 py-3 shadow-xl">
+          <AlertCircle size={17} className="mt-0.5 shrink-0 text-red-500" />
+          <span className="text-xs font-semibold leading-relaxed text-red-600">{errorMessage}</span>
+        </div>
+      )}
+
       {itemToArchive && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm p-4">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 max-w-sm w-full"><AlertCircle size={40} className="text-red-500 mb-2"/>
-            <h2 className="text-2xl font-serif text-brand-blue font-bold">Delete Item?</h2>
-            <div className="flex gap-3 w-full mt-4">
-              <button onClick={() => setItemToArchive(null)} disabled={isArchiving} className="flex-1 py-3 bg-gray-100 font-bold rounded-xl text-xs uppercase">Cancel</button>
-              <button onClick={confirmArchive} disabled={isArchiving} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl text-xs uppercase flex justify-center">{isArchiving ? <Loader2 size={16} className="animate-spin" /> : 'Delete'}</button>
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-7 shadow-2xl">
+            <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-red-500">
+              <Trash2 size={24} />
+            </div>
+            <h2 className="text-center text-2xl font-serif font-bold text-brand-blue">Remove from navigation?</h2>
+            <p className="mt-3 text-center text-sm leading-relaxed text-gray-500">
+              <strong className="text-brand-blue">{itemToArchive.nav_title}</strong> will be removed from the website navigation setup. The actual project and its project page will not be deleted.
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setItemToArchive(null)}
+                disabled={isArchiving}
+                className="flex-1 rounded-xl bg-gray-100 px-4 py-3 text-xs font-bold uppercase tracking-wider text-gray-600 hover:bg-gray-200 disabled:opacity-60"
+              >
+                Keep Item
+              </button>
+              <button
+                type="button"
+                onClick={confirmArchive}
+                disabled={isArchiving}
+                className="flex-1 rounded-xl bg-red-600 px-4 py-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-red-700 disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {isArchiving ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                Remove
+              </button>
             </div>
           </div>
         </div>
       )}
-      {successMessage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm p-4">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-3 max-w-sm w-full"><CheckCircle2 size={40} className="text-green-500 mb-2"/>
-            <h2 className="text-2xl font-serif text-brand-blue font-bold">Success!</h2><p className="text-gray-600 text-sm">{successMessage}</p>
-          </div>
-        </div>
-      )}
+
       {editModalOpen && editingData && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg flex flex-col">
-            <div className="px-6 py-4 bg-[#f8f9fa] border-b border-gray-100 flex justify-between items-center"><h3 className="font-bold text-brand-blue tracking-widest uppercase text-sm">Edit Navbar Details</h3><button onClick={() => setEditModalOpen(false)}><X size={20} /></button></div>
-            <div className="p-6 space-y-4">
-              <div><label className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1 block">Display Title</label><input type="text" value={editingData.nav_title} onChange={(e) => setEditingData({ ...editingData, nav_title: e.target.value })} className="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm" /></div>
-              <div><label className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1 block">Tagline</label><textarea rows={2} value={editingData.tagline || ''} onChange={(e) => setEditingData({ ...editingData, tagline: e.target.value })} className="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm" /></div>
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 bg-[#f8f9fa] px-6 py-4">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1 block">Project Image</label>
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-brand-gold">Navigation Item</p>
+                <h3 className="mt-1 text-lg font-serif font-bold text-brand-blue">Edit {editingData.nav_title || 'Project'}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditModalOpen(false);
+                  setEditingData(null);
+                }}
+                className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-white hover:text-brand-blue"
+                aria-label="Close editor"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto p-6 space-y-5">
+              <div>
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-gray-500">Navigation Title</label>
+                <input
+                  type="text"
+                  value={editingData.nav_title || ''}
+                  onChange={(e) => setEditingData({ ...editingData, nav_title: e.target.value })}
+                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-brand-blue outline-none transition-colors focus:border-brand-gold"
+                  placeholder="Project name shown in navigation"
+                />
+                <p className="mt-1.5 text-[10px] leading-relaxed text-gray-400">
+                  This is the label visitors see in the website navigation. It can differ from the project&apos;s internal title.
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-gray-500">Tagline</label>
+                <textarea
+                  rows={3}
+                  value={editingData.tagline || ''}
+                  onChange={(e) => setEditingData({ ...editingData, tagline: e.target.value })}
+                  className="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm leading-relaxed text-brand-blue outline-none transition-colors focus:border-brand-gold"
+                  placeholder="Short supporting line shown with the project"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-gray-500">Navigation Image</label>
                 <div
-                  className={`relative border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 ${isDragging ? 'border-brand-gold bg-brand-gold/5' : 'border-gray-200 hover:border-brand-blue/50 hover:bg-gray-50'}`}
-                  onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}
+                  className={`relative flex min-h-52 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed text-center transition-all duration-200 ${
+                    isDragging
+                      ? 'border-brand-gold bg-brand-gold/5'
+                      : 'border-gray-200 hover:border-brand-blue/40 hover:bg-gray-50'
+                  }`}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
                 >
-                  <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*" className="hidden" />
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    className="hidden"
+                  />
+
                   {isUploading ? (
-                    <div className="flex flex-col items-center gap-3 py-4"><Loader2 className="animate-spin text-brand-blue" size={28} /><span className="text-xs font-bold tracking-widest uppercase text-brand-blue">Uploading...</span></div>
+                    <div className="flex flex-col items-center gap-3 py-8">
+                      <Loader2 className="animate-spin text-brand-blue" size={30} />
+                      <span className="text-xs font-bold uppercase tracking-widest text-brand-blue">Uploading image...</span>
+                    </div>
                   ) : editingData.nav_image_url ? (
-                    <div className="flex flex-col items-center gap-3 w-full"><img src={editingData.nav_image_url} alt="Preview" className="h-28 w-auto object-contain rounded-lg shadow-sm border border-gray-100" /><span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-brand-gold transition-colors">Click or drag to replace image</span></div>
+                    <div className="relative h-52 w-full bg-gray-100">
+                      <div className="absolute inset-0 flex items-center justify-center text-gray-300">
+                        <Building2 size={34} />
+                      </div>
+                      <img
+                        src={editingData.nav_image_url}
+                        alt={`${editingData.nav_title || 'Project'} navigation preview`}
+                        className="relative h-full w-full object-cover"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-4 pb-4 pt-12 text-left">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-white">Click or drag to replace image</span>
+                      </div>
+                    </div>
                   ) : (
-                    <div className="flex flex-col items-center gap-2 text-gray-400 py-2"><div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-2 group-hover:bg-brand-blue group-hover:text-white transition-colors"><Upload size={20} className="text-brand-blue" /></div><span className="text-sm font-bold text-brand-blue">Click to upload or drag and drop</span><span className="text-[10px] uppercase tracking-widest">SVG, PNG, JPG or WEBP (max. 5MB)</span></div>
+                    <div className="flex flex-col items-center gap-2 px-5 py-8 text-gray-400">
+                      <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-full bg-brand-blue/5 text-brand-blue">
+                        <Upload size={20} />
+                      </div>
+                      <span className="text-sm font-bold text-brand-blue">Add navigation image</span>
+                      <span className="text-[10px] uppercase tracking-widest">PNG, JPG, WEBP or SVG · max 5 MB</span>
+                    </div>
                   )}
                 </div>
               </div>
-              <div><label className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1 block">Order</label><input type="number" value={editingData.display_order} onChange={(e) => setEditingData({ ...editingData, display_order: e.target.value })} className="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm" /></div>
+
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-bold text-brand-blue">Visible in website navigation</p>
+                    <p className="mt-1 text-[10px] leading-relaxed text-gray-400">Hide this item without deleting its configuration.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditingData({ ...editingData, is_active: !editingData.is_active })}
+                    className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+                      editingData.is_active ? 'bg-green-500' : 'bg-gray-300'
+                    }`}
+                    aria-pressed={Boolean(editingData.is_active)}
+                    aria-label="Toggle navigation visibility"
+                  >
+                    <span
+                      className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-all ${
+                        editingData.is_active ? 'left-6' : 'left-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue/60">Linked Project</p>
+                <p className="mt-1 text-sm font-semibold text-brand-blue">{editingData.project_table?.title || 'Project unavailable'}</p>
+              </div>
             </div>
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3"><button onClick={() => setEditModalOpen(false)} className="px-5 py-2.5 text-xs font-bold text-gray-600 bg-gray-200 rounded-xl uppercase">Cancel</button><button onClick={handleSave} disabled={isSaving} className="px-5 py-2.5 text-xs font-bold text-white bg-brand-blue rounded-xl uppercase flex gap-2">{isSaving ? <Loader2 size={14} className="animate-spin" /> : 'Save Changes'}</button></div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-gray-100 bg-gray-50 px-6 py-4">
+              <div>
+                {checkPerm('edit_project', 'can_delete') && (
+                  <button
+                    type="button"
+                    onClick={() => handleArchiveClick(editingData.id, editingData.nav_title)}
+                    className="inline-flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold text-red-500 transition-colors hover:bg-red-50"
+                  >
+                    <Trash2 size={14} />
+                    Remove from Navigation
+                  </button>
+                )}
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditModalOpen(false);
+                    setEditingData(null);
+                  }}
+                  className="rounded-xl bg-gray-200 px-5 py-2.5 text-xs font-bold uppercase text-gray-600 transition-colors hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={isSaving || isUploading}
+                  className="flex min-w-32 items-center justify-center gap-2 rounded-xl bg-brand-blue px-5 py-2.5 text-xs font-bold uppercase text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSaving ? <Loader2 size={14} className="animate-spin" /> : null}
+                  {isSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="w-full overflow-x-auto pb-4"><div className="min-w-[600px]">
-        <div className="grid grid-cols-12 gap-4 py-4 border-y border-gray-200 text-[10px] font-bold tracking-widest uppercase text-brand-blue/60"><div className="col-span-1">Order</div><div className="col-span-3">Title</div><div className="col-span-4">Tagline</div><div className="col-span-2">Status</div><div className="col-span-2 text-right">Actions</div></div>
-        <div className="flex flex-col">
-          {navProjects.map((item) => (
-            <div key={item.id} className="grid grid-cols-12 gap-4 py-4 items-center border-b border-gray-100 hover:bg-gray-50/50 group">
-              <div className="col-span-1 font-bold text-brand-blue text-sm pl-2">{item.display_order}</div>
-              <div className="col-span-3 flex items-center gap-3"><div className="w-8 h-8 rounded bg-gray-200 overflow-hidden"><img src={item.nav_image_url || 'https://via.placeholder.com/150'} alt="" className="w-full h-full object-cover" /></div><span className="font-bold text-sm text-brand-blue">{item.nav_title}</span></div>
-              <div className="col-span-4 text-xs text-gray-500 pr-4">{item.tagline || '—'}</div>
-              <div className="col-span-2"><span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1.5 rounded-md ${item.is_active ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-500'}`}>{item.is_active ? 'Visible' : 'Hidden'}</span></div>
-              <div className="col-span-2 flex justify-end gap-2 opacity-0 group-hover:opacity-100">
-                {checkPerm('edit_project', 'can_edit') && <button onClick={() => handleToggleActive(item.id, item.is_active, item.nav_title)} className={`p-2 bg-white border rounded-lg ${item.is_active ? 'border-green-200 text-green-600' : 'border-gray-200 text-gray-400'}`}>{item.is_active ? <Eye size={14} /> : <EyeOff size={14} />}</button>}
-                {checkPerm('edit_project', 'can_edit') && <button onClick={() => handleEditClick(item)} className="p-2 bg-white border border-gray-200 text-brand-blue rounded-lg"><Edit2 size={14} /></button>}
-                {checkPerm('edit_project', 'can_delete') && <button onClick={() => handleArchiveClick(item.id, item.nav_title)} className="p-2 bg-white border border-gray-200 text-red-500 rounded-lg"><Trash2 size={14} /></button>}
-              </div>
-            </div>
-          ))}
+      <div className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-gold">Projects · Navigation</p>
+          <h2 className="mt-1 text-2xl font-serif font-bold text-brand-blue">Website Navigation Order</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
+            Arrange how projects appear in the website navigation. Drag cards to change their order, toggle visibility directly, and edit the title, tagline, or image when needed.
+          </p>
         </div>
-      </div></div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+            {navProjects.length} Items
+          </span>
+          <span className="rounded-full border border-green-100 bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-green-600">
+            {visibleCount} Visible
+          </span>
+          {hiddenCount > 0 && (
+            <span className="rounded-full border border-gray-200 bg-gray-100 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+              {hiddenCount} Hidden
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-gray-200 bg-white p-3 shadow-sm sm:p-4">
+        <div className="mb-3 flex items-center justify-between px-2 py-1">
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+            <GripVertical size={14} />
+            Drag to reorder
+          </div>
+          {isReordering && (
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-brand-blue">
+              <Loader2 size={13} className="animate-spin" />
+              Saving order
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          {navProjects.length === 0 ? (
+            <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 px-6 text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-blue/5 text-brand-blue/50">
+                <Building2 size={24} />
+              </div>
+              <h3 className="font-serif text-lg font-bold text-brand-blue">No navigation projects configured</h3>
+              <p className="mt-2 max-w-md text-sm leading-relaxed text-gray-400">
+                Navigation entries will appear here once they are connected to projects.
+              </p>
+            </div>
+          ) : (
+            navProjects.map((item, index) => {
+              const canEdit = checkPerm('edit_project', 'can_edit');
+              const isBeingDragged = draggedId === item.id;
+
+              return (
+                <div
+                  key={item.id}
+                  draggable={canEdit && !isReordering}
+                  onDragStart={() => setDraggedId(item.id)}
+                  onDragEnd={() => setDraggedId(null)}
+                  onDragOver={(event) => {
+                    if (canEdit) event.preventDefault();
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    handleDropOnItem(item.id);
+                  }}
+                  className={`group grid grid-cols-[auto_1fr] gap-3 rounded-2xl border px-3 py-3 transition-all sm:grid-cols-[auto_80px_1fr_auto] sm:items-center sm:gap-4 sm:px-4 ${
+                    isBeingDragged
+                      ? 'border-brand-gold bg-brand-gold/5 opacity-60'
+                      : 'border-gray-100 bg-[#fbfbfc] hover:border-brand-blue/15 hover:bg-white hover:shadow-sm'
+                  }`}
+                >
+                  <div className="row-span-2 flex items-center gap-2 sm:row-span-1">
+                    <button
+                      type="button"
+                      className={`flex h-10 w-8 items-center justify-center rounded-lg text-gray-300 transition-colors ${
+                        canEdit ? 'cursor-grab hover:bg-white hover:text-brand-gold active:cursor-grabbing' : 'cursor-default'
+                      }`}
+                      aria-label={`Drag ${item.nav_title} to reorder`}
+                      tabIndex={-1}
+                    >
+                      <GripVertical size={18} />
+                    </button>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue text-[11px] font-bold text-white shadow-sm">
+                      {index + 1}
+                    </div>
+                  </div>
+
+                  <div className="relative hidden h-16 w-20 overflow-hidden rounded-xl bg-gray-100 sm:block">
+                    <div className="absolute inset-0 flex items-center justify-center text-gray-300">
+                      <Building2 size={20} />
+                    </div>
+                    {item.nav_image_url && (
+                      <img
+                        src={item.nav_image_url}
+                        alt=""
+                        className="relative h-full w-full object-cover"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => canEdit && handleEditClick(item)}
+                    className={`min-w-0 text-left ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <h3 className="truncate text-sm font-bold text-brand-blue transition-colors group-hover:text-brand-gold sm:text-base">
+                        {item.nav_title || item.project_table?.title || 'Untitled Project'}
+                      </h3>
+                      {!item.is_active && (
+                        <span className="shrink-0 rounded-full bg-gray-200 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gray-500">
+                          Hidden
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-gray-500 sm:text-sm">
+                      {item.tagline || 'No tagline added yet.'}
+                    </p>
+                    <p className="mt-1.5 text-[10px] font-medium text-gray-400">
+                      Linked to {item.project_table?.title || 'project unavailable'}
+                    </p>
+                  </button>
+
+                  <div className="col-start-2 flex items-center justify-between gap-3 sm:col-start-auto sm:justify-end">
+                    <div className="flex items-center gap-2">
+                      <span className={`hidden text-[10px] font-bold uppercase tracking-wider md:inline ${item.is_active ? 'text-green-600' : 'text-gray-400'}`}>
+                        {item.is_active ? 'Visible' : 'Hidden'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleActive(item.id, Boolean(item.is_active), item.nav_title)}
+                        disabled={!canEdit}
+                        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                          item.is_active ? 'bg-green-500' : 'bg-gray-300'
+                        }`}
+                        aria-pressed={Boolean(item.is_active)}
+                        aria-label={`${item.is_active ? 'Hide' : 'Show'} ${item.nav_title} in navigation`}
+                      >
+                        <span
+                          className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-all ${
+                            item.is_active ? 'left-6' : 'left-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => handleEditClick(item)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-brand-blue transition-all hover:border-brand-gold hover:text-brand-gold"
+                      >
+                        <Edit2 size={13} />
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue/60">Ordering tip</p>
+        <p className="mt-1 text-xs leading-relaxed text-gray-500">
+          The number is managed automatically. Drag a project to a new position instead of typing an order value.
+        </p>
+      </div>
     </div>
   );
 }
@@ -2093,6 +2614,7 @@ const handleSaveSectionChanges = async () => {
       'News & Updates': 'News & Updates',
       Promotions: 'Promotions',
       'Navbar Setup': 'Navbar Setup',
+      'Navigation Setup': 'Navbar Setup',
       Modules: 'Home',
     };
 
@@ -3304,6 +3826,8 @@ const contentMenuItems = allowedMenuItems.filter(
                 ? 'Dashboard'
                 : activeTab === 'our story'
                 ? 'Our Story'
+                : activeTab === 'Navbar Setup'
+                ? 'Navigation Setup'
                 : activeTab}
             </h1>
             {activeTab === 'Projects' && checkPerm('edit_project', 'can_create') && <button onClick={() => router.push('/admin/projects')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Project</button>}

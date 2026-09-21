@@ -882,69 +882,362 @@ for (
         }
 
 // 7. Map Markers
-if (finalData.map_latitude && finalData.map_longitude) {
-      await supabaseAdmin.from('parent_marker').upsert(
-        {
-          project_id: targetProjectId,
-          latitude: finalData.map_latitude,
-          longitude: finalData.map_longitude,
-        },
-        { onConflict: 'project_id' }
-      );
+    const mapLatitude =
+      typeof finalData.map_latitude === 'string'
+        ? finalData.map_latitude.trim()
+        : '';
+
+    const mapLongitude =
+      typeof finalData.map_longitude === 'string'
+        ? finalData.map_longitude.trim()
+        : '';
+
+    if (mapLatitude && mapLongitude) {
+      const { error: parentMarkerError } =
+        await supabaseAdmin
+          .from('parent_marker')
+          .upsert(
+            {
+              project_id: targetProjectId,
+              latitude: mapLatitude,
+              longitude: mapLongitude,
+            },
+            { onConflict: 'project_id' }
+          );
+
+      if (parentMarkerError) {
+        throw new Error(
+          `Project map location error: ${parentMarkerError.message}`
+        );
+      }
+    } else {
+      const { error: clearParentMarkerError } =
+        await supabaseAdmin
+          .from('parent_marker')
+          .delete()
+          .eq('project_id', targetProjectId);
+
+      if (clearParentMarkerError) {
+        throw new Error(
+          `Project map location clear error: ${clearParentMarkerError.message}`
+        );
+      }
     }
 
-    const { data: oldMarkers } = await supabaseAdmin
-      .from('child_marker_table')
-      .select('id')
-      .eq('project_id', targetProjectId);
-
-    if (oldMarkers && oldMarkers.length > 0) {
-      const oldIds = oldMarkers.map((marker: any) => marker.id);
-
-      await supabaseAdmin
-        .from('marker_type_table')
-        .delete()
-        .in('child_marker_id', oldIds);
-
-      await supabaseAdmin
-        .from('child_marker_table')
-        .delete()
-        .in('id', oldIds);
-    }
-
-    const childMarkers = Array.isArray(finalData.child_markers)
+    const childMarkers = Array.isArray(
+      finalData.child_markers
+    )
       ? finalData.child_markers
       : [];
 
-    if (childMarkers.length > 0) {
-      for (const marker of childMarkers) {
-        const { data: newMarker, error: markerErr } = await supabaseAdmin
+    const {
+      data: oldMarkers,
+      error: oldMarkersError,
+    } = await supabaseAdmin
+      .from('child_marker_table')
+      .select(
+        'id, thumbnail, marker_type_table(id, icon, name)'
+      )
+      .eq('project_id', targetProjectId);
+
+    if (oldMarkersError) {
+      throw new Error(
+        `Landmark fetch error: ${oldMarkersError.message}`
+      );
+    }
+
+    const existingMarkerIds = new Set(
+      (oldMarkers || []).map(
+        (marker: any) => Number(marker.id)
+      )
+    );
+
+    const retainedMarkerIds =
+      new Set<number>();
+
+    const buildMarkerValues = (
+      marker: any
+    ) => ({
+      interest_name:
+        typeof marker.interest_name ===
+        'string'
+          ? marker.interest_name.trim()
+          : 'Landmark',
+
+      address:
+        typeof marker.address === 'string'
+          ? marker.address.trim()
+          : '',
+
+      phrase:
+        typeof marker.phrase === 'string'
+          ? marker.phrase.trim()
+          : '',
+
+      distance_km:
+        marker.distance_km || null,
+
+      distance_drive:
+        marker.distance_drive || null,
+
+      distance_walk:
+        marker.distance_walk || null,
+
+      latitude:
+        marker.latitude || null,
+
+      longitude:
+        marker.longitude || null,
+
+      thumbnail:
+        marker.thumbnail || '',
+    });
+
+    for (const marker of childMarkers) {
+      const parsedId =
+        marker.id !== undefined &&
+        marker.id !== null &&
+        marker.id !== ''
+          ? Number(marker.id)
+          : null;
+
+      const isExistingMarker =
+        parsedId !== null &&
+        Number.isInteger(parsedId) &&
+        existingMarkerIds.has(parsedId);
+
+      const markerValues =
+        buildMarkerValues(marker);
+
+      let savedMarkerId: number;
+
+      if (isExistingMarker) {
+        const {
+          data: updatedMarker,
+          error: updateMarkerError,
+        } = await supabaseAdmin
+          .from('child_marker_table')
+          .update(markerValues)
+          .eq('project_id', targetProjectId)
+          .eq('id', parsedId)
+          .select('id')
+          .single();
+
+        if (updateMarkerError) {
+          throw new Error(
+            `Landmark update error (${parsedId}): ${updateMarkerError.message}`
+          );
+        }
+
+        savedMarkerId =
+          Number(updatedMarker.id);
+
+        retainedMarkerIds.add(
+          savedMarkerId
+        );
+      } else {
+        const {
+          data: insertedMarker,
+          error: insertMarkerError,
+        } = await supabaseAdmin
           .from('child_marker_table')
           .insert({
-            project_id: targetProjectId,
-            interest_name: marker.interest_name || 'Landmark',
-            address: marker.address || '',
-            phrase: marker.phrase || '',
-            distance_km: marker.distance_km || null,
-            distance_drive: marker.distance_drive || null,
-            distance_walk: marker.distance_walk || null,
-            latitude: marker.latitude || null,
-            longitude: marker.longitude || null,
-            thumbnail: marker.thumbnail,
+            project_id:
+              targetProjectId,
+            ...markerValues,
           })
           .select('id')
           .single();
 
-        if (markerErr) throw markerErr;
-        if (!newMarker) throw new Error('Failed to create marker');
-
-        if (marker.marker_icon && marker.marker_type) {
-          await supabaseAdmin.from('marker_type_table').insert({
-            child_marker_id: newMarker.id,
-            icon: marker.marker_icon,
-            name: marker.marker_type,
-          });
+        if (insertMarkerError) {
+          throw new Error(
+            `Landmark insert error: ${insertMarkerError.message}`
+          );
         }
+
+        if (!insertedMarker) {
+          throw new Error(
+            'Failed to create landmark.'
+          );
+        }
+
+        savedMarkerId =
+          Number(insertedMarker.id);
+
+        retainedMarkerIds.add(
+          savedMarkerId
+        );
+      }
+
+      /*
+       * marker_type_table behaves like
+       * one piece of metadata attached
+       * to a landmark. Keep the child
+       * marker ID stable, then refresh
+       * that small metadata row.
+       */
+      const {
+        error: markerTypeDeleteError,
+      } = await supabaseAdmin
+        .from('marker_type_table')
+        .delete()
+        .eq(
+          'child_marker_id',
+          savedMarkerId
+        );
+
+      if (markerTypeDeleteError) {
+        throw new Error(
+          `Landmark marker type cleanup error: ${markerTypeDeleteError.message}`
+        );
+      }
+
+      const markerIcon =
+        typeof marker.marker_icon ===
+          'string'
+          ? marker.marker_icon.trim()
+          : '';
+
+      const markerType =
+        typeof marker.marker_type ===
+          'string'
+          ? marker.marker_type.trim()
+          : '';
+
+      if (markerIcon && markerType) {
+        const {
+          error: markerTypeInsertError,
+        } = await supabaseAdmin
+          .from('marker_type_table')
+          .insert({
+            child_marker_id:
+              savedMarkerId,
+            icon: markerIcon,
+            name: markerType,
+          });
+
+        if (markerTypeInsertError) {
+          throw new Error(
+            `Landmark marker type error: ${markerTypeInsertError.message}`
+          );
+        }
+      }
+    }
+
+    const removedMarkerIds =
+      (oldMarkers || [])
+        .map(
+          (marker: any) =>
+            Number(marker.id)
+        )
+        .filter(
+          (id: number) =>
+            !retainedMarkerIds.has(id)
+        );
+
+    if (removedMarkerIds.length > 0) {
+      const {
+        error:
+          removedMarkerTypeError,
+      } = await supabaseAdmin
+        .from('marker_type_table')
+        .delete()
+        .in(
+          'child_marker_id',
+          removedMarkerIds
+        );
+
+      if (removedMarkerTypeError) {
+        throw new Error(
+          `Landmark marker type delete error: ${removedMarkerTypeError.message}`
+        );
+      }
+
+      const {
+        error: removedMarkerError,
+      } = await supabaseAdmin
+        .from('child_marker_table')
+        .delete()
+        .eq(
+          'project_id',
+          targetProjectId
+        )
+        .in(
+          'id',
+          removedMarkerIds
+        );
+
+      if (removedMarkerError) {
+        throw new Error(
+          `Landmark delete error: ${removedMarkerError.message}`
+        );
+      }
+    }
+
+    /*
+     * Clean up marker photos/icons that
+     * are no longer referenced after a
+     * save. The client already attempts
+     * replacement cleanup; this also
+     * covers landmarks removed entirely.
+     */
+    const currentMarkerAssetUrls =
+      childMarkers.flatMap(
+        (marker: any) => [
+          marker.thumbnail,
+          marker.marker_icon,
+        ]
+      )
+      .filter(Boolean);
+
+    const oldMarkerAssetUrls =
+      (oldMarkers || []).flatMap(
+        (marker: any) => [
+          marker.thumbnail,
+          ...(marker.marker_type_table || [])
+            .map(
+              (typeRow: any) =>
+                typeRow.icon
+            ),
+        ]
+      )
+      .filter(Boolean);
+
+    for (
+      const oldAssetUrl of
+      oldMarkerAssetUrls
+    ) {
+      if (
+        currentMarkerAssetUrls.includes(
+          oldAssetUrl
+        ) ||
+        !String(oldAssetUrl).includes(
+          '/storage/v1/object/public/images/'
+        )
+      ) {
+        continue;
+      }
+
+      const oldStoragePath =
+        String(oldAssetUrl).split(
+          '/storage/v1/object/public/images/'
+        )[1];
+
+      if (!oldStoragePath) {
+        continue;
+      }
+
+      const {
+        error: markerStorageCleanupError,
+      } = await supabaseAdmin.storage
+        .from('images')
+        .remove([oldStoragePath]);
+
+      if (markerStorageCleanupError) {
+        console.warn(
+          'Failed to clean up old landmark asset:',
+          markerStorageCleanupError
+        );
       }
     }
 
@@ -1002,6 +1295,31 @@ if (savedLayoutFetchError) {
   );
 }
 
+const {
+  data: savedMarkerData,
+  error: savedMarkerFetchError,
+} = await supabaseAdmin
+  .from('child_marker_table')
+  .select(
+    '*, marker_type_table(*)'
+  )
+  .eq(
+    'project_id',
+    targetProjectId
+  )
+  .order(
+    'id',
+    {
+      ascending: true,
+    }
+  );
+
+if (savedMarkerFetchError) {
+  throw new Error(
+    `Landmark refresh error: ${savedMarkerFetchError.message}`
+  );
+}
+
     return {
   success: true,
   towerData:
@@ -1010,6 +1328,8 @@ if (savedLayoutFetchError) {
     savedAmenityData || [],
   layoutData:
     savedLayoutData || [],
+  markerData:
+    savedMarkerData || [],
 };
   } catch (error: any) {
     console.error('Server Action Failed:', error);
@@ -1617,7 +1937,8 @@ export async function fetchProjectForEdit(editId: string | number) {
     supabaseAdmin
       .from('child_marker_table')
       .select('*, marker_type_table(*)')
-      .eq('project_id', editId),
+      .eq('project_id', editId)
+      .order('id', { ascending: true }),
 
     supabaseAdmin
       .from('project_tag')

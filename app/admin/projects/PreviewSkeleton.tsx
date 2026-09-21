@@ -27,11 +27,15 @@ export type ProjectEditorRegion =
   | 'location'
   | 'awards'
   | 'tags'
-  | 'editorial'
+  | 'editorial-title'
+  | 'editorial-description'
+  | 'editorial-visuals'
   | 'amenities'
   | `amenity:${number}`
   | 'unit-layouts'
-  | `unit-layout:${number}`;
+  | `unit-layout:${number}`
+  | 'points-of-interest'
+  | `landmark:${number}`;
 
 interface PreviewSkeletonProps {
   data: any;
@@ -40,6 +44,8 @@ interface PreviewSkeletonProps {
   onSelectRegion?: (region: ProjectEditorRegion) => void;
   onAddAmenity?: () => void;
   onAddLayout?: () => void;
+  onAddLandmark?: () => void;
+  pendingRemovedLandmarkIds?: Array<number | string>;
 }
 
 function formatTowerName(raw?: string | null): string {
@@ -54,23 +60,625 @@ function formatTowerName(raw?: string | null): string {
   return trimmed;
 }
 
-function DummyMapSection() {
+function PointsOfInterestPreview({
+  data,
+  editorMode,
+  selectedRegion,
+  onSelectRegion,
+  onAddLandmark,
+  pendingRemovedLandmarkIds = [],
+}: {
+  data: any;
+  editorMode: boolean;
+  selectedRegion: ProjectEditorRegion | null;
+  onSelectRegion?: (region: ProjectEditorRegion) => void;
+  onAddLandmark?: () => void;
+  pendingRemovedLandmarkIds?: Array<number | string>;
+}) {
+  const landmarks = Array.isArray(
+    data.child_markers
+  )
+    ? data.child_markers
+    : [];
+
+  const pendingRemovalSet =
+    new Set(
+      pendingRemovedLandmarkIds.map(
+        (id) => String(id)
+      )
+    );
+
+  const select = (
+    e: React.MouseEvent,
+    region: ProjectEditorRegion
+  ) => {
+    if (!editorMode) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    onSelectRegion?.(region);
+  };
+
+  const sectionSelected =
+    selectedRegion ===
+    'points-of-interest';
+
+  const projectLocation =
+    data.map_latitude &&
+    data.map_longitude
+      ? `${data.map_latitude}, ${data.map_longitude}`
+      : 'Project coordinates not set';
+
   return (
-    <section className="relative py-24 bg-[#0A1128] overflow-hidden flex items-center min-h-[900px]">
-      <div className="absolute inset-0 z-0 opacity-20" style={{ backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
-      <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-brand-gold/10 rounded-full blur-[120px] pointer-events-none z-0" />
-      <div className="absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] bg-brand-blue/30 rounded-full blur-[150px] pointer-events-none z-0" />
-      <div className="max-w-[90rem] mx-auto px-6 md:px-12 relative z-20 flex flex-col items-center w-full">
-        <div className="mb-12 text-center">
-          <h2 className="text-5xl md:text-6xl lg:text-7xl font-serif font-light leading-tight mb-4 text-white">
-            Points of <span className="text-brand-gold">Interest</span>
+    <section
+      className="
+        relative
+        overflow-hidden
+        bg-[#0A1128]
+        py-20 md:py-24
+      "
+    >
+      <div
+        className="
+          absolute inset-0 z-0
+          opacity-20
+        "
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)',
+          backgroundSize: '40px 40px',
+        }}
+      />
+
+      <div className="absolute top-[-10%] left-[-10%] h-[50vw] w-[50vw] rounded-full bg-brand-gold/10 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-20%] right-[-10%] h-[60vw] w-[60vw] rounded-full bg-brand-blue/30 blur-[150px] pointer-events-none" />
+
+      <div
+        className="
+          relative z-20
+          mx-auto
+          w-full
+          max-w-[90rem]
+          px-6 md:px-12
+        "
+      >
+        <div
+          onClick={(e) =>
+            select(
+              e,
+              'points-of-interest'
+            )
+          }
+          className={`
+            relative
+            mx-auto
+            mb-10
+            max-w-3xl
+            rounded-xl
+            px-4 py-3
+            text-center
+            transition-all
+            ${
+              editorMode
+                ? 'cursor-pointer'
+                : ''
+            }
+            ${
+              editorMode &&
+              sectionSelected
+                ? 'ring-2 ring-brand-gold ring-offset-4 ring-offset-[#0A1128]'
+                : editorMode
+                ? 'hover:ring-2 hover:ring-white/60'
+                : ''
+            }
+          `}
+        >
+          {editorMode &&
+            sectionSelected && (
+              <span
+                className="
+                  absolute
+                  -top-3 left-1/2
+                  -translate-x-1/2
+                  rounded-md
+                  bg-brand-gold
+                  px-2.5 py-1
+                  text-[9px]
+                  font-bold
+                  uppercase
+                  tracking-wider
+                  text-brand-blue
+                  shadow-lg
+                "
+              >
+                Points of Interest
+              </span>
+            )}
+
+          <p
+            className="
+              mb-3
+              text-[10px]
+              font-bold
+              uppercase
+              tracking-[0.25em]
+              text-brand-gold
+            "
+          >
+            Nearby Places
+          </p>
+
+          <h2
+            className="
+              text-4xl md:text-5xl
+              lg:text-6xl
+              font-serif
+              font-light
+              leading-tight
+              text-white
+            "
+          >
+            Points of{' '}
+            <span className="text-brand-gold">
+              Interest
+            </span>
           </h2>
-          <p className="text-center font-light leading-relaxed text-white/70 text-lg md:text-xl max-w-2xl mx-auto">
-            Everything you need, strategically positioned right around your sanctuary.
+
+          <p
+            className="
+              mx-auto mt-4
+              max-w-2xl
+              text-sm md:text-base
+              font-light
+              leading-relaxed
+              text-white/65
+            "
+          >
+            {data.map_subtitle ||
+              'Everything you need, strategically positioned right around your sanctuary.'}
           </p>
         </div>
-        <div className="w-full h-[500px] p-2 md:p-4 rounded-sm bg-white/5 border border-white/10 flex items-center justify-center backdrop-blur-md shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
-           <span className="text-brand-gold font-bold uppercase tracking-widest text-sm">Interactive Map disabled in Live Preview</span>
+
+        <div
+          onClick={(e) =>
+            select(
+              e,
+              'points-of-interest'
+            )
+          }
+          className={`
+            relative
+            overflow-hidden
+            rounded-2xl
+            border
+            bg-white/5
+            p-4 md:p-6
+            shadow-[0_20px_50px_rgba(0,0,0,0.35)]
+            backdrop-blur-md
+            transition-all
+            ${
+              editorMode
+                ? 'cursor-pointer'
+                : ''
+            }
+            ${
+              editorMode &&
+              sectionSelected
+                ? 'border-brand-gold/70'
+                : 'border-white/10'
+            }
+          `}
+        >
+          <div
+            className="
+              relative
+              flex
+              min-h-[320px]
+              items-center
+              justify-center
+              overflow-hidden
+              rounded-xl
+              border
+              border-white/10
+              bg-[#0d1b3e]
+            "
+          >
+            <div
+              className="
+                absolute inset-0
+                opacity-35
+              "
+              style={{
+                backgroundImage:
+                  'radial-gradient(circle at 20% 30%, rgba(212,175,55,.35) 0 2px, transparent 3px), radial-gradient(circle at 80% 60%, rgba(255,255,255,.25) 0 2px, transparent 3px), linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px)',
+                backgroundSize:
+                  '180px 180px, 220px 220px, 36px 36px, 36px 36px',
+              }}
+            />
+
+            <div
+              className="
+                relative z-10
+                flex
+                max-w-md
+                flex-col
+                items-center
+                px-6
+                text-center
+              "
+            >
+              <div
+                className="
+                  flex h-16 w-16
+                  items-center
+                  justify-center
+                  overflow-hidden
+                  rounded-full
+                  border
+                  border-brand-gold/40
+                  bg-brand-blue
+                  shadow-xl
+                "
+              >
+                {data.map_icon ? (
+                  <Image
+                    src={data.map_icon}
+                    alt="Project map pin"
+                    width={44}
+                    height={44}
+                    className="h-11 w-11 object-contain"
+                  />
+                ) : (
+                  <MapPin
+                    size={28}
+                    className="text-brand-gold"
+                  />
+                )}
+              </div>
+
+              <p
+                className="
+                  mt-4
+                  text-xs
+                  font-bold
+                  uppercase
+                  tracking-[0.2em]
+                  text-white
+                "
+              >
+                Project Location
+              </p>
+
+              <p
+                className="
+                  mt-1
+                  text-[10px]
+                  leading-relaxed
+                  text-white/45
+                "
+              >
+                {projectLocation}
+              </p>
+
+              {editorMode && (
+                <p
+                  className="
+                    mt-5
+                    rounded-full
+                    border border-white/10
+                    bg-black/20
+                    px-4 py-2
+                    text-[9px]
+                    font-medium
+                    uppercase
+                    tracking-wider
+                    text-white/55
+                  "
+                >
+                  Interactive map disabled while editing
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-8">
+          <div
+            className="
+              mb-3
+              flex
+              items-end
+              justify-between
+              gap-4
+            "
+          >
+            <div>
+              <p
+                className="
+                  text-[10px]
+                  font-bold
+                  uppercase
+                  tracking-[0.2em]
+                  text-white/45
+                "
+              >
+                Landmarks
+              </p>
+
+              <p
+                className="
+                  mt-1
+                  text-xs
+                  text-white/35
+                "
+              >
+                {landmarks.length}{' '}
+                {landmarks.length === 1
+                  ? 'place'
+                  : 'places'}{' '}
+                configured
+              </p>
+            </div>
+          </div>
+
+          <div
+            className="
+              grid
+              grid-cols-1
+              gap-4
+              md:grid-cols-2
+              xl:grid-cols-3
+            "
+          >
+            {landmarks.map(
+              (
+                marker: any,
+                index: number
+              ) => {
+                const editorIndex =
+                  Number.isInteger(
+                    marker.editorIndex
+                  )
+                    ? marker.editorIndex
+                    : index;
+
+                const region =
+                  `landmark:${editorIndex}` as ProjectEditorRegion;
+
+                const selected =
+                  selectedRegion ===
+                  region;
+
+                const isPendingRemoval =
+                  marker.id !== undefined &&
+                  marker.id !== null &&
+                  pendingRemovalSet.has(
+                    String(marker.id)
+                  );
+
+                return (
+                  <button
+                    key={
+                      marker.id ??
+                      editorIndex
+                    }
+                    type="button"
+                    onClick={(e) =>
+                      select(e, region)
+                    }
+                    className={`
+                      group
+                      overflow-hidden
+                      rounded-xl
+                      border
+                      bg-white/[0.06]
+                      text-left
+                      transition-all
+                      ${
+                        editorMode
+                          ? 'cursor-pointer hover:bg-white/[0.09]'
+                          : 'cursor-default'
+                      }
+                      ${
+                        isPendingRemoval
+                          ? 'border-amber-400/70 bg-amber-500/[0.08] opacity-75'
+                          : selected
+                          ? 'border-brand-gold ring-2 ring-brand-gold/30'
+                          : 'border-white/10'
+                      }
+                    `}
+                  >
+                    <div
+                      className="
+                        flex
+                        min-h-[110px]
+                        items-stretch
+                      "
+                    >
+                      <div
+                        className="
+                          relative
+                          w-28
+                          shrink-0
+                          overflow-hidden
+                          bg-white/5
+                        "
+                      >
+                        {marker.thumbnail ? (
+                          <Image
+                            src={
+                              marker.thumbnail
+                            }
+                            alt={
+                              marker.interest_name ||
+                              'Landmark'
+                            }
+                            fill
+                            sizes="112px"
+                            className="object-cover transition-transform duration-500 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div
+                            className="
+                              flex
+                              h-full
+                              flex-col
+                              items-center
+                              justify-center
+                              gap-1
+                            "
+                          >
+                            <MapPin
+                              size={24}
+                              className="text-brand-gold/70"
+                            />
+
+                            {editorMode && (
+                              <span className="text-[8px] font-bold uppercase tracking-wider text-white/35">
+                                Add Photo
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <div
+                        className="
+                          min-w-0
+                          flex-1
+                          p-4
+                        "
+                      >
+                        <div
+                          className="
+                            flex
+                            items-start
+                            justify-between
+                            gap-3
+                          "
+                        >
+                          <h3
+                            className="
+                              truncate
+                              font-serif
+                              text-lg
+                              text-white
+                            "
+                          >
+                            {marker.interest_name ||
+                              `Landmark ${index + 1}`}
+                          </h3>
+
+                          {isPendingRemoval ? (
+                            <span
+                              className="
+                                shrink-0
+                                rounded-full
+                                border
+                                border-amber-300/40
+                                bg-amber-400/10
+                                px-2 py-1
+                                text-[8px]
+                                font-bold
+                                uppercase
+                                tracking-wider
+                                text-amber-300
+                              "
+                            >
+                              Pending removal
+                            </span>
+                          ) : marker.marker_type && (
+                            <span
+                              className="
+                                shrink-0
+                                rounded-full
+                                border
+                                border-brand-gold/20
+                                bg-brand-gold/10
+                                px-2 py-1
+                                text-[8px]
+                                font-bold
+                                uppercase
+                                tracking-wider
+                                text-brand-gold
+                              "
+                            >
+                              {marker.marker_type}
+                            </span>
+                          )}
+                        </div>
+
+                        <p
+                          className="
+                            mt-2
+                            line-clamp-2
+                            text-[10px]
+                            leading-relaxed
+                            text-white/45
+                          "
+                        >
+                          {marker.address ||
+                            marker.phrase ||
+                            'No address added yet.'}
+                        </p>
+
+                        {marker.distance_km && (
+                          <p
+                            className="
+                              mt-3
+                              text-[9px]
+                              font-semibold
+                              uppercase
+                              tracking-wider
+                              text-white/35
+                            "
+                          >
+                            {marker.distance_km}{' '}
+                            km away
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              }
+            )}
+
+            {editorMode && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onAddLandmark?.();
+                }}
+                className="
+                  flex
+                  min-h-[110px]
+                  items-center
+                  justify-center
+                  gap-2
+                  rounded-xl
+                  border
+                  border-dashed
+                  border-brand-gold/40
+                  bg-brand-gold/[0.04]
+                  px-5
+                  text-[10px]
+                  font-bold
+                  uppercase
+                  tracking-wider
+                  text-brand-gold
+                  transition-all
+                  hover:border-brand-gold
+                  hover:bg-brand-gold/[0.08]
+                "
+              >
+                <PlusCircle size={16} />
+                Add Landmark
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </section>
@@ -84,6 +692,8 @@ export default function PreviewSkeleton({
   onSelectRegion,
   onAddAmenity,
   onAddLayout,
+  onAddLandmark,
+  pendingRemovedLandmarkIds = [],
 }: PreviewSkeletonProps) {
   const blueprintSectionRef = useRef<HTMLElement>(null);
   
@@ -511,12 +1121,35 @@ const regionStyle = (region: ProjectEditorRegion) => {
           >
             <Image
               src={data.image || BLANK_IMAGE}
-              alt={data.title}
+              alt={data.title || 'Project hero'}
               fill
               sizes="100vw"
               priority
               className="object-cover"
             />
+
+            {editorMode && !data.image && (
+              <div
+                className="
+                  absolute inset-0
+                  z-20
+                  flex
+                  items-center
+                  justify-center
+                  bg-gray-900
+                "
+              >
+                <div className="text-center text-white/70">
+                  <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-white/30">
+                    <PlusCircle size={20} />
+                  </span>
+
+                  <p className="mt-3 text-[10px] font-bold uppercase tracking-[0.2em]">
+                    Add Hero Image
+                  </p>
+                </div>
+              </div>
+            )}
 
             {editorMode &&
               selectedRegion === 'hero-image' && (
@@ -718,48 +1351,49 @@ const regionStyle = (region: ProjectEditorRegion) => {
 
 
       {/* EDITABLE AWARD BADGE */}
-      {data.img_awards &&
-        data.img_awards !== '' && (
-          <div
-            onClick={(e) =>
-              selectRegion(
-                e,
-                'awards'
-              )
-            }
-            className={`
-              relative
-              hidden
-              lg:block
-              mb-10
-              rounded-sm
-              ${regionStyle(
-                'awards'
-              )}
-            `}
-          >
-            {editorMode &&
-              selectedRegion ===
-                'awards' && (
-                <span
-                  className="
-                    absolute
-                    -top-7 left-0
-                    rounded-md
-                    bg-brand-gold
-                    px-2 py-1
-                    text-[9px]
-                    font-bold
-                    uppercase
-                    tracking-wider
-                    text-brand-blue
-                    shadow-lg
-                  "
-                >
-                  Awards
-                </span>
-              )}
+      {(data.img_awards || editorMode) && (
+        <div
+          onClick={(e) =>
+            selectRegion(
+              e,
+              'awards'
+            )
+          }
+          className={`
+            relative
+            hidden
+            lg:block
+            mb-10
+            rounded-sm
+            ${regionStyle(
+              'awards'
+            )}
+          `}
+        >
+          {editorMode &&
+            selectedRegion ===
+              'awards' && (
+              <span
+                className="
+                  absolute
+                  -top-7 left-0
+                  z-20
+                  rounded-md
+                  bg-brand-gold
+                  px-2 py-1
+                  text-[9px]
+                  font-bold
+                  uppercase
+                  tracking-wider
+                  text-brand-blue
+                  shadow-lg
+                "
+              >
+                Awards
+              </span>
+            )}
 
+          {data.img_awards ? (
             <Image
               src={data.img_awards}
               alt="Award"
@@ -770,8 +1404,33 @@ const regionStyle = (region: ProjectEditorRegion) => {
                 drop-shadow-2xl
               "
             />
-          </div>
-        )}
+          ) : (
+            <div
+              className="
+                flex
+                h-[92px]
+                w-[280px]
+                items-center
+                justify-center
+                gap-2
+                rounded-xl
+                border-2
+                border-dashed
+                border-white/25
+                bg-black/20
+                text-[10px]
+                font-bold
+                uppercase
+                tracking-wider
+                text-white/55
+              "
+            >
+              <PlusCircle size={15} />
+              Add Awards Badge
+            </div>
+          )}
+        </div>
+      )}
     </div>
 
 
@@ -911,7 +1570,7 @@ const regionStyle = (region: ProjectEditorRegion) => {
       {data.extended_description?.length > 0 && (
         <section
           onClick={(e) =>
-            selectRegion(e, 'editorial')
+            selectRegion(e, 'editorial-visuals')
           }
           className={`
             relative
@@ -928,9 +1587,9 @@ const regionStyle = (region: ProjectEditorRegion) => {
                   pointer-events-auto
                   cursor-pointer
                   ${
-                    selectedRegion === 'editorial'
+                    selectedRegion === 'editorial-visuals'
                       ? 'ring-2 ring-inset ring-brand-gold'
-                      : 'hover:ring-2 hover:ring-inset hover:ring-white/70'
+                      : 'hover:ring-2 hover:ring-inset hover:ring-white/30'
                   }
                 `
                 : 'pointer-events-none'
@@ -953,10 +1612,9 @@ const regionStyle = (region: ProjectEditorRegion) => {
             )`,
           }}
         >
-
-          {/* EDITOR LABEL */}
           {editorMode &&
-            selectedRegion === 'editorial' && (
+            selectedRegion ===
+              'editorial-visuals' && (
               <span
                 className="
                   absolute
@@ -973,10 +1631,9 @@ const regionStyle = (region: ProjectEditorRegion) => {
                   shadow-lg
                 "
               >
-                Editorial Section
+                Image &amp; Background
               </span>
             )}
-
 
           <div
             className="
@@ -992,10 +1649,15 @@ const regionStyle = (region: ProjectEditorRegion) => {
               lg:h-[600px]
             "
           >
-
-            {/* EDITORIAL IMAGE */}
+            {/* EDITORIAL IMAGE + BACKGROUND SHARE ONE INSPECTOR */}
             <div
-              className="
+              onClick={(e) =>
+                selectRegion(
+                  e,
+                  'editorial-visuals'
+                )
+              }
+              className={`
                 relative
                 w-full
                 h-[400px]
@@ -1006,7 +1668,10 @@ const regionStyle = (region: ProjectEditorRegion) => {
                 bg-gray-200
                 border
                 border-gray-300
-              "
+                ${regionStyle(
+                  'editorial-visuals'
+                )}
+              `}
             >
               <Image
                 src={
@@ -1018,8 +1683,55 @@ const regionStyle = (region: ProjectEditorRegion) => {
                 fill
                 className="object-cover"
               />
-            </div>
 
+              {editorMode &&
+                !data.extended_description[0]
+                  ?.editorial_img && (
+                  <div
+                    className="
+                      absolute inset-0
+                      z-10
+                      flex
+                      items-center
+                      justify-center
+                      bg-gray-100
+                    "
+                  >
+                    <div className="text-center text-brand-blue/55">
+                      <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-brand-blue/20">
+                        <PlusCircle size={18} />
+                      </span>
+
+                      <p className="mt-3 text-[10px] font-bold uppercase tracking-wider">
+                        Add Editorial Image
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+              {editorMode &&
+                selectedRegion ===
+                  'editorial-visuals' && (
+                  <span
+                    className="
+                      absolute
+                      bottom-4 left-4
+                      z-20
+                      rounded-md
+                      bg-brand-gold
+                      px-2.5 py-1
+                      text-[9px]
+                      font-bold
+                      uppercase
+                      tracking-wider
+                      text-brand-blue
+                      shadow-lg
+                    "
+                  >
+                    Editorial Image
+                  </span>
+                )}
+            </div>
 
             {/* EDITORIAL COPY */}
             <div
@@ -1033,58 +1745,133 @@ const regionStyle = (region: ProjectEditorRegion) => {
                 overflow-hidden
               "
             >
-              <h2
-                className="
-                  font-serif
-                  text-2xl
-                  sm:text-3xl
-                  lg:text-[36px]
-                  xl:text-[44px]
-                  leading-[1.18]
-                  transition-colors
-                  duration-300
-                  shrink-0
-                "
-                style={{
-                  color:
-                    data.extended_description[0]
-                      ?.editorial_title_color ||
-                    '#132243',
-                }}
-              >
-                {(
-                  data.extended_description[0]
-                    ?.editorial_title ||
-                  'Editorial Headline'
-                )
-                  .split('\n')
-                  .map(
-                    (
-                      line: string,
-                      idx: number
-                    ) => (
-                      <span
-                        key={idx}
-                        className="block"
-                      >
-                        {line}
-                      </span>
-                    )
-                  )}
-              </h2>
-
-
+              {/* EDITABLE EDITORIAL HEADING */}
               <div
-                className="
+                onClick={(e) =>
+                  selectRegion(
+                    e,
+                    'editorial-title'
+                  )
+                }
+                className={`
+                  relative
+                  w-full
+                  rounded-sm
+                  ${regionStyle(
+                    'editorial-title'
+                  )}
+                `}
+              >
+                {editorMode &&
+                  selectedRegion ===
+                    'editorial-title' && (
+                    <span
+                      className="
+                        absolute
+                        -top-7 left-0
+                        z-20
+                        rounded-md
+                        bg-brand-gold
+                        px-2 py-1
+                        text-[9px]
+                        font-bold
+                        uppercase
+                        tracking-wider
+                        text-brand-blue
+                        shadow-lg
+                      "
+                    >
+                      Headline
+                    </span>
+                  )}
+
+                <h2
+                  className="
+                    font-serif
+                    text-2xl
+                    sm:text-3xl
+                    lg:text-[36px]
+                    xl:text-[44px]
+                    leading-[1.18]
+                    transition-colors
+                    duration-300
+                    shrink-0
+                  "
+                  style={{
+                    color:
+                      data.extended_description[0]
+                        ?.editorial_title_color ||
+                      '#132243',
+                  }}
+                >
+                  {(
+                    data.extended_description[0]
+                      ?.editorial_title ||
+                    'Editorial Headline'
+                  )
+                    .split('\n')
+                    .map(
+                      (
+                        line: string,
+                        idx: number
+                      ) => (
+                        <span
+                          key={idx}
+                          className="block"
+                        >
+                          {line}
+                        </span>
+                      )
+                    )}
+                </h2>
+              </div>
+
+              {/* EDITABLE EDITORIAL PARAGRAPH */}
+              <div
+                onClick={(e) =>
+                  selectRegion(
+                    e,
+                    'editorial-description'
+                  )
+                }
+                className={`
+                  relative
                   space-y-6
                   overflow-y-auto
                   w-full
                   pr-2
-                "
+                  rounded-sm
+                  ${regionStyle(
+                    'editorial-description'
+                  )}
+                `}
                 style={{
                   scrollbarWidth: 'thin',
                 }}
               >
+                {editorMode &&
+                  selectedRegion ===
+                    'editorial-description' && (
+                    <span
+                      className="
+                        absolute
+                        top-0 right-2
+                        z-20
+                        rounded-md
+                        bg-brand-gold
+                        px-2 py-1
+                        text-[9px]
+                        font-bold
+                        uppercase
+                        tracking-wider
+                        text-brand-blue
+                        shadow-lg
+                      "
+                    >
+                      Description
+                    </span>
+                  )}
+
                 <p
                   className="
                     text-lg
@@ -1107,11 +1894,10 @@ const regionStyle = (region: ProjectEditorRegion) => {
                 </p>
               </div>
             </div>
-
           </div>
         </section>
       )}
-      
+
       {/* --- AMENITIES DRAGGABLE CAROUSEL SECTION --- */}
       {(
           data.amenities?.length > 0 ||
@@ -1236,23 +2022,27 @@ const regionStyle = (region: ProjectEditorRegion) => {
 
           {/* CAROUSEL WRAPPER */}
           <div className="relative w-full">
-            <button
-              type="button"
-              onClick={scrollPrev}
-              aria-label="Previous Amenities"
-              className="absolute left-4 md:left-8 top-[36%] -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-[#132243]/80 hover:bg-brand-gold border border-brand-gold/100 hover:border-[#132243]/100 text-brand-gold hover:text-[#132243] backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer outline-none group active:scale-95"
-            >
-              <ChevronLeft size={24} strokeWidth={2.5} className="transition-transform duration-300 group-hover:-translate-x-0.5" />
-            </button>
+            {filteredAmenities.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={scrollPrev}
+                  aria-label="Previous Amenities"
+                  className="absolute left-4 md:left-8 top-[36%] -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-[#132243]/80 hover:bg-brand-gold border border-brand-gold/100 hover:border-[#132243]/100 text-brand-gold hover:text-[#132243] backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer outline-none group active:scale-95"
+                >
+                  <ChevronLeft size={24} strokeWidth={2.5} className="transition-transform duration-300 group-hover:-translate-x-0.5" />
+                </button>
 
-            <button
-              type="button"
-              onClick={scrollNext}
-              aria-label="Next Amenities"
-              className="absolute right-4 md:right-8 top-[36%] -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-[#132243]/80 hover:bg-brand-gold border border-brand-gold/100 hover:border-[#132243]/100 text-brand-gold hover:text-[#132243] backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer outline-none group active:scale-95"
-            >
-              <ChevronRight size={24} strokeWidth={2.5} className="transition-transform duration-300 group-hover:translate-x-0.5" />
-            </button>
+                <button
+                  type="button"
+                  onClick={scrollNext}
+                  aria-label="Next Amenities"
+                  className="absolute right-4 md:right-8 top-[36%] -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-[#132243]/80 hover:bg-brand-gold border border-brand-gold/100 hover:border-[#132243]/100 text-brand-gold hover:text-[#132243] backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer outline-none group active:scale-95"
+                >
+                  <ChevronRight size={24} strokeWidth={2.5} className="transition-transform duration-300 group-hover:translate-x-0.5" />
+                </button>
+              </>
+            )}
 
             <div 
               ref={scrollContainerRef}
@@ -1334,8 +2124,21 @@ const regionStyle = (region: ProjectEditorRegion) => {
                   `}
                 >
                   <div className="relative h-[38vh] min-h-[240px] max-h-[380px] w-full overflow-hidden rounded-xl bg-gray-800 shadow-2xl pointer-events-auto">
-                    <Image src={item.thumbnail || BLANK_IMAGE} alt={item.title} fill draggable="false" sizes="(max-width: 768px) 82vw, (max-width: 1024px) 40vw, 30vw" className="object-cover group-hover:scale-105 transition-transform duration-[1.5s] ease-out pointer-events-none select-none" />
+                    <Image src={item.thumbnail || BLANK_IMAGE} alt={item.title || 'Amenity'} fill draggable="false" sizes="(max-width: 768px) 82vw, (max-width: 1024px) 40vw, 30vw" className="object-cover group-hover:scale-105 transition-transform duration-[1.5s] ease-out pointer-events-none select-none" />
                     <div className="absolute inset-0 bg-black/15 group-hover:bg-transparent transition-colors duration-500 pointer-events-none" />
+
+                    {editorMode && !item.thumbnail && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-[#0d1b3e] text-white/60 pointer-events-none">
+                        <div className="text-center">
+                          <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-white/25">
+                            <PlusCircle size={18} />
+                          </span>
+                          <p className="mt-3 text-[10px] font-bold uppercase tracking-wider">
+                            Add Amenity Image
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="mt-5 flex flex-col gap-2 pr-4">
                     <div className="flex items-center gap-3">
@@ -1606,7 +2409,7 @@ const regionStyle = (region: ProjectEditorRegion) => {
                   {/* STICKY TOWER HEADER */}
                   <div className="sticky top-20 md:top-24 z-20 pb-8 pt-2 flex justify-center pointer-events-none">
                     <div className="inline-flex items-center gap-3 px-6 py-2.5 rounded-full bg-brand-blue backdrop-blur-md border border-brand-gold/40 shadow-xl pointer-events-auto">
-                      <span className="w-2 h-2 rounded-full bg-brand-gold animate-pulse" />
+                      <span className="w-2 h-2 rounded-full bg-brand-gold" />
 
                       <span className="text-xs md:text-sm uppercase tracking-[0.25em] font-serif text-white font-medium">
                         {towerName}
@@ -1766,12 +2569,26 @@ const regionStyle = (region: ProjectEditorRegion) => {
                                     BLANK_IMAGE
                                   }
                                   alt={
-                                    plan.title
+                                    plan.title || 'Unit layout'
                                   }
                                   fill
                                   sizes="(max-width: 1024px) 100vw, 60vw"
                                   className="object-contain drop-shadow-2xl"
                                 />
+
+                                {editorMode &&
+                                  !plan.thumbnail && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-white text-brand-blue/45">
+                                      <div className="text-center">
+                                        <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-brand-blue/15">
+                                          <PlusCircle size={18} />
+                                        </span>
+                                        <p className="mt-3 text-[10px] font-bold uppercase tracking-wider">
+                                          Add Floorplan Image
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )}
                               </div>
                             </div>
                           </div>
@@ -1815,7 +2632,8 @@ const regionStyle = (region: ProjectEditorRegion) => {
                       transition-colors
                     "
                   >
-                    + Add Unit Layout
+                    <PlusCircle size={14} />
+                    Add Unit Layout
                   </button>
                 </div>
               )}
@@ -1823,8 +2641,17 @@ const regionStyle = (region: ProjectEditorRegion) => {
         </section>
       )}
 
-      {/* --- MAP SECTION --- */}
-      <DummyMapSection />
+      {/* --- POINTS OF INTEREST --- */}
+      <PointsOfInterestPreview
+        data={data}
+        editorMode={editorMode}
+        selectedRegion={selectedRegion}
+        onSelectRegion={onSelectRegion}
+        onAddLandmark={onAddLandmark}
+        pendingRemovedLandmarkIds={
+          pendingRemovedLandmarkIds
+        }
+      />
     </div>
   );
 }

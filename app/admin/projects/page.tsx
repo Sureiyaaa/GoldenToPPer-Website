@@ -102,6 +102,7 @@ const projectSchema = z.object({
   map_icon: z.string().optional(), // NEW: Main project map pin
    map_subtitle: z.string().optional(),
   child_markers: z.array(z.object({
+    id: z.union([z.number(), z.string()]).optional().nullable(),
     interest_name: z.string().min(1, "Name required"), address: z.string(), phrase: z.string(), 
     distance_km: z.string().min(1, "Required"), 
     distance_drive: z.string().min(1, "Required"), 
@@ -263,7 +264,11 @@ function ProjectManager() {
   
   const [isFetching, setIsFetching] = useState(!!editId); 
   const [isSaving, setIsSaving] = useState(false);
-  const [successMsg, setSuccessMsg] = useState('');
+  const [editorFeedback, setEditorFeedback] = useState<{
+    type: 'success' | 'error' | 'info';
+    message: string;
+  } | null>(null);
+  const [resetConfirmationOpen, setResetConfirmationOpen] = useState(false);
   const [createError, setCreateError] = useState('');
 
   const [newTowerName, setNewTowerName] =
@@ -365,6 +370,33 @@ const [
   } | null>(null);
 
   const [
+    markerToRemove,
+    setMarkerToRemove
+  ] = useState<{
+    index: number;
+    title: string;
+  } | null>(null);
+
+  // Persisted landmarks stay visible until Save. Their IDs are staged here
+  // so Reset or Undo can cancel removal without reconstructing form rows.
+  const [
+    pendingMarkerRemovalIds,
+    setPendingMarkerRemovalIds
+  ] = useState<number[]>([]);
+
+  // Navigation guard. Internal navigation gets a friendly confirmation modal,
+  // while refresh/tab-close uses the browser's native unsaved-changes warning.
+  const [
+    pendingNavigationTarget,
+    setPendingNavigationTarget
+  ] = useState<string | null>(null);
+
+  const [
+    leaveAfterSaveTarget,
+    setLeaveAfterSaveTarget
+  ] = useState<string | null>(null);
+
+  const [
     layoutEditorError,
     setLayoutEditorError
   ] = useState('');
@@ -393,11 +425,6 @@ const [
   'project-title'
 );
 
-const [
-  useLegacyEditor,
-  setUseLegacyEditor
-] = useState(false);
-  
   const [pendingFiles, setPendingFiles] = useState<Record<string, File>>({});
   const [previews, setPreviews] = useState<Record<string, string>>({});
 
@@ -468,6 +495,7 @@ const [
   formState: {
     errors: basicErrors,
     isSubmitting: isCreatingBasic,
+    isDirty: isBasicDirty,
   },
 } = useForm<BasicProjectFormData>({
   resolver: zodResolver(basicProjectSchema),
@@ -514,7 +542,15 @@ const [
     name: "unit_layouts",
     keyName: "fieldKey"
   });
-  const { fields: markerFields, append: appendMarker, remove: removeMarker } = useFieldArray({ control, name: "child_markers" });
+  const {
+    fields: markerFields,
+    append: appendMarker,
+    remove: removeMarker
+  } = useFieldArray({
+    control,
+    name: "child_markers",
+    keyName: "fieldKey"
+  });
 
   useEffect(() => {
     const loadData = async () => {
@@ -610,7 +646,7 @@ const [
         data.layoutData.forEach((l: any, i: number) => { if (l.thumbnail) existingPreviews[`unit_layouts.${i}.thumbnail`] = l.thumbnail; });
         data.markerData.forEach((m: any, i: number) => { 
           if (m.thumbnail) existingPreviews[`child_markers.${i}.thumbnail`] = m.thumbnail; 
-          if (m.marker_type_table?.[0]?.icon && m.marker_type_table[0].icon.startsWith('http')) {
+          if (m.marker_type_table?.[0]?.icon) {
              existingPreviews[`child_markers.${i}.marker_icon`] = m.marker_type_table[0].icon;
           }
         });
@@ -628,6 +664,50 @@ const [
   }, [editId, reset]);
 
   const formData = watch();
+
+  const hasUnsavedChanges = editId
+    ? isDirty ||
+      pendingMarkerRemovalIds.length > 0
+    : isBasicDirty;
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) {
+      setPendingNavigationTarget(null);
+      return;
+    }
+
+    const handleBeforeUnload = (
+      event: BeforeUnloadEvent
+    ) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, [hasUnsavedChanges]);
+
+  useEffect(() => {
+    if (!editorFeedback) return;
+
+    const timeout = window.setTimeout(
+      () => setEditorFeedback(null),
+      editorFeedback.type === 'error'
+        ? 5000
+        : 3000
+    );
+
+    return () => window.clearTimeout(timeout);
+  }, [editorFeedback]);
 
   const availableTowerOptions =
     (formData.towers || [])
@@ -657,13 +737,18 @@ const [
       );
     };
   
-  const hasErrors = Object.keys(errors).length > 0;
   
   const mapCardLayoutCount =
     formData.unit_layouts?.filter((layout) => layout.show_on_map_card).length || 0;
 
   const projectPageLayoutCount =
     formData.unit_layouts?.filter((layout) => layout.show_on_project_page).length || 0;
+
+const handleBasicValidationError = () => {
+  setCreateError(
+    'Please complete the highlighted required fields before continuing.'
+  );
+};
 
 const onCreateBasicProject = async (
   data: BasicProjectFormData
@@ -852,16 +937,65 @@ const normalizeTowerAssignments = (
   };
 };
 
+  const handleProjectValidationError = () => {
+    setEditorFeedback({
+      type: 'error',
+      message: 'Some fields need attention. Review the highlighted fields before saving.',
+    });
+  };
+
   const onSubmit = async (data: ProjectFormData) => {
     setIsSaving(true);
+    setEditorFeedback(null);
     try {
       let finalData =
       normalizeTowerAssignments(
         data
       );
 
+      const pendingMarkerIdSet =
+        new Set(
+          pendingMarkerRemovalIds.map(
+            (id) => Number(id)
+          )
+        );
+
+      const pendingMarkerIndexes =
+        new Set(
+          (finalData.child_markers || [])
+            .map((marker, index) => {
+              const parsedId =
+                marker.id !== undefined &&
+                marker.id !== null &&
+                marker.id !== ''
+                  ? Number(marker.id)
+                  : null;
+
+              return parsedId !== null &&
+                pendingMarkerIdSet.has(parsedId)
+                ? index
+                : -1;
+            })
+            .filter((index) => index >= 0)
+        );
+
       // 1. UPLOAD IMAGES TO BUCKET (Kept on the client)
       for (const [path, file] of Object.entries(pendingFiles)) {
+        const markerPathMatch =
+          path.match(
+            /^child_markers\.(\d+)\./
+          );
+
+        if (
+          markerPathMatch &&
+          pendingMarkerIndexes.has(
+            Number(markerPathMatch[1])
+          )
+        ) {
+          // This landmark is waiting to be removed on Save.
+          // Avoid uploading replacement assets that will immediately be discarded.
+          continue;
+        }
         const fileExt = file.name.split('.').pop();
         const uniqueFileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
         const filePath = `projects/${uniqueFileName}`;
@@ -886,6 +1020,30 @@ const normalizeTowerAssignments = (
 
         current[keys[keys.length - 1]] = publicUrlData.publicUrl;
       }
+
+      // Apply staged landmark removals only at save time.
+      // Until this point the rows stay in the form/preview so Reset or Undo works.
+      finalData = {
+        ...finalData,
+        child_markers:
+          (finalData.child_markers || []).filter(
+            (marker) => {
+              const parsedId =
+                marker.id !== undefined &&
+                marker.id !== null &&
+                marker.id !== ''
+                  ? Number(marker.id)
+                  : null;
+
+              return (
+                parsedId === null ||
+                !pendingMarkerIdSet.has(
+                  parsedId
+                )
+              );
+            }
+          ),
+      };
 
       // 2. PREPARE THE CLEAN DATA
       const cleanProjectData = {
@@ -997,29 +1155,141 @@ const normalizeTowerAssignments = (
           ) ??
           finalData.unit_layouts ??
           [],
+
+        child_markers:
+          result.markerData?.map(
+            (marker: any) => ({
+              id: marker.id,
+              interest_name:
+                marker.interest_name || '',
+              address:
+                marker.address || '',
+              phrase:
+                marker.phrase || '',
+              distance_km:
+                marker.distance_km != null
+                  ? String(
+                      marker.distance_km
+                    )
+                  : '',
+              distance_drive:
+                marker.distance_drive != null
+                  ? String(
+                      marker.distance_drive
+                    )
+                  : '',
+              distance_walk:
+                marker.distance_walk != null
+                  ? String(
+                      marker.distance_walk
+                    )
+                  : '',
+              latitude:
+                marker.latitude != null
+                  ? String(
+                      marker.latitude
+                    )
+                  : '',
+              longitude:
+                marker.longitude != null
+                  ? String(
+                      marker.longitude
+                    )
+                  : '',
+              thumbnail:
+                marker.thumbnail || '',
+              marker_icon:
+                marker.marker_type_table?.[0]
+                  ?.icon || '',
+              marker_type:
+                marker.marker_type_table?.[0]
+                  ?.name || 'general',
+            })
+          ) ??
+          finalData.child_markers ??
+          [],
       };
 
       reset(savedFormData);
 
       setPendingFiles({});
       setPreviews({});
+      setPendingMarkerRemovalIds([]);
+      setMarkerToRemove(null);
 
-      setSuccessMsg(
-        editId
-          ? 'Changes saved successfully.'
-          : 'Project created successfully.'
-      );
+      setEditorFeedback({
+        type: 'success',
+        message: editId
+          ? 'Changes saved.'
+          : 'Project created successfully.',
+      });
 
-      setIsSaving(false);
+      const destination =
+        leaveAfterSaveTarget;
 
-      setTimeout(() => {
-        setSuccessMsg('');
-      }, 2000);
+      setLeaveAfterSaveTarget(null);
+
+      if (destination) {
+        router.push(destination);
+        return;
+      }
 
     } catch (error: any) {
-      alert(`Action Failed: ${error.message}`);
+      setEditorFeedback({
+        type: 'error',
+        message:
+          error?.message
+            ? `Could not save changes: ${error.message}`
+            : 'Could not save changes. Please try again.',
+      });
+      setLeaveAfterSaveTarget(null);
+    } finally {
       setIsSaving(false);
     }
+  };
+
+  const requestNavigation = (
+    target: string
+  ) => {
+    if (!hasUnsavedChanges) {
+      router.push(target);
+      return;
+    }
+
+    setPendingNavigationTarget(target);
+  };
+
+  const handleKeepEditing = () => {
+    setPendingNavigationTarget(null);
+  };
+
+  const handleDiscardAndLeave = () => {
+    const target = pendingNavigationTarget;
+
+    if (!target) return;
+
+    setPendingNavigationTarget(null);
+    setLeaveAfterSaveTarget(null);
+    router.push(target);
+  };
+
+  const handleSaveAndLeave = () => {
+    if (!pendingNavigationTarget || !editId) {
+      return;
+    }
+
+    const target = pendingNavigationTarget;
+
+    setPendingNavigationTarget(null);
+    setLeaveAfterSaveTarget(target);
+
+    void handleSubmit(
+      onSubmit,
+      () => {
+        setLeaveAfterSaveTarget(null);
+        handleProjectValidationError();
+      }
+    )();
   };
 
   const previewData = {
@@ -1040,7 +1310,8 @@ const normalizeTowerAssignments = (
       editorial_desc_color: formData.editorial_desc_color,
       editorial_bg_color: formData.editorial_bg_color,
       amenities_title: formData.amenities_title || 'Experience A Fresh',
-      amenities_title_gold: formData.amenities_title_gold || `Way Of Living in ${formData.title || 'this project'}.`
+      amenities_title_gold: formData.amenities_title_gold || `Way Of Living in ${formData.title || 'this project'}.`,
+      map_subtitle: formData.map_subtitle || 'Everything you need, strategically positioned right around your sanctuary.'
     }],
     amenities: formData.amenities?.length > 0 ? formData.amenities.map((a, i) => ({
       id: a.id ?? i + 1,
@@ -1068,10 +1339,65 @@ const normalizeTowerAssignments = (
     show_on_project_page: l.show_on_project_page || false,
     project_page_order: l.project_page_order || "",
     sort_order: l.sort_order ?? null
-  })) : []
+  })) : [],
+    map_subtitle:
+      formData.map_subtitle ||
+      'Everything you need, strategically positioned right around your sanctuary.',
+    map_latitude:
+      formData.map_latitude || '',
+    map_longitude:
+      formData.map_longitude || '',
+    map_icon:
+      previews['map_icon'] ||
+      formData.map_icon ||
+      '',
+    child_markers:
+      formData.child_markers?.length > 0
+        ? formData.child_markers.map(
+            (marker, index) => ({
+              id:
+                marker.id ??
+                index + 1,
+              editorIndex:
+                index,
+              interest_name:
+                marker.interest_name ||
+                `Landmark ${index + 1}`,
+              address:
+                marker.address || '',
+              phrase:
+                marker.phrase || '',
+              distance_km:
+                marker.distance_km || '',
+              distance_drive:
+                marker.distance_drive || '',
+              distance_walk:
+                marker.distance_walk || '',
+              latitude:
+                marker.latitude || '',
+              longitude:
+                marker.longitude || '',
+              thumbnail:
+                previews[
+                  `child_markers.${index}.thumbnail`
+                ] ||
+                marker.thumbnail ||
+                '',
+              marker_icon:
+                previews[
+                  `child_markers.${index}.marker_icon`
+                ] ||
+                marker.marker_icon ||
+                '',
+              marker_type:
+                marker.marker_type ||
+                'general',
+            })
+          )
+        : [],
   };
 
-    const handleResetEditorChanges = () => {
+    const applyResetEditorChanges = () => {
     Object.values(previews).forEach((url) => {
       if (
         typeof url === 'string' &&
@@ -1083,8 +1409,33 @@ const normalizeTowerAssignments = (
 
     setPreviews({});
     setPendingFiles({});
+    setPendingMarkerRemovalIds([]);
+    setMarkerToRemove(null);
+    setAmenityToRemove(null);
+    setLayoutToRemove(null);
+    setLayoutEditorError('');
+    setTowerError('');
+    setTowerRenameError('');
+    setTowerDeleteError('');
 
     reset();
+    setResetConfirmationOpen(false);
+    setEditorFeedback({
+      type: 'info',
+      message: 'Changes reset to the last saved version.',
+    });
+  };
+
+  const handleRequestResetEditorChanges = () => {
+    if (
+      !hasUnsavedChanges ||
+      isSaving ||
+      isSubmitting
+    ) {
+      return;
+    }
+
+    setResetConfirmationOpen(true);
   };
 
       const handleAddTower = () => {
@@ -2426,6 +2777,535 @@ const amenityRemoveModal =
       </div>
     ) : null;
 
+
+  const selectedMarkerIndex =
+    typeof selectedEditorRegion ===
+      'string' &&
+    selectedEditorRegion.startsWith(
+      'landmark:'
+    )
+      ? Number(
+          selectedEditorRegion.split(
+            ':'
+          )[1]
+        )
+      : null;
+
+  const selectedMarker =
+    selectedMarkerIndex !== null &&
+    Number.isInteger(
+      selectedMarkerIndex
+    )
+      ? formData.child_markers?.[
+          selectedMarkerIndex
+        ]
+      : null;
+
+  const selectedMarkerId =
+    selectedMarker?.id !== undefined &&
+    selectedMarker?.id !== null &&
+    selectedMarker?.id !== ''
+      ? Number(selectedMarker.id)
+      : null;
+
+  const selectedMarkerPendingRemoval =
+    selectedMarkerId !== null &&
+    Number.isInteger(
+      selectedMarkerId
+    ) &&
+    pendingMarkerRemovalIds.includes(
+      selectedMarkerId
+    );
+
+  const markerTypeSuggestions =
+    Array.from(
+      new Set(
+        (formData.child_markers || [])
+          .map(
+            (marker) =>
+              marker.marker_type?.trim()
+          )
+          .filter(
+            (value): value is string =>
+              Boolean(value)
+          )
+      )
+    );
+
+  const handleAddLandmark = () => {
+    const newIndex =
+      markerFields.length;
+
+    appendMarker({
+      id: null,
+      interest_name: '',
+      address: '',
+      phrase: '',
+      distance_km: '',
+      distance_drive: '',
+      distance_walk: '',
+      latitude: '',
+      longitude: '',
+      thumbnail: '',
+      marker_icon: '',
+      marker_type: 'general',
+    });
+
+    setSelectedEditorRegion(
+      `landmark:${newIndex}`
+    );
+  };
+
+  const handleRequestRemoveLandmark = (
+    index: number
+  ) => {
+    const marker =
+      formData.child_markers?.[index];
+
+    if (!marker) return;
+
+    setMarkerToRemove({
+      index,
+      title:
+        marker.interest_name?.trim() ||
+        `Landmark ${index + 1}`,
+    });
+  };
+
+  const handleCancelRemoveLandmark = () => {
+    setMarkerToRemove(null);
+  };
+
+  const handleConfirmRemoveLandmark = () => {
+    if (!markerToRemove) return;
+
+    const marker =
+      formData.child_markers?.[
+        markerToRemove.index
+      ];
+
+    if (!marker) {
+      setMarkerToRemove(null);
+      return;
+    }
+
+    const parsedId =
+      marker.id !== undefined &&
+      marker.id !== null &&
+      marker.id !== ''
+        ? Number(marker.id)
+        : null;
+
+    if (
+      parsedId !== null &&
+      Number.isInteger(parsedId)
+    ) {
+      // Existing DB landmark: keep it visible and stage its deletion.
+      setPendingMarkerRemovalIds(
+        (current) =>
+          current.includes(parsedId)
+            ? current
+            : [...current, parsedId]
+      );
+
+      setMarkerToRemove(null);
+      setSelectedEditorRegion(
+        'points-of-interest'
+      );
+      return;
+    }
+
+    // New unsaved landmark: there is no DB row to stage.
+    removeNestedFieldFiles(
+      'child_markers',
+      markerToRemove.index
+    );
+
+    removeMarker(
+      markerToRemove.index
+    );
+
+    setMarkerToRemove(null);
+    setSelectedEditorRegion(
+      'points-of-interest'
+    );
+  };
+
+  const handleUndoRemoveLandmark = (
+    markerId: number
+  ) => {
+    setPendingMarkerRemovalIds(
+      (current) =>
+        current.filter(
+          (id) => id !== markerId
+        )
+    );
+  };
+
+  const markerRemoveModal =
+    markerToRemove ? (
+      <div
+        className="
+          fixed inset-0 z-[260]
+          flex items-center justify-center
+          bg-brand-blue/55
+          backdrop-blur-sm
+          p-4
+        "
+        onMouseDown={
+          handleCancelRemoveLandmark
+        }
+      >
+        <div
+          className="
+            w-full max-w-md
+            overflow-hidden
+            rounded-2xl
+            bg-white
+            shadow-2xl
+          "
+          onMouseDown={(e) =>
+            e.stopPropagation()
+          }
+        >
+          <div
+            className="
+              border-b border-gray-100
+              px-6 py-5
+            "
+          >
+            <p
+              className="
+                text-[10px]
+                font-bold uppercase
+                tracking-widest
+                text-red-500
+              "
+            >
+              Remove Landmark
+            </p>
+
+            <h3
+              className="
+                mt-1
+                text-xl
+                font-semibold
+                text-brand-blue
+              "
+            >
+              Remove {
+                markerToRemove.title
+              }?
+            </h3>
+          </div>
+
+          <div className="px-6 py-5">
+            <p
+              className="
+                text-sm
+                leading-relaxed
+                text-gray-500
+              "
+            >
+              Existing landmarks stay visible as
+              pending removal until you save.
+              Use Undo or Reset if you change
+              your mind.
+            </p>
+          </div>
+
+          <div
+            className="
+              flex justify-end gap-3
+              border-t border-gray-100
+              bg-gray-50
+              px-6 py-4
+            "
+          >
+            <button
+              type="button"
+              onClick={
+                handleCancelRemoveLandmark
+              }
+              className="
+                rounded-lg
+                px-4 py-2.5
+                text-xs font-bold
+                text-gray-500
+                hover:bg-gray-100
+              "
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={
+                handleConfirmRemoveLandmark
+              }
+              className="
+                inline-flex
+                items-center
+                justify-center
+                gap-2
+                rounded-lg
+                bg-red-600
+                px-4 py-2.5
+                text-xs font-bold
+                text-white
+                hover:bg-red-700
+              "
+            >
+              <Trash2 size={14} />
+              Remove Landmark
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null;
+
+  const resetConfirmationModal =
+    resetConfirmationOpen ? (
+      <div
+        className="
+          fixed inset-0 z-[290]
+          flex items-center justify-center
+          bg-brand-blue/55
+          backdrop-blur-sm
+          p-4
+        "
+        onMouseDown={() =>
+          setResetConfirmationOpen(false)
+        }
+      >
+        <div
+          className="
+            w-full max-w-md
+            overflow-hidden
+            rounded-2xl
+            bg-white
+            shadow-2xl
+          "
+          onMouseDown={(event) =>
+            event.stopPropagation()
+          }
+        >
+          <div className="border-b border-gray-100 px-6 py-5">
+            <div
+              className="
+                flex items-center gap-2
+                text-[10px]
+                font-bold uppercase
+                tracking-widest
+                text-amber-600
+              "
+            >
+              <AlertCircle size={14} />
+              Unsaved Changes
+            </div>
+
+            <h3 className="mt-2 text-xl font-semibold text-brand-blue">
+              Reset your changes?
+            </h3>
+          </div>
+
+          <div className="px-6 py-5">
+            <p className="text-sm leading-relaxed text-gray-500">
+              This will discard the changes made since your last save and restore the saved project.
+            </p>
+          </div>
+
+          <div
+            className="
+              flex justify-end gap-2
+              border-t border-gray-100
+              bg-gray-50
+              px-6 py-4
+            "
+          >
+            <button
+              type="button"
+              onClick={() =>
+                setResetConfirmationOpen(false)
+              }
+              className="
+                rounded-lg
+                px-4 py-2.5
+                text-xs font-bold
+                text-gray-500
+                hover:bg-gray-100
+              "
+            >
+              Keep Editing
+            </button>
+
+            <button
+              type="button"
+              onClick={applyResetEditorChanges}
+              className="
+                rounded-lg
+                border border-red-200
+                bg-white
+                px-4 py-2.5
+                text-xs font-bold
+                text-red-600
+                hover:bg-red-50
+              "
+            >
+              Reset Changes
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null;
+
+  const unsavedNavigationModal =
+    pendingNavigationTarget ? (
+      <div
+        className="
+          fixed inset-0 z-[280]
+          flex items-center justify-center
+          bg-brand-blue/55
+          backdrop-blur-sm
+          p-4
+        "
+        onMouseDown={handleKeepEditing}
+      >
+        <div
+          className="
+            w-full max-w-md
+            overflow-hidden
+            rounded-2xl
+            bg-white
+            shadow-2xl
+          "
+          onMouseDown={(event) =>
+            event.stopPropagation()
+          }
+        >
+          <div
+            className="
+              border-b border-gray-100
+              px-6 py-5
+            "
+          >
+            <div
+              className="
+                flex items-center gap-2
+                text-[10px]
+                font-bold uppercase
+                tracking-widest
+                text-amber-600
+              "
+            >
+              <AlertCircle size={14} />
+              Unsaved Changes
+            </div>
+
+            <h3
+              className="
+                mt-2
+                text-xl
+                font-semibold
+                text-brand-blue
+              "
+            >
+              Leave this project?
+            </h3>
+          </div>
+
+          <div className="px-6 py-5">
+            <p
+              className="
+                text-sm
+                leading-relaxed
+                text-gray-500
+              "
+            >
+              You have changes that have not been saved yet.
+              Keep editing, discard them, or save before leaving.
+            </p>
+          </div>
+
+          <div
+            className="
+              flex flex-col-reverse
+              sm:flex-row
+              sm:justify-end
+              gap-2
+              border-t border-gray-100
+              bg-gray-50
+              px-6 py-4
+            "
+          >
+            <button
+              type="button"
+              onClick={handleKeepEditing}
+              className="
+                rounded-lg
+                px-4 py-2.5
+                text-xs font-bold
+                text-gray-500
+                hover:bg-gray-100
+              "
+            >
+              Keep Editing
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDiscardAndLeave}
+              className="
+                rounded-lg
+                border border-red-200
+                bg-white
+                px-4 py-2.5
+                text-xs font-bold
+                text-red-600
+                hover:bg-red-50
+              "
+            >
+              Discard &amp; Leave
+            </button>
+
+            {editId && (
+              <button
+                type="button"
+                onClick={handleSaveAndLeave}
+                disabled={
+                  isSaving || isSubmitting
+                }
+                className="
+                  inline-flex
+                  items-center
+                  justify-center
+                  gap-2
+                  rounded-lg
+                  bg-brand-blue
+                  px-4 py-2.5
+                  text-xs font-bold
+                  text-white
+                  hover:bg-brand-blue/90
+                  disabled:opacity-50
+                  disabled:cursor-not-allowed
+                "
+              >
+                {(isSaving || isSubmitting) ? (
+                  <Loader2
+                    size={14}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <Save size={14} />
+                )}
+                Save &amp; Leave
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    ) : null;
+
   const labelStyles = "text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1 mt-4";
   const inputStyles = "w-full border border-gray-200 rounded-lg p-3 text-sm focus:border-brand-gold outline-none transition-colors bg-gray-50 focus:bg-white";
 
@@ -2439,45 +3319,104 @@ const amenityRemoveModal =
 
 if (!editId) {
   return ( 
-    <div
+    <>
+      {unsavedNavigationModal}
+      <div
       className="
         min-h-screen
         bg-[#F7F8FA]
         text-gray-900
         font-sans
-        overflow-y-auto
       "
     >
-      {/* TOP BAR */}
+      {/* PERSISTENT TOP ACTION BAR */}
       <header
         className="
+          fixed inset-x-0 top-0
+          z-50
           h-20
-          bg-white
+          bg-white/95
+          backdrop-blur-md
           border-b border-gray-200
+          shadow-[0_1px_0_rgba(15,23,42,0.04)]
           flex items-center
+          justify-between
+          gap-4
           px-6 md:px-10
-          sticky top-0
-          z-30
         "
       >
+        <div className="flex items-center gap-4 min-w-0">
+          <button
+            type="button"
+            onClick={() =>
+              requestNavigation(
+                '/admin/dashboard?section=Projects'
+              )
+            }
+            className="
+              inline-flex items-center gap-2
+              rounded-lg
+              px-2.5 py-2
+              text-xs
+              font-bold
+              text-gray-500
+              hover:text-brand-blue
+              hover:bg-gray-100
+              transition-colors
+              shrink-0
+            "
+          >
+            <ArrowLeft size={16} />
+            <span className="hidden sm:inline">Back to Projects</span>
+          </button>
+
+          <div className="hidden md:block h-6 w-px bg-gray-200" />
+
+          <div className="min-w-0 hidden md:block">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              Projects / New Project
+            </p>
+            <p className="text-sm font-bold text-brand-blue truncate">
+              Add New Project
+            </p>
+          </div>
+        </div>
+
         <button
-          type="button"
-          onClick={() =>
-            router.push(
-              '/admin/dashboard?section=Projects'
-            )
-          }
+          type="submit"
+          form="new-project-form"
+          disabled={isCreatingBasic}
           className="
-            flex items-center gap-2
+            inline-flex
+            items-center
+            justify-center
+            gap-2
+            min-w-[190px]
+            rounded-lg
+            bg-brand-blue
+            px-4 py-2.5
             text-xs
             font-bold
-            text-gray-500
-            hover:text-brand-blue
+            text-white
+            shadow-sm
+            hover:bg-brand-blue/90
             transition-colors
+            disabled:opacity-60
+            disabled:cursor-not-allowed
+            shrink-0
           "
         >
-          <ArrowLeft size={16} />
-          Back to Projects
+          {isCreatingBasic ? (
+            <>
+              <Loader2 size={15} className="animate-spin" />
+              Creating...
+            </>
+          ) : (
+            <>
+              <PlusCircle size={15} />
+              Create &amp; Continue
+            </>
+          )}
         </button>
       </header>
 
@@ -2487,7 +3426,8 @@ if (!editId) {
           max-w-4xl
           mx-auto
           px-6
-          py-10 md:py-14
+          pt-28 md:pt-32
+          pb-10 md:pb-14
         "
       >
         {/* PAGE INTRO */}
@@ -2580,9 +3520,11 @@ if (!editId) {
 
         {/* FORM */}
         <form
+          id="new-project-form"
           onSubmit={
             handleBasicSubmit(
-              onCreateBasicProject
+              onCreateBasicProject,
+              handleBasicValidationError
             )
           }
           className="
@@ -3077,7 +4019,7 @@ if (!editId) {
             <button
               type="button"
               onClick={() =>
-                router.push(
+                requestNavigation(
                   '/admin/dashboard?section=Projects'
                 )
               }
@@ -3137,17 +4079,15 @@ if (!editId) {
         </form>
       </main>
     </div>
+    </>
   );
 }
 
 // ==========================================
-// VISUAL PROJECT EDITOR
+// PROJECT VISUAL EDITOR
 // ==========================================
 
-if (
-  editId &&
-  !useLegacyEditor
-) {
+if (editId) {
   return (
     <div
       className="
@@ -3162,40 +4102,75 @@ if (
     >
       {amenityRemoveModal}
       {layoutRemoveModal}
+      {markerRemoveModal}
+      {resetConfirmationModal}
+      {unsavedNavigationModal}
 
-      {/* SUCCESS TOAST */}
-      {successMsg && (
+      {/* NON-BLOCKING EDITOR FEEDBACK */}
+      {editorFeedback && (
         <div
-          className="
+          role={
+            editorFeedback.type === 'error'
+              ? 'alert'
+              : 'status'
+          }
+          aria-live="polite"
+          className={`
             fixed
             top-24
-            left-1/2
-            -translate-x-1/2
+            left-4 right-4
+            sm:left-auto sm:right-6
+            sm:max-w-md
             z-[100]
             flex
-            items-center
-            gap-2
+            items-start
+            gap-2.5
             rounded-xl
             border
-            border-green-200
             bg-white
             px-4 py-3
             shadow-xl
-          "
+            ${
+              editorFeedback.type === 'error'
+                ? 'border-red-200'
+                : editorFeedback.type === 'success'
+                ? 'border-emerald-200'
+                : 'border-blue-200'
+            }
+          `}
         >
-          <CheckCircle2
-            size={17}
-            className="text-green-500"
-          />
+          {editorFeedback.type === 'error' ? (
+            <AlertCircle
+              size={17}
+              className="mt-0.5 shrink-0 text-red-500"
+            />
+          ) : (
+            <CheckCircle2
+              size={17}
+              className={`
+                mt-0.5 shrink-0
+                ${
+                  editorFeedback.type === 'success'
+                    ? 'text-emerald-500'
+                    : 'text-brand-blue'
+                }
+              `}
+            />
+          )}
 
           <span
-            className="
+            className={`
               text-xs
               font-bold
-              text-brand-blue
-            "
+              leading-relaxed
+              ${
+                editorFeedback.type === 'error'
+                  ? 'text-red-700'
+                  : 'text-brand-blue'
+              }
+            `}
           >
-            {successMsg}
+            {editorFeedback.message}
           </span>
         </div>
       )}
@@ -3204,6 +4179,7 @@ if (
       {/* EDITOR TOP BAR */}
       <header
         className="
+          sticky top-0
           h-20
           shrink-0
           bg-white
@@ -3230,7 +4206,7 @@ if (
           <button
             type="button"
             onClick={() =>
-              router.push(
+              requestNavigation(
                 '/admin/dashboard?section=Projects'
               )
             }
@@ -3348,8 +4324,38 @@ if (
           {/* DIVIDER */}
           <div className="hidden lg:block h-6 w-px bg-gray-200 mx-1" />
 
-          {/* CHANGE STATUS */}
-          {isDirty && (
+          {/* SAVE STATUS */}
+          {(isSaving || isSubmitting) ? (
+            <span
+              className="
+                hidden lg:inline-flex
+                items-center gap-1.5
+                text-xs font-medium
+                text-brand-blue
+                whitespace-nowrap
+              "
+            >
+              <Loader2
+                size={13}
+                className="animate-spin"
+              />
+              Saving...
+            </span>
+          ) : editorFeedback?.type === 'success' &&
+            !hasUnsavedChanges ? (
+            <span
+              className="
+                hidden lg:inline-flex
+                items-center gap-1.5
+                text-xs font-medium
+                text-emerald-600
+                whitespace-nowrap
+              "
+            >
+              <CheckCircle2 size={13} />
+              Saved
+            </span>
+          ) : hasUnsavedChanges ? (
             <span
               className="
                 hidden lg:inline-flex
@@ -3364,14 +4370,15 @@ if (
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
               Unsaved changes
             </span>
-          )}
+          ) : null}
           
           {/* RESET */}
           <button
             type="button"
-            onClick={handleResetEditorChanges}
+            onClick={handleRequestResetEditorChanges}
+            title="Restore the last saved version"
             disabled={
-              !isDirty ||
+              !hasUnsavedChanges ||
               isSaving ||
               isSubmitting
             }
@@ -3393,9 +4400,12 @@ if (
           {/* SAVE */}
           <button
             type="button"
-            onClick={handleSubmit(onSubmit)}
+            onClick={handleSubmit(
+              onSubmit,
+              handleProjectValidationError
+            )}
             disabled={
-              !isDirty ||
+              !hasUnsavedChanges ||
               isSaving ||
               isSubmitting
             }
@@ -3426,7 +4436,9 @@ if (
               <Save size={15} />
             )}
 
-            Save Changes
+            {(isSaving || isSubmitting)
+              ? 'Saving...'
+              : 'Save Changes'}
           </button>
 
         </div>
@@ -3473,6 +4485,12 @@ if (
             }
             onAddLayout={
               handleAddLayout
+            }
+            onAddLandmark={
+              handleAddLandmark
+            }
+            pendingRemovedLandmarkIds={
+              pendingMarkerRemovalIds
             }
           />
         </div>
@@ -3532,8 +4550,12 @@ if (
               ? 'Awards Badge'
               : selectedEditorRegion === 'tags'
               ? 'Tags & Stats'
-              : selectedEditorRegion === 'editorial'
-              ? 'Editorial Section'
+              : selectedEditorRegion === 'editorial-title'
+              ? 'Editorial Headline'
+              : selectedEditorRegion === 'editorial-description'
+              ? 'Editorial Description'
+              : selectedEditorRegion === 'editorial-visuals'
+              ? 'Editorial Image & Background'
               : selectedEditorRegion ===
                 'amenities'
               ? 'Amenities Section'
@@ -3550,6 +4572,14 @@ if (
                 )
               ? selectedLayout?.title ||
                 'Unit Layout'
+              : selectedEditorRegion ===
+                'points-of-interest'
+              ? 'Points of Interest'
+              : selectedEditorRegion?.startsWith(
+                  'landmark:'
+                )
+              ? selectedMarker?.interest_name ||
+                'Landmark'
               : selectedEditorRegion === 'page-settings'
               ? 'Page Settings'
               : 'Select Content'}
@@ -3770,6 +4800,21 @@ if (
                   />
                 </div>
 
+                <div
+                  className="
+                    rounded-xl
+                    border border-brand-blue/10
+                    bg-brand-blue/[0.03]
+                    px-4 py-3
+                  "
+                >
+                  <p className="text-[10px] leading-relaxed text-gray-500">
+                    This is the public-facing location shown in the hero.
+                    Exact map coordinates are managed separately under
+                    Points of Interest.
+                  </p>
+                </div>
+
               </div>
             )}
 
@@ -3857,55 +4902,112 @@ if (
                     space-y-3
                   "
                 >
-                  {tagFields.map(
-                    (field, index) => (
-                      <div
-                        key={field.id}
+                  {tagFields.length === 0 ? (
+                    <div
+                      className="
+                        rounded-xl
+                        border-2
+                        border-dashed
+                        border-gray-200
+                        bg-gray-50/70
+                        px-4 py-6
+                        text-center
+                      "
+                    >
+                      <p className="text-xs font-medium text-brand-blue">
+                        No project tags yet
+                      </p>
+
+                      <p className="mx-auto mt-1 max-w-xs text-[10px] leading-relaxed text-gray-400">
+                        Add short public-facing labels such as Pre-Selling,
+                        Residential, or Ready for Occupancy.
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          appendTag({
+                            tag_name: ''
+                          })
+                        }
                         className="
-                          flex
+                          mt-4
+                          inline-flex
                           items-center
+                          justify-center
                           gap-2
+                          rounded-lg
+                          bg-brand-blue
+                          px-3 py-2
+                          text-[10px]
+                          font-bold
+                          text-white
+                          transition-colors
+                          hover:bg-brand-gold
+                          hover:text-brand-blue
                         "
                       >
-                        <input
-                          {...register(
-                            `tags.${index}.tag_name`
-                          )}
-                          placeholder="Tag name"
+                        <PlusCircle size={13} />
+                        Add First Tag
+                      </button>
+                    </div>
+                  ) : (
+                    tagFields.map(
+                      (field, index) => (
+                        <div
+                          key={field.id}
                           className="
-                            flex-1
-                            border
-                            border-gray-200
-                            rounded-xl
-                            px-3 py-2.5
-                            text-sm
-                            text-brand-blue
-                            outline-none
-                            focus:border-brand-gold
-                          "
-                        />
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            removeTag(
-                              index
-                            )
-                          }
-                          className="
-                            p-2
-                            text-gray-300
-                            hover:text-red-500
+                            flex
+                            items-center
+                            gap-2
                           "
                         >
-                          <Trash2
-                            size={15}
+                          <input
+                            {...register(
+                              `tags.${index}.tag_name`
+                            )}
+                            placeholder="Tag name"
+                            className="
+                              flex-1
+                              border
+                              border-gray-200
+                              rounded-xl
+                              px-3 py-2.5
+                              text-sm
+                              text-brand-blue
+                              outline-none
+                              focus:border-brand-gold
+                            "
                           />
-                        </button>
-                      </div>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              removeTag(
+                                index
+                              )
+                            }
+                            aria-label="Remove tag"
+                            className="
+                              p-2
+                              text-gray-300
+                              hover:text-red-500
+                            "
+                          >
+                            <Trash2
+                              size={15}
+                            />
+                          </button>
+                        </div>
+                      )
                     )
                   )}
                 </div>
+
+                <p className="mt-3 text-[10px] leading-relaxed text-gray-400">
+                  Tags are descriptive labels. Total SQM and Total Units below
+                  are separate project statistics.
+                </p>
 
 
                 <div
@@ -3987,51 +5089,11 @@ if (
               </div>
             )}
 
-            {/* EDITORIAL */}
+            {/* EDITORIAL HEADLINE */}
             {selectedEditorRegion ===
-              'editorial' && (
+              'editorial-title' && (
               <div className="space-y-6">
-
-                {/* IMAGE */}
                 <div>
-                  <ImageDropzone
-                    fieldPath="editorial_img"
-                    label="Editorial Image"
-                    height="h-52"
-                    watch={watch}
-                    setValue={setValue}
-                    errors={errors}
-                    setPendingFiles={
-                      setPendingFiles
-                    }
-                    setPreviews={
-                      setPreviews
-                    }
-                    previews={previews}
-                  />
-
-                  <p
-                    className="
-                      mt-2
-                      text-[10px]
-                      leading-relaxed
-                      text-gray-400
-                    "
-                  >
-                    This image appears beside the
-                    editorial headline and description.
-                  </p>
-                </div>
-
-
-                <div
-                  className="
-                    border-t
-                    border-gray-100
-                    pt-6
-                  "
-                >
-                  {/* HEADLINE */}
                   <label
                     className="
                       block
@@ -4050,7 +5112,7 @@ if (
                     {...register(
                       'editorial_title'
                     )}
-                    rows={3}
+                    rows={4}
                     placeholder="Editorial headline"
                     className="
                       w-full
@@ -4085,8 +5147,45 @@ if (
                   )}
                 </div>
 
+                <div
+                  className="
+                    border-t
+                    border-gray-100
+                    pt-5
+                  "
+                >
+                  <ColorInputSync
+                    label="Headline Color"
+                    fieldName="editorial_title_color"
+                    register={register}
+                    watch={watch}
+                    setValue={setValue}
+                    inputStyles={inputStyles}
+                    labelStyles={labelStyles}
+                  />
 
-                {/* DESCRIPTION */}
+                  <p
+                    className="
+                      mt-2
+                      text-[10px]
+                      leading-relaxed
+                      text-gray-400
+                    "
+                  >
+                    Click the editorial headline
+                    in the preview whenever you
+                    want to return to these
+                    controls.
+                  </p>
+                </div>
+              </div>
+            )}
+
+
+            {/* EDITORIAL DESCRIPTION */}
+            {selectedEditorRegion ===
+              'editorial-description' && (
+              <div className="space-y-6">
                 <div>
                   <label
                     className="
@@ -4106,7 +5205,7 @@ if (
                     {...register(
                       'editorial_long'
                     )}
-                    rows={8}
+                    rows={10}
                     placeholder="Project description"
                     className="
                       w-full
@@ -4127,79 +5226,108 @@ if (
                   />
                 </div>
 
-
-                {/* COLORS */}
                 <div
                   className="
                     border-t
                     border-gray-100
-                    pt-6
+                    pt-5
                   "
                 >
-                  <div className="mb-4">
-                    <p
-                      className="
-                        text-xs
-                        font-bold
-                        text-brand-blue
-                      "
-                    >
-                      Appearance
-                    </p>
+                  <ColorInputSync
+                    label="Text Color"
+                    fieldName="editorial_desc_color"
+                    register={register}
+                    watch={watch}
+                    setValue={setValue}
+                    inputStyles={inputStyles}
+                    labelStyles={labelStyles}
+                  />
 
-                    <p
-                      className="
-                        mt-1
-                        text-[10px]
-                        leading-relaxed
-                        text-gray-400
-                      "
-                    >
-                      Adjust the colors used by this
-                      editorial section.
-                    </p>
-                  </div>
-
-
-                  <div
+                  <p
                     className="
-                      grid
-                      grid-cols-1
-                      gap-4
+                      mt-2
+                      text-[10px]
+                      leading-relaxed
+                      text-gray-400
                     "
                   >
-                    <ColorInputSync
-                      label="Headline Color"
-                      fieldName="editorial_title_color"
-                      register={register}
-                      watch={watch}
-                      setValue={setValue}
-                      inputStyles={inputStyles}
-                      labelStyles={labelStyles}
-                    />
+                    Text and color stay together
+                    because they describe the same
+                    visible element.
+                  </p>
+                </div>
+              </div>
+            )}
 
-                    <ColorInputSync
-                      label="Text Color"
-                      fieldName="editorial_desc_color"
-                      register={register}
-                      watch={watch}
-                      setValue={setValue}
-                      inputStyles={inputStyles}
-                      labelStyles={labelStyles}
-                    />
 
-                    <ColorInputSync
-                      label="Background Color"
-                      fieldName="editorial_bg_color"
-                      register={register}
-                      watch={watch}
-                      setValue={setValue}
-                      inputStyles={inputStyles}
-                      labelStyles={labelStyles}
-                    />
-                  </div>
+            {/* EDITORIAL IMAGE + BACKGROUND */}
+            {selectedEditorRegion ===
+              'editorial-visuals' && (
+              <div className="space-y-6">
+                <div>
+                  <ImageDropzone
+                    fieldPath="editorial_img"
+                    label="Editorial Image"
+                    height="h-52"
+                    watch={watch}
+                    setValue={setValue}
+                    errors={errors}
+                    setPendingFiles={
+                      setPendingFiles
+                    }
+                    setPreviews={
+                      setPreviews
+                    }
+                    previews={previews}
+                  />
+
+                  <p
+                    className="
+                      mt-2
+                      text-[10px]
+                      leading-relaxed
+                      text-gray-400
+                    "
+                  >
+                    Click the image or the empty
+                    background area of the
+                    editorial section to open
+                    these visual controls.
+                  </p>
                 </div>
 
+                <div
+                  className="
+                    border-t
+                    border-gray-100
+                    pt-5
+                  "
+                >
+                  <ColorInputSync
+                    label="Section Background Color"
+                    fieldName="editorial_bg_color"
+                    register={register}
+                    watch={watch}
+                    setValue={setValue}
+                    inputStyles={inputStyles}
+                    labelStyles={labelStyles}
+                  />
+
+                  <p
+                    className="
+                      mt-2
+                      text-[10px]
+                      leading-relaxed
+                      text-gray-400
+                    "
+                  >
+                    The image and section
+                    background share one inspector
+                    because they define the
+                    editorial section's visual
+                    treatment.
+                  </p>
+                </div>
               </div>
             )}
 
@@ -4586,6 +5714,11 @@ if (
                   }
                   previews={previews}
                 />
+
+                <p className="-mt-3 text-[10px] leading-relaxed text-gray-400">
+                  This image appears in the amenities carousel. A landscape
+                  image with the subject near the center works best.
+                </p>
 
 
                 {/* DELETE */}
@@ -5295,6 +6428,11 @@ if (
                   previews={previews}
                 />
 
+                <p className="-mt-3 text-[10px] leading-relaxed text-gray-400">
+                  Transparent PNG or WebP floorplans work best so the drawing
+                  stays clear on the white blueprint card.
+                </p>
+
                 {/* DISPLAY PLACEMENT */}
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
@@ -5452,6 +6590,706 @@ if (
                     <Trash2 size={15} />
                     Remove Unit Layout
                   </button>
+                </div>
+              </div>
+            )}
+
+
+            {/* POINTS OF INTEREST SECTION */}
+            {selectedEditorRegion ===
+              'points-of-interest' && (
+              <div className="space-y-6">
+                <div>
+                  <p className="text-xs font-bold text-brand-blue">
+                    Map Section
+                  </p>
+
+                  <p className="mt-1 text-[10px] leading-relaxed text-gray-400">
+                    Edit the project map context and manage nearby landmarks.
+                    The live public map remains interactive on the website;
+                    this editor uses a simplified preview so map controls do
+                    not compete with content editing.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                    Section Subtitle
+                  </label>
+
+                  <textarea
+                    {...register(
+                      'map_subtitle'
+                    )}
+                    rows={3}
+                    placeholder="Everything you need, strategically positioned right around your sanctuary."
+                    className="
+                      w-full
+                      resize-none
+                      rounded-xl
+                      border border-gray-200
+                      bg-white
+                      px-4 py-3
+                      text-sm
+                      leading-relaxed
+                      text-brand-blue
+                      outline-none
+                      transition-all
+                      focus:border-brand-gold
+                      focus:ring-2
+                      focus:ring-brand-gold/10
+                    "
+                  />
+                </div>
+
+                <div
+                  className="
+                    overflow-hidden
+                    rounded-xl
+                    border border-gray-200
+                    bg-white
+                  "
+                >
+                  <div className="border-b border-gray-100 px-4 py-4">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
+                      Project Map Location
+                    </p>
+
+                    <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
+                      These coordinates place the development itself on the
+                      map. They are separate from nearby landmark coordinates.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4 p-4">
+                    <details
+                      className="
+                        rounded-xl
+                        border border-gray-200
+                        bg-gray-50
+                      "
+                    >
+                      <summary
+                        className="
+                          cursor-pointer
+                          list-none
+                          px-4 py-3
+                          text-[10px]
+                          font-bold
+                          uppercase
+                          tracking-wider
+                          text-brand-blue
+                        "
+                      >
+                        Location Coordinates
+                      </summary>
+
+                      <div className="grid grid-cols-2 gap-3 border-t border-gray-200 p-4">
+                        <div>
+                          <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
+                            Latitude
+                          </label>
+
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            {...register(
+                              'map_latitude'
+                            )}
+                            placeholder="14.5995"
+                            className="
+                              w-full rounded-lg
+                              border border-gray-200
+                              bg-white
+                              px-3 py-2.5
+                              text-xs
+                              text-brand-blue
+                              outline-none
+                              focus:border-brand-gold
+                            "
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
+                            Longitude
+                          </label>
+
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            {...register(
+                              'map_longitude'
+                            )}
+                            placeholder="120.9842"
+                            className="
+                              w-full rounded-lg
+                              border border-gray-200
+                              bg-white
+                              px-3 py-2.5
+                              text-xs
+                              text-brand-blue
+                              outline-none
+                              focus:border-brand-gold
+                            "
+                          />
+                        </div>
+                      </div>
+                    </details>
+
+                    <ImageDropzone
+                      fieldPath="map_icon"
+                      label="Project Map Pin"
+                      height="h-32"
+                      watch={watch}
+                      setValue={setValue}
+                      errors={errors}
+                      setPendingFiles={
+                        setPendingFiles
+                      }
+                      setPreviews={
+                        setPreviews
+                      }
+                      previews={previews}
+                    />
+
+                    <p className="text-[9px] leading-relaxed text-gray-400">
+                      A transparent PNG or SVG works best for the project pin.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-100 pt-6">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
+                        Nearby Landmarks
+                      </p>
+
+                      <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
+                        {markerFields.length}{' '}
+                        {markerFields.length === 1
+                          ? 'landmark'
+                          : 'landmarks'}{' '}
+                        configured
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={
+                      handleAddLandmark
+                    }
+                    className="
+                      w-full
+                      inline-flex
+                      items-center
+                      justify-center
+                      gap-2
+                      rounded-xl
+                      bg-brand-blue
+                      px-4 py-3
+                      text-xs
+                      font-bold
+                      text-white
+                      transition-colors
+                      hover:bg-brand-gold
+                      hover:text-brand-blue
+                    "
+                  >
+                    <PlusCircle size={15} />
+                    Add Landmark
+                  </button>
+
+                  <p className="mt-3 text-[10px] leading-relaxed text-gray-400">
+                    Select any landmark card in the preview to edit its
+                    details. New landmarks also appear as the last card in
+                    the section.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* INDIVIDUAL LANDMARK */}
+            {selectedMarkerIndex !== null &&
+              selectedMarker && (
+              <div className="space-y-6">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelectedEditorRegion(
+                      'points-of-interest'
+                    )
+                  }
+                  className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-gray-400 hover:text-brand-blue"
+                >
+                  <ArrowLeft size={13} />
+                  Points of Interest
+                </button>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                    Landmark Name
+                  </label>
+
+                  <input
+                    {...register(
+                      `child_markers.${selectedMarkerIndex}.interest_name`
+                    )}
+                    placeholder="e.g. SM City"
+                    className="
+                      w-full rounded-xl
+                      border border-gray-200
+                      px-4 py-3
+                      text-sm text-brand-blue
+                      outline-none
+                      focus:border-brand-gold
+                      focus:ring-2
+                      focus:ring-brand-gold/10
+                    "
+                  />
+
+                  {errors?.child_markers?.[
+                    selectedMarkerIndex
+                  ]?.interest_name && (
+                    <p className="mt-1.5 text-[10px] font-medium text-red-500">
+                      {
+                        errors.child_markers[
+                          selectedMarkerIndex
+                        ]?.interest_name
+                          ?.message
+                      }
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                    Address
+                  </label>
+
+                  <input
+                    {...register(
+                      `child_markers.${selectedMarkerIndex}.address`
+                    )}
+                    placeholder="Street, city, or area"
+                    className="
+                      w-full rounded-xl
+                      border border-gray-200
+                      px-4 py-3
+                      text-sm text-brand-blue
+                      outline-none
+                      focus:border-brand-gold
+                      focus:ring-2
+                      focus:ring-brand-gold/10
+                    "
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                    Short Description
+                  </label>
+
+                  <input
+                    {...register(
+                      `child_markers.${selectedMarkerIndex}.phrase`
+                    )}
+                    placeholder="e.g. Everyday essentials nearby"
+                    className="
+                      w-full rounded-xl
+                      border border-gray-200
+                      px-4 py-3
+                      text-sm text-brand-blue
+                      outline-none
+                      focus:border-brand-gold
+                      focus:ring-2
+                      focus:ring-brand-gold/10
+                    "
+                  />
+                </div>
+
+                <div
+                  className="
+                    rounded-xl
+                    border border-gray-200
+                    bg-gray-50
+                    p-4
+                  "
+                >
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
+                    Distance &amp; Travel Time
+                  </p>
+
+                  <div className="mt-4 grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
+                        Distance
+                      </label>
+
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          {...register(
+                            `child_markers.${selectedMarkerIndex}.distance_km`
+                          )}
+                          className="
+                            w-full rounded-lg
+                            border border-gray-200
+                            bg-white
+                            px-3 py-2.5 pr-8
+                            text-xs
+                            text-brand-blue
+                            outline-none
+                            focus:border-brand-gold
+                          "
+                        />
+
+                        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-gray-300">
+                          KM
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
+                        Drive
+                      </label>
+
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          {...register(
+                            `child_markers.${selectedMarkerIndex}.distance_drive`
+                          )}
+                          className="
+                            w-full rounded-lg
+                            border border-gray-200
+                            bg-white
+                            px-3 py-2.5 pr-9
+                            text-xs
+                            text-brand-blue
+                            outline-none
+                            focus:border-brand-gold
+                          "
+                        />
+
+                        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-gray-300">
+                          MIN
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
+                        Walk
+                      </label>
+
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          {...register(
+                            `child_markers.${selectedMarkerIndex}.distance_walk`
+                          )}
+                          className="
+                            w-full rounded-lg
+                            border border-gray-200
+                            bg-white
+                            px-3 py-2.5 pr-9
+                            text-xs
+                            text-brand-blue
+                            outline-none
+                            focus:border-brand-gold
+                          "
+                        />
+
+                        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-gray-300">
+                          MIN
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {(errors?.child_markers?.[
+                    selectedMarkerIndex
+                  ]?.distance_km ||
+                    errors?.child_markers?.[
+                      selectedMarkerIndex
+                    ]?.distance_drive ||
+                    errors?.child_markers?.[
+                      selectedMarkerIndex
+                    ]?.distance_walk) && (
+                    <p className="mt-2 text-[9px] font-medium text-red-500">
+                      Distance, drive time, and walk time are required.
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                    Category / Tag
+                  </label>
+
+                  <input
+                    list="landmark-type-suggestions"
+                    {...register(
+                      `child_markers.${selectedMarkerIndex}.marker_type`
+                    )}
+                    placeholder="e.g. retail"
+                    className="
+                      w-full rounded-xl
+                      border border-gray-200
+                      px-4 py-3
+                      text-sm text-brand-blue
+                      outline-none
+                      focus:border-brand-gold
+                      focus:ring-2
+                      focus:ring-brand-gold/10
+                    "
+                  />
+
+                  <datalist id="landmark-type-suggestions">
+                    {!markerTypeSuggestions
+                      .some(
+                        (value) =>
+                          value.toLowerCase() ===
+                          'general'
+                      ) && (
+                      <option value="general" />
+                    )}
+
+                    {markerTypeSuggestions.map(
+                      (value) => (
+                        <option
+                          key={value}
+                          value={value}
+                        />
+                      )
+                    )}
+                  </datalist>
+
+                  <p className="mt-1.5 text-[9px] leading-relaxed text-gray-400">
+                    Keep category names short and consistent across landmarks.
+                  </p>
+                </div>
+
+                <div>
+                  <ImageDropzone
+                    fieldPath={`child_markers.${selectedMarkerIndex}.marker_icon`}
+                    label="Custom Map Icon"
+                    height="h-28"
+                    watch={watch}
+                    setValue={setValue}
+                    errors={errors}
+                    setPendingFiles={
+                      setPendingFiles
+                    }
+                    setPreviews={
+                      setPreviews
+                    }
+                    previews={previews}
+                  />
+
+                  <p className="mt-2 text-[9px] leading-relaxed text-gray-400">
+                    Optional. Use a small transparent icon if this landmark
+                    needs a custom pin on the public map.
+                  </p>
+                </div>
+
+                <div>
+                  <ImageDropzone
+                    fieldPath={`child_markers.${selectedMarkerIndex}.thumbnail`}
+                    label="Landmark Photo"
+                    height="h-36"
+                    watch={watch}
+                    setValue={setValue}
+                    errors={errors}
+                    setPendingFiles={
+                      setPendingFiles
+                    }
+                    setPreviews={
+                      setPreviews
+                    }
+                    previews={previews}
+                  />
+
+                  <p className="mt-2 text-[9px] leading-relaxed text-gray-400">
+                    Used for the landmark preview/card. A simple landscape
+                    photo is easiest to recognize at a glance.
+                  </p>
+                </div>
+
+                <details
+                  className="
+                    overflow-hidden
+                    rounded-xl
+                    border border-gray-200
+                    bg-white
+                  "
+                >
+                  <summary
+                    className="
+                      cursor-pointer
+                      list-none
+                      px-4 py-3
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      tracking-wider
+                      text-brand-blue
+                    "
+                  >
+                    Advanced Location Details
+                  </summary>
+
+                  <div className="border-t border-gray-100 p-4">
+                    <p className="mb-3 text-[9px] leading-relaxed text-gray-400">
+                      Required for exact map placement. Copy the latitude and
+                      longitude from your mapping source.
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
+                          Latitude
+                        </label>
+
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          {...register(
+                            `child_markers.${selectedMarkerIndex}.latitude`
+                          )}
+                          className="
+                            w-full rounded-lg
+                            border border-gray-200
+                            bg-gray-50
+                            px-3 py-2.5
+                            text-xs
+                            text-brand-blue
+                            outline-none
+                            focus:border-brand-gold
+                            focus:bg-white
+                          "
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
+                          Longitude
+                        </label>
+
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          {...register(
+                            `child_markers.${selectedMarkerIndex}.longitude`
+                          )}
+                          className="
+                            w-full rounded-lg
+                            border border-gray-200
+                            bg-gray-50
+                            px-3 py-2.5
+                            text-xs
+                            text-brand-blue
+                            outline-none
+                            focus:border-brand-gold
+                            focus:bg-white
+                          "
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </details>
+
+                {(errors?.child_markers?.[
+                  selectedMarkerIndex
+                ]?.latitude ||
+                  errors?.child_markers?.[
+                    selectedMarkerIndex
+                  ]?.longitude) && (
+                  <p className="-mt-3 text-[9px] font-medium leading-relaxed text-red-500">
+                    Latitude and longitude are required before this landmark can
+                    be saved.
+                  </p>
+                )}
+
+                <div className="border-t border-gray-100 pt-6">
+                  {selectedMarkerPendingRemoval &&
+                  selectedMarkerId !== null ? (
+                    <div
+                      className="
+                        rounded-xl
+                        border border-amber-200
+                        bg-amber-50
+                        p-4
+                      "
+                    >
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700">
+                        Pending removal
+                      </p>
+
+                      <p className="mt-1.5 text-[10px] leading-relaxed text-amber-700/80">
+                        This landmark is still on screen and in the database.
+                        It will only be deleted when you save your changes.
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleUndoRemoveLandmark(
+                            selectedMarkerId
+                          )
+                        }
+                        className="
+                          mt-3
+                          w-full
+                          rounded-lg
+                          border border-amber-300
+                          bg-white
+                          px-3 py-2.5
+                          text-xs font-bold
+                          text-amber-700
+                          hover:bg-amber-100
+                          transition-colors
+                        "
+                      >
+                        Undo Removal
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleRequestRemoveLandmark(
+                          selectedMarkerIndex
+                        )
+                      }
+                      className="
+                        w-full
+                        inline-flex
+                        items-center
+                        justify-center
+                        gap-2
+                        rounded-xl
+                        border border-red-200
+                        bg-red-50
+                        px-4 py-3
+                        text-xs
+                        font-bold
+                        text-red-600
+                        transition-colors
+                        hover:bg-red-100
+                      "
+                    >
+                      <Trash2 size={15} />
+                      Remove Landmark
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -6465,845 +8303,13 @@ if (
 
           </div>
 
-          {/* TEMPORARY FALLBACK */}
-          <div
-            className="
-              shrink-0
-              border-t
-              border-gray-100
-              p-4
-              bg-gray-50
-            "
-          >
-            <p
-              className="
-                text-[10px]
-                text-gray-400
-                mb-3
-                leading-relaxed
-              "
-            >
-              Editorial, amenities, unit
-              layouts, and map controls are
-              still available in the existing
-              editor while we migrate them.
-            </p>
-
-            <button
-              type="button"
-              onClick={() =>
-                setUseLegacyEditor(true)
-              }
-              className="
-                w-full
-                rounded-xl
-                border
-                border-gray-200
-                bg-white
-                px-4 py-3
-                text-xs
-                font-bold
-                text-brand-blue
-                hover:border-brand-gold
-                transition-colors
-              "
-            >
-              Open All Content Controls
-            </button>
-          </div>
-
         </aside>
       </div>
     </div>
   );
 }
 
-  return (
-    <div className="flex h-screen w-full bg-[#E7E7E7] font-sans text-gray-900 overflow-hidden relative">
-      {amenityRemoveModal}
-      {layoutRemoveModal}
-      
-      {successMsg && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-3 max-w-sm w-full mx-4">
-            <div className="w-20 h-20 bg-green-50 text-green-500 rounded-full flex items-center justify-center mb-2 shadow-inner">
-              <CheckCircle2 size={40} />
-            </div>
-            <h2 className="text-2xl font-serif text-brand-blue text-center font-bold">Success!</h2>
-            <p className="text-gray-600 text-center font-medium">{successMsg}</p>
-          </div>
-        </div>
-      )}
-
-      {/* LEFT SIDE: ADMIN FORM ENTRY */}
-      <div className="w-[500px] shrink-0 bg-white p-8 overflow-y-auto border-r border-gray-200 shadow-2xl z-20 flex flex-col relative custom-scrollbar">
-        <button
-          type="button"
-          onClick={() =>
-            router.push('/admin/dashboard?section=Projects')
-          }
-          className="flex items-center gap-2 text-[10px] text-gray-500 hover:text-brand-blue mb-8 font-bold uppercase tracking-widest transition-colors w-fit outline-none"
-        >
-          <ArrowLeft size={14} />
-          Back to Projects
-        </button>
-
-              <button
-        type="button"
-        onClick={() =>
-          setUseLegacyEditor(false)
-        }
-        className="
-          flex
-          items-center
-          gap-2
-          text-[10px]
-          text-brand-blue
-          hover:text-brand-gold
-          mb-6
-          font-bold
-          uppercase
-          tracking-widest
-          transition-colors
-        "
-      >
-        ← Back to Visual Editor
-      </button>
-
-        <h2 className="text-3xl font-serif text-brand-blue mb-8">{editId ? 'Edit Project' : 'Add New Project'}</h2>
-        
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-10 flex-1 pb-10">
-          
-          {/* Section 1: Basic Info */}
-          <div>
-            <h3 className="text-xs font-bold text-brand-gold uppercase tracking-widest border-b pb-2">Basic Info</h3>
-            
-            <label className={labelStyles}>Project Title</label>
-            <input {...register("title")} placeholder="e.g. City Clou" className={inputStyles} />
-            {errors.title && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.title.message}</p>}
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={labelStyles}>URL Slug</label>
-                <input {...register("slug")} placeholder="/cityclou" className={inputStyles} />
-                {errors.slug && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.slug.message}</p>}
-              </div>
-              <div>
-                <label className={labelStyles}>Status</label>
-                <select {...register("status")} className={`${inputStyles} cursor-pointer`}>
-                  <option value="">Select...</option>
-                  <option value="Pre-Selling">Pre-Selling</option>
-                  <option value="Ready for Occupancy">Ready for Occupancy</option>
-                </select>
-                {errors.status && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.status.message}</p>}
-              </div>
-            </div>
-
-            <label className={labelStyles}>Street Address</label>
-            <input {...register("address")} className={inputStyles} />
-            {errors.address && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.address.message}</p>}
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={labelStyles}>City</label>
-                <input {...register("city")} className={inputStyles} />
-                {errors.city && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.city.message}</p>}
-              </div>
-              <div>
-                <label className={labelStyles}>Country</label>
-                <input {...register("country")} className={inputStyles} />
-                {errors.country && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.country.message}</p>}
-              </div>
-              <div>
-                <label className={labelStyles}>Total SQM</label>
-                <input type="text" {...register("sqm")} placeholder="e.g. 5000" className={inputStyles} />
-                {errors.sqm && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.sqm.message}</p>}
-              </div>
-              <div>
-                <label className={labelStyles}>Total Units</label>
-                <input type="text" {...register("unit_total")} placeholder="e.g. 450" className={inputStyles} />
-                {errors.unit_total && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.unit_total.message}</p>}
-              </div>
-            </div>
-
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <ImageDropzone 
-                fieldPath="image" label="Main Hero Image" height="h-32"
-                watch={watch} setValue={setValue} errors={errors} 
-                setPendingFiles={setPendingFiles} setPreviews={setPreviews} previews={previews} 
-              />
-              <ImageDropzone 
-                fieldPath="img_awards" label="Awards Badge (Optional)" height="h-32"
-                watch={watch} setValue={setValue} errors={errors} 
-                setPendingFiles={setPendingFiles} setPreviews={setPreviews} previews={previews} 
-              />
-            </div>
-          </div>
-
-          {/* Section 2: Tags */}
-          <div>
-            <div className="flex justify-between items-center border-b pb-2">
-              <h3 className="text-xs font-bold text-brand-gold uppercase tracking-widest">Tags</h3>
-              <button type="button" onClick={() => appendTag({ tag_name: "" })} className="text-[10px] text-brand-blue font-bold uppercase flex items-center gap-1"><PlusCircle size={12}/> Add Tag</button>
-            </div>
-            {tagFields.map((field, index) => (
-              <div key={field.id} className="flex gap-2 items-center mt-3">
-                <div className="flex-1">
-                   <input {...register(`tags.${index}.tag_name`)} placeholder="e.g. Mixed Use" className={inputStyles} />
-                   {errors?.tags?.[index]?.tag_name && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.tags[index]?.tag_name?.message}</p>}
-                </div>
-                <button type="button" onClick={() => removeTag(index)} className="text-gray-300 hover:text-red-500"><Trash2 size={16}/></button>
-              </div>
-            ))}
-          </div>
-
-          {/* Section 3: Editorial */}
-          <div>
-            <h3 className="text-xs font-bold text-brand-gold uppercase tracking-widest border-b pb-2">Editorial Section</h3>
-            
-            <div className="grid grid-cols-3 gap-4 mt-4 mb-4">
-              <ColorInputSync 
-                label="Bg Color" 
-                fieldName="editorial_bg_color" 
-                register={register} watch={watch} setValue={setValue} 
-                inputStyles={inputStyles} labelStyles={labelStyles} 
-              />
-              <ColorInputSync 
-                label="Headline" 
-                fieldName="editorial_title_color" 
-                register={register} watch={watch} setValue={setValue} 
-                inputStyles={inputStyles} labelStyles={labelStyles} 
-              />
-              <ColorInputSync 
-                label="Text" 
-                fieldName="editorial_desc_color" 
-                register={register} watch={watch} setValue={setValue} 
-                inputStyles={inputStyles} labelStyles={labelStyles} 
-              />
-            </div>
-
-            <label className={labelStyles}>Headline</label>
-            <textarea 
-              {...register("editorial_title")} 
-              rows={2} 
-              className={`${inputStyles} resize-none`} 
-            />
-            {errors.editorial_title && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.editorial_title.message}</p>}
-                        
-            <label className={labelStyles}>Long Description</label>
-            <textarea {...register("editorial_long")} rows={4} className={`${inputStyles} resize-none`} />
-            {errors.editorial_long && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.editorial_long.message}</p>}
-            
-            <div className="mt-4">
-               <ImageDropzone 
-                fieldPath="editorial_img" label="Editorial Image" height="h-32"
-                watch={watch} setValue={setValue} errors={errors} 
-                setPendingFiles={setPendingFiles} setPreviews={setPreviews} previews={previews} 
-              />
-            </div>
-          </div>
-
-          {/* Section 4: Amenities */}
-          <div>
-            <div className="flex justify-between items-center border-b pb-2">
-              <h3 className="text-xs font-bold text-brand-gold uppercase tracking-widest">Amenities</h3>
-              <button type="button" onClick={() => appendAmenity({ id: null, title: "", description: "", thumbnail: "", tower: null })} className="text-[10px] text-brand-blue font-bold uppercase flex items-center gap-1"><PlusCircle size={12}/> Add Amenity</button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 mt-4 mb-6 p-4 bg-brand-blue/5 rounded-xl border border-brand-blue/10">
-              <div>
-                <label className={labelStyles}>Headline (White Text)</label>
-                <input {...register("amenities_title")} placeholder="Experience A Fresh" className={inputStyles} />
-              </div>
-              <div>
-                <label className={labelStyles}>Headline (Gold Text)</label>
-                <input {...register("amenities_title_gold")} placeholder="Way Of Living in City Clou." className={inputStyles} />
-              </div>
-            </div>
-            
-            {amenityFields.map((field, index) => (
-              <div key={field.fieldKey} className="p-4 mt-4 bg-gray-50 border border-gray-100 rounded-lg relative group">
-                <button 
-                  type="button" 
-                  onClick={() =>
-                    handleRequestRemoveAmenity(
-                      index
-                    )
-                  } 
-                  className="absolute top-4 right-4 text-gray-300 hover:text-red-500"
-                >
-                  <Trash2 size={16} />
-                </button>
-                
-                <label className={labelStyles}>
-                  Assigned Tower
-                </label>
-
-                <select
-                  {...register(`amenities.${index}.tower`)}
-                  className={`${inputStyles} cursor-pointer`}
-                >
-                  <option value="">
-                    All Towers / Shared
-                  </option>
-
-                  {watch(`amenities.${index}.tower`) &&
-                    !isValidTowerAssignment(
-                      watch(`amenities.${index}.tower`)
-                    ) && (
-                      <option
-                        value={
-                          watch(`amenities.${index}.tower`) || ''
-                        }
-                        disabled
-                      >
-                        {watch(`amenities.${index}.tower`)} — no longer exists
-                      </option>
-                    )}
-
-                  {availableTowerOptions.map((tower) => (
-                    <option
-                      key={tower}
-                      value={tower}
-                    >
-                      {tower}
-                    </option>
-                  ))}
-                </select>
-
-                {isValidTowerAssignment(
-                  watch(`amenities.${index}.tower`)
-                ) ? (
-                  <p className="mt-1 text-[10px] text-gray-400">
-                    Select a tower, or choose All Towers / Shared.
-                    Manage project towers from Page Settings.
-                  </p>
-                ) : (
-                  <p className="mt-1 text-[10px] font-medium text-amber-600">
-                    This amenity is assigned to a tower that no longer exists.
-                    Choose a valid tower or All Towers / Shared before saving.
-                  </p>
-                )}
-                
-                <label className={labelStyles}>Description</label>
-                <textarea {...register(`amenities.${index}.description`)} rows={2} className={`${inputStyles} resize-none`} />
-                
-                <div className="mt-4">
-                  <ImageDropzone 
-                    fieldPath={`amenities.${index}.thumbnail`} label="Thumbnail" height="h-24"
-                    watch={watch} setValue={setValue} errors={errors} 
-                    setPendingFiles={setPendingFiles} setPreviews={setPreviews} previews={previews} 
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Section 5: Blueprints */}
-          <div>
-            <div className="flex justify-between items-center border-b pb-2">
-              <div>
-                <h3 className="text-xs font-bold text-brand-gold uppercase tracking-widest">Unit Layouts</h3>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="px-2 py-1 rounded-full bg-brand-blue/5 border border-brand-blue/10 text-[9px] font-bold uppercase tracking-wider text-brand-blue">
-                    {mapCardLayoutCount} Map Card
-                  </span>
-                  <span className="px-2 py-1 rounded-full bg-brand-gold/10 border border-brand-gold/30 text-[9px] font-bold uppercase tracking-wider text-brand-blue">
-                    {projectPageLayoutCount} Projects Page
-                  </span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  appendLayout({
-                    title: "",
-                    tower_name: availableTowerOptions[0] || "",
-                    bg_color: "#051431",
-                    description: "",
-                    min_sqm: "",
-                    max_sqm: "",
-                    thumbnail: "",
-                    show_on_map_card: false,
-                    map_card_order: "",
-                    show_on_project_page: false,
-                    project_page_order: "",
-                    sort_order: null
-                  })
-                }
-                className="text-[10px] text-brand-blue hover:text-brand-gold font-bold uppercase flex items-center gap-1 transition-colors"
-              >
-                <PlusCircle size={12} /> Add Layout
-              </button>
-            </div>
-
-            <p className="mt-3 text-[10px] leading-relaxed text-gray-400">
-              Add or remove floorplans here, then choose where each layout is promoted.
-              Display order controls the sequence shown on the public site.
-            </p>
-
-            {layoutFields.map((field, index) => {
-              const showOnMapCard = Boolean(watch(`unit_layouts.${index}.show_on_map_card`));
-              const showOnProjectPage = Boolean(watch(`unit_layouts.${index}.show_on_project_page`));
-
-              return (
-                <div
-                  key={field.fieldKey}
-                  className="p-4 mt-4 bg-gray-50 border border-gray-100 rounded-xl relative group shadow-sm"
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      removeNestedFieldFiles("unit_layouts", index);
-                      removeLayout(index);
-                    }}
-                    className="absolute top-4 right-4 text-gray-300 hover:text-red-500 transition-colors"
-                    aria-label="Remove unit layout"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-
-                  <div className="pr-8">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className={labelStyles}>Tower Name</label>
-                        <select
-                          {...register(`unit_layouts.${index}.tower_name`)}
-                          className={`${inputStyles} cursor-pointer`}
-                        >
-                          <option value="">
-                            Select tower...
-                          </option>
-
-                          {watch(`unit_layouts.${index}.tower_name`) &&
-                            !isValidTowerAssignment(
-                              watch(`unit_layouts.${index}.tower_name`)
-                            ) && (
-                              <option
-                                value={
-                                  watch(`unit_layouts.${index}.tower_name`) || ''
-                                }
-                                disabled
-                              >
-                                {watch(`unit_layouts.${index}.tower_name`)} — no longer exists
-                              </option>
-                            )}
-
-                          {availableTowerOptions.map((tower) => (
-                            <option
-                              key={tower}
-                              value={tower}
-                            >
-                              {tower}
-                            </option>
-                          ))}
-                        </select>
-
-                        {!isValidTowerAssignment(
-                          watch(`unit_layouts.${index}.tower_name`)
-                        ) && (
-                          <p className="text-amber-600 text-[10px] font-medium mt-1">
-                            This layout is assigned to a tower that no longer exists.
-                            Choose a valid tower before saving.
-                          </p>
-                        )}
-
-                        {errors?.unit_layouts?.[index]?.tower_name && (
-                          <p className="text-red-500 text-[10px] font-bold mt-1">
-                            {errors.unit_layouts[index]?.tower_name?.message}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className={labelStyles}>Layout Title</label>
-                        <input
-                          {...register(`unit_layouts.${index}.title`)}
-                          placeholder="e.g. Studio Unit"
-                          className={inputStyles}
-                        />
-                        {errors?.unit_layouts?.[index]?.title && (
-                          <p className="text-red-500 text-[10px] font-bold mt-1">
-                            {errors.unit_layouts[index]?.title?.message}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Placement controls */}
-                    <div className="mt-5 p-4 rounded-xl bg-white border border-gray-200 shadow-sm">
-                      <div className="flex items-center justify-between mb-4">
-                        <div>
-                          <p className="text-[10px] font-bold text-brand-blue uppercase tracking-widest">
-                            Display Placement
-                          </p>
-                          <p className="text-[9px] text-gray-400 mt-1">
-                            Control where this layout appears outside the project detail page.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-3">
-                        {/* Map popup */}
-                        <div
-                          className={`flex items-center justify-between gap-3 rounded-lg border p-3 transition-all ${
-                            showOnMapCard
-                              ? "border-brand-gold/50 bg-brand-gold/10"
-                              : "border-gray-200 bg-gray-50"
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const nextValue = !showOnMapCard;
-                              setValue(`unit_layouts.${index}.show_on_map_card`, nextValue, {
-                                shouldDirty: true,
-                                shouldValidate: true
-                              });
-
-                              if (!nextValue) {
-                                setValue(`unit_layouts.${index}.map_card_order`, "", {
-                                  shouldDirty: true
-                                });
-                              }
-                            }}
-                            className="flex flex-1 items-center gap-3 text-left"
-                          >
-                            <span
-                              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
-                                showOnMapCard
-                                  ? "border-brand-gold bg-brand-gold text-brand-blue"
-                                  : "border-gray-300 bg-white"
-                              }`}
-                            >
-                              {showOnMapCard && <CheckCircle2 size={13} />}
-                            </span>
-
-                            <span>
-                              <span className="block text-[10px] font-bold uppercase tracking-wider text-brand-blue">
-                                Show on Map Card
-                              </span>
-                              <span className="block text-[9px] text-gray-400 mt-0.5">
-                                Displays this layout as a tag in the map project popup.
-                              </span>
-                            </span>
-                          </button>
-
-                          <div className="w-20 shrink-0">
-                            <label className="block text-[8px] font-bold uppercase tracking-wider text-gray-400 mb-1">
-                              Order
-                            </label>
-                            <input
-                              type="number"
-                              min="1"
-                              inputMode="numeric"
-                              disabled={!showOnMapCard}
-                              {...register(`unit_layouts.${index}.map_card_order`)}
-                              className={`${inputStyles} py-2 text-center disabled:opacity-40 disabled:cursor-not-allowed`}
-                              placeholder="-"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Projects listing */}
-                        <div
-                          className={`flex items-center justify-between gap-3 rounded-lg border p-3 transition-all ${
-                            showOnProjectPage
-                              ? "border-brand-blue/30 bg-brand-blue/5"
-                              : "border-gray-200 bg-gray-50"
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const nextValue = !showOnProjectPage;
-                              setValue(`unit_layouts.${index}.show_on_project_page`, nextValue, {
-                                shouldDirty: true,
-                                shouldValidate: true
-                              });
-
-                              if (!nextValue) {
-                                setValue(`unit_layouts.${index}.project_page_order`, "", {
-                                  shouldDirty: true
-                                });
-                              }
-                            }}
-                            className="flex flex-1 items-center gap-3 text-left"
-                          >
-                            <span
-                              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
-                                showOnProjectPage
-                                  ? "border-brand-blue bg-brand-blue text-brand-gold"
-                                  : "border-gray-300 bg-white"
-                              }`}
-                            >
-                              {showOnProjectPage && <CheckCircle2 size={13} />}
-                            </span>
-
-                            <span>
-                              <span className="block text-[10px] font-bold uppercase tracking-wider text-brand-blue">
-                                Show on Projects Page
-                              </span>
-                              <span className="block text-[9px] text-gray-400 mt-0.5">
-                                Displays this layout in the public projects listing.
-                              </span>
-                            </span>
-                          </button>
-
-                          <div className="w-20 shrink-0">
-                            <label className="block text-[8px] font-bold uppercase tracking-wider text-gray-400 mb-1">
-                              Order
-                            </label>
-                            <input
-                              type="number"
-                              min="1"
-                              inputMode="numeric"
-                              disabled={!showOnProjectPage}
-                              {...register(`unit_layouts.${index}.project_page_order`)}
-                              className={`${inputStyles} py-2 text-center disabled:opacity-40 disabled:cursor-not-allowed`}
-                              placeholder="-"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 mb-2">
-                      <ColorInputSync
-                        label="Card Left Background Color"
-                        fieldName={`unit_layouts.${index}.bg_color`}
-                        register={register}
-                        watch={watch}
-                        setValue={setValue}
-                        inputStyles={inputStyles}
-                        labelStyles={labelStyles}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className={labelStyles}>Min SQM</label>
-                        <input
-                          type="text"
-                          {...register(`unit_layouts.${index}.min_sqm`)}
-                          className={inputStyles}
-                        />
-                        {errors?.unit_layouts?.[index]?.min_sqm && (
-                          <p className="text-red-500 text-[10px] font-bold mt-1">
-                            {errors.unit_layouts[index]?.min_sqm?.message}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className={labelStyles}>Max SQM</label>
-                        <input
-                          type="text"
-                          {...register(`unit_layouts.${index}.max_sqm`)}
-                          className={inputStyles}
-                        />
-                        {errors?.unit_layouts?.[index]?.max_sqm && (
-                          <p className="text-red-500 text-[10px] font-bold mt-1">
-                            {errors.unit_layouts[index]?.max_sqm?.message}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <label className={labelStyles}>Description</label>
-                    <textarea
-                      {...register(`unit_layouts.${index}.description`)}
-                      rows={2}
-                      className={`${inputStyles} resize-none`}
-                    />
-
-                    <div className="mt-4">
-                      <ImageDropzone
-                        fieldPath={`unit_layouts.${index}.thumbnail`}
-                        label="Floorplan Image"
-                        height="h-24"
-                        watch={watch}
-                        setValue={setValue}
-                        errors={errors}
-                        setPendingFiles={setPendingFiles}
-                        setPreviews={setPreviews}
-                        previews={previews}
-                      />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="mt-4">
-            <label className={labelStyles}>Points of Interest Subtitle</label>
-            <input 
-              {...register("map_subtitle")} 
-              placeholder="Everything you need, strategically positioned right around your sanctuary." 
-              className={inputStyles} 
-            />
-          </div>
-
-          {/* Section 6: Map Markers */}
-          <div>
-            <div className="flex justify-between items-center border-b pb-2">
-              <h3 className="text-xs font-bold text-brand-gold uppercase tracking-widest">Map Landmarks</h3>
-              <button type="button" onClick={() => appendMarker({ interest_name: "", address: "", phrase: "", distance_km: "", distance_drive: "", distance_walk: "", latitude: "", longitude: "", thumbnail: "", marker_icon: "", marker_type: "general" })} className="text-[10px] text-brand-blue font-bold uppercase flex items-center gap-1"><PlusCircle size={12}/> Add Landmark</button>
-            </div>
-            
-            {/* 1. UPDATED LAT/LNG LABELS */}
-            <div className="grid grid-cols-2 gap-4 mt-4 mb-4">
-              <div>
-                <label className={labelStyles}>Project Location (Building Lat)</label>
-                <input type="text" {...register("map_latitude")} className={inputStyles} />
-                {errors.map_latitude && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.map_latitude.message}</p>}
-              </div>
-              <div>
-                <label className={labelStyles}>Project Location (Building Lng)</label>
-                <input type="text" {...register("map_longitude")} className={inputStyles} />
-                {errors.map_longitude && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.map_longitude.message}</p>}
-              </div>
-            </div>
-
-            {/* 2. MAIN PROJECT PIN UPLOAD */}
-            <div className="mt-4 mb-8 p-4 bg-brand-blue/5 rounded-xl border border-brand-blue/10">
-              <label className={labelStyles}>Main Project Map Pin (Transparent PNG or SVG)</label>
-              <ImageDropzone 
-                fieldPath="map_icon" 
-                label="Upload Custom Project Pin" 
-                height="h-32"
-                watch={watch} 
-                setValue={setValue} 
-                errors={errors} 
-                setPendingFiles={setPendingFiles} 
-                setPreviews={setPreviews} 
-                previews={previews} 
-              />
-            </div>
-
-            {markerFields.map((field, index) => (
-              <div key={field.id} className="p-4 mt-4 bg-gray-50 border border-gray-100 rounded-lg relative group">
-                <button 
-                type="button" 
-                onClick={() => {
-                  removeNestedFieldFiles("child_markers", index);
-                  removeMarker(index);
-                }} 
-                className="absolute top-4 right-4 text-gray-300 hover:text-red-500"
-              >
-                <Trash2 size={16} />
-              </button>
-                
-                <label className={labelStyles}>Landmark Name</label>
-                <input {...register(`child_markers.${index}.interest_name`)} className={inputStyles} />
-                {errors?.child_markers?.[index]?.interest_name && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.child_markers[index]?.interest_name?.message}</p>}
-                
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className={labelStyles}>Address</label>
-                    <input {...register(`child_markers.${index}.address`)} className={inputStyles} />
-                  </div>
-                  <div>
-                    <label className={labelStyles}>Catchphrase</label>
-                    <input {...register(`child_markers.${index}.phrase`)} className={inputStyles} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2">
-                   <div>
-                      <label className={labelStyles}>KM</label>
-                      <input type="text" {...register(`child_markers.${index}.distance_km`)} className={inputStyles} />
-                      {errors?.child_markers?.[index]?.distance_km && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.child_markers[index]?.distance_km?.message}</p>}
-                   </div>
-                   <div>
-                      <label className={labelStyles}>Drive (m)</label>
-                      <input type="text" {...register(`child_markers.${index}.distance_drive`)} className={inputStyles} />
-                      {errors?.child_markers?.[index]?.distance_drive && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.child_markers[index]?.distance_drive?.message}</p>}
-                   </div>
-                   <div>
-                      <label className={labelStyles}>Walk (m)</label>
-                      <input type="text" {...register(`child_markers.${index}.distance_walk`)} className={inputStyles} />
-                      {errors?.child_markers?.[index]?.distance_walk && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.child_markers[index]?.distance_walk?.message}</p>}
-                   </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2">
-                   <div>
-                      <label className={labelStyles}>Lat</label>
-                      <input type="text" {...register(`child_markers.${index}.latitude`)} className={inputStyles} />
-                      {errors?.child_markers?.[index]?.latitude && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.child_markers[index]?.latitude?.message}</p>}
-                   </div>
-                   <div>
-                      <label className={labelStyles}>Lng</label>
-                      <input type="text" {...register(`child_markers.${index}.longitude`)} className={inputStyles} />
-                      {errors?.child_markers?.[index]?.longitude && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.child_markers[index]?.longitude?.message}</p>}
-                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 mt-2">
-                   {/* 3. CHILD MARKER IMAGE DROPZONE (Replacing Select) */}
-                   <div>
-                      <label className={labelStyles}>Custom Map Icon</label>
-                      <ImageDropzone 
-                        fieldPath={`child_markers.${index}.marker_icon`} 
-                        label="Upload Marker Icon" 
-                        height="h-24"
-                        watch={watch} 
-                        setValue={setValue} 
-                        errors={errors} 
-                        setPendingFiles={setPendingFiles} 
-                        setPreviews={setPreviews} 
-                        previews={previews} 
-                      />
-                   </div>
-                   <div>
-                      <label className={labelStyles}>Tag (e.g. retail)</label>
-                      <input {...register(`child_markers.${index}.marker_type`)} className={inputStyles} />
-                   </div>
-                </div>
-
-                <div className="mt-4">
-                  <ImageDropzone 
-                    fieldPath={`child_markers.${index}.thumbnail`} label="Landmark Photo" height="h-24"
-                    watch={watch} setValue={setValue} errors={errors} 
-                    setPendingFiles={setPendingFiles} setPreviews={setPreviews} previews={previews} 
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {hasErrors && (
-            <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl flex items-center gap-3 text-xs font-bold mt-4">
-              <AlertCircle size={16} /> Please fill in all required fields marked in red above.
-            </div>
-          )}
-
-          <button 
-            type="submit" disabled={isSaving || isSubmitting}
-            className="flex items-center justify-center gap-2 bg-brand-blue text-white py-5 rounded-xl uppercase tracking-widest font-bold text-[11px] hover:bg-brand-gold transition-colors shadow-xl w-full disabled:opacity-70 mt-6 mb-4"
-          >
-            {(isSaving || isSubmitting) ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-            {editId ? 'Update & Save Project' : 'Upload & Publish Project'}
-          </button>
-
-        </form>
-      </div>
-
-      {/* RIGHT SIDE: LIVE GSAP SKELETON PREVIEW */}
-      <div id="preview-scroller" className="flex-1 overflow-y-auto relative scroll-smooth bg-black custom-scrollbar">
-        <div className="fixed top-6 right-8 z-50 pointer-events-none">
-          <span className="px-4 py-2 bg-white/90 backdrop-blur-md border border-brand-gold/50 text-[10px] font-bold text-brand-blue uppercase tracking-widest rounded-full shadow-2xl">
-            Live Preview Mode
-          </span>
-        </div>
-        <PreviewSkeleton data={previewData} />
-      </div>
-
-    </div>
-  );
+  return null;
 }
 
 export default function Page() {
