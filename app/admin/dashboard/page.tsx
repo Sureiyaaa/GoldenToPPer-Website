@@ -12,7 +12,12 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { toggleActiveStatus, archiveRecord } from '@/app/actions/updates';
-import { fetchAdminProjectsList } from '@/app/actions/projects';
+import {
+  fetchAdminProjectsList,
+  ensureProjectNavigationEntriesAction,
+  hideProjectNavigationEntryAction,
+  setProjectWebsiteVisibilityAction,
+} from '@/app/actions/projects';
 import {
   fetchAdminVirtualToursList,
   fetchAdminPromotionsList,
@@ -311,10 +316,19 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
     setIsArchiving(true);
 
     try {
+      // A project and its navigation item are tied together. Hide the
+      // navigation entry first so an archived project can never leave a
+      // visible navigation card pointing to unavailable content.
+      await hideProjectNavigationEntryAction(projectToArchive.id);
       await archiveRecord('project_table', projectToArchive.id, 'deleted_at');
 
       // ✅ SERVER-SIDE AUDIT LOG
-      await createAuditLogAction('DELETE', 'Projects', projectToArchive.title, 'Deleted project from dashboard.');
+      await createAuditLogAction(
+        'DELETE',
+        'Projects',
+        projectToArchive.title,
+        'Deleted project from dashboard and hid its linked navigation item.'
+      );
 
       setProjects(prevProjects => prevProjects.filter(p => p.id !== projectToArchive.id));
       setProjectToArchive(null);
@@ -329,22 +343,40 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
   };
 
   const handleToggleProject = async (id: number, currentStatus: boolean, title: string) => {
+    const nextStatus = !currentStatus;
+
     try {
-      await toggleActiveStatus('project_table', id, currentStatus);
+      await setProjectWebsiteVisibilityAction(id, nextStatus);
 
-      // ✅ SERVER-SIDE AUDIT LOG
-      await createAuditLogAction('EDIT', 'Projects', title, `Changed active status to ${!currentStatus ? 'Visible' : 'Hidden'}.`);
+      await createAuditLogAction(
+        'EDIT',
+        'Projects',
+        title,
+        nextStatus
+          ? 'Changed project website visibility to Visible. Linked navigation now follows its saved visibility preference.'
+          : 'Changed project website visibility to Hidden. Linked navigation is automatically hidden while preserving its saved visibility preference.'
+      );
 
-      setProjects(prev => prev.map(p => p.id === id ? { ...p, is_active: !currentStatus } : p));
-    } catch (error: any) { alert(`Failed to toggle status: ${error.message}`); }
+      setProjects(prev =>
+        prev.map(p =>
+          p.id === id
+            ? { ...p, is_active: nextStatus }
+            : p
+        )
+      );
+    } catch (error: any) {
+      alert(`Failed to update project visibility: ${error.message}`);
+    }
   };
 
   const filteredProjects = projects.filter(proj => proj.title.toLowerCase().includes(searchQuery.toLowerCase()) || proj.city.toLowerCase().includes(searchQuery.toLowerCase()));
+  const visibleProjectCount = projects.filter(proj => proj.is_active).length;
+  const hiddenProjectCount = projects.length - visibleProjectCount;
 
   if (isLoading) return <div className="flex justify-center items-center h-64"><Loader2 className="animate-spin text-brand-blue" size={40} /></div>;
 
   return (
-    <div className="animate-in fade-in duration-300">
+    <div className="animate-in fade-in duration-300 max-w-6xl mx-auto">
 
       {/* === ARCHIVE CONFIRMATION MODAL === */}
       {projectToArchive && (
@@ -383,121 +415,76 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
         </div>
       )}
 
-      <div className="mb-7">
+      {/* PROJECTS SUB-NAVIGATION */}
+      <div className="mb-7 flex items-center gap-6 border-b border-gray-200">
+        <button
+          type="button"
+          className="relative pb-3 text-sm font-bold text-brand-blue"
+          aria-current="page"
+        >
+          Projects
+          <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-brand-blue" />
+        </button>
 
-  {/* PROJECTS SUB-NAVIGATION */}
-  <div className="flex items-center gap-6 border-b border-gray-200 mb-6">
-
-    <button
-      type="button"
-      className="
-        relative
-        pb-3
-        text-sm
-        font-bold
-        text-brand-blue
-      "
-    >
-      Projects
-
-      <span
-        className="
-          absolute
-          left-0 right-0 bottom-0
-          h-0.5
-          bg-brand-blue
-          rounded-full
-        "
-      />
-    </button>
-
-    <button
-      type="button"
-      onClick={openNavigationSetup}
-      className="
-        pb-3
-        text-sm
-        font-medium
-        text-gray-400
-        hover:text-brand-blue
-        transition-colors
-      "
-    >
-      Navigation Setup
-    </button>
-
-  </div>
-
-  {/* LIST CONTROLS */}
-  <div
-    className="
-      flex
-      flex-col sm:flex-row
-      sm:items-center
-      justify-between
-      gap-4
-    "
-  >
-    <div>
-      <div className="text-sm font-bold text-brand-blue">
-        {filteredProjects.length}{' '}
-        {filteredProjects.length === 1 ? 'project' : 'projects'}
+        <button
+          type="button"
+          onClick={openNavigationSetup}
+          className="pb-3 text-sm font-medium text-gray-400 transition-colors hover:text-brand-blue"
+        >
+          Navigation Setup
+        </button>
       </div>
 
-      <p className="text-xs text-gray-400 mt-1">
-        Select a project to manage its website content.
-      </p>
-    </div>
+      {/* PAGE INTRO */}
+      <div className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-gold">Projects · Content</p>
+          <h2 className="mt-1 text-2xl font-serif font-bold text-brand-blue">Project Website Content</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
+            Select a project to manage its website content, visibility, layouts, amenities, and other project details.
+          </p>
+        </div>
 
-    <div className="relative w-full sm:w-80">
-      <Search
-        size={16}
-        className="
-          absolute
-          left-4 top-1/2
-          -translate-y-1/2
-          text-gray-400
-          pointer-events-none
-        "
-      />
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+            {projects.length} {projects.length === 1 ? 'Project' : 'Projects'}
+          </span>
+          <span className="rounded-full border border-green-100 bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-green-600">
+            {visibleProjectCount} Visible
+          </span>
+          {hiddenProjectCount > 0 && (
+            <span className="rounded-full border border-gray-200 bg-gray-100 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+              {hiddenProjectCount} Hidden
+            </span>
+          )}
+        </div>
+      </div>
 
-      <input
-        type="text"
-        placeholder="Search projects..."
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-        className="
-          w-full
-          bg-white
-          border border-gray-200
-          rounded-xl
-          pl-10 pr-4
-          py-2.5
-          text-brand-blue
-          text-sm
-          outline-none
-          shadow-sm
-          focus:border-brand-gold
-          focus:ring-2
-          focus:ring-brand-gold/10
-          transition-all
-        "
-      />
-    </div>
-  </div>
+      {/* LIST CONTROLS */}
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-gray-400">
+          Showing <span className="font-semibold text-brand-blue">{filteredProjects.length}</span> of {projects.length}
+        </p>
 
-</div>
+        <div className="relative w-full sm:w-80">
+          <Search
+            size={16}
+            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+          />
+          <input
+            type="text"
+            placeholder="Search projects..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-blue shadow-sm outline-none transition-all focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/10"
+          />
+        </div>
+      </div>
 
       <div className="w-full overflow-x-auto pb-4">
         <div
-  className="
-    bg-white
-    border border-gray-200
-    rounded-2xl
-    overflow-hidden
-    shadow-sm
-  "
->
+          className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm"
+        >
 
   {/* TABLE HEADER */}
   <div
@@ -528,7 +515,7 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
     </div>
 
     <div className="col-span-2">
-      Website
+      Website Visibility
     </div>
 
     <div className="col-span-1 text-right">
@@ -707,15 +694,9 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
 
           {/* WEBSITE VISIBILITY */}
           <div className="md:col-span-2">
-
             <button
               type="button"
-              disabled={
-                !checkPerm(
-                  'edit_project',
-                  'can_edit'
-                )
-              }
+              disabled={!checkPerm('edit_project', 'can_edit')}
               onClick={(e) => {
                 e.stopPropagation();
 
@@ -728,46 +709,63 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
               className={`
                 inline-flex
                 items-center
-                gap-2
-                text-xs
+                gap-2.5
+                rounded-xl
+                px-1 py-1
+                text-[10px]
                 font-bold
-                rounded-lg
-                px-2.5 py-2
+                uppercase
+                tracking-wider
                 transition-colors
-
                 ${
-                  proj.is_active
-                    ? `
-                      bg-green-50
-                      text-green-700
-                      hover:bg-green-100
-                    `
-                    : `
-                      bg-gray-100
-                      text-gray-500
-                      hover:bg-gray-200
-                    `
+                  checkPerm('edit_project', 'can_edit')
+                    ? 'cursor-pointer'
+                    : 'cursor-not-allowed opacity-60'
                 }
-
-                disabled:cursor-default
               `}
               title={
                 proj.is_active
-                  ? 'Hide project from the website'
-                  : 'Show project on the website'
+                  ? 'Click to hide this project from the website'
+                  : 'Click to make this project visible on the website'
               }
+              aria-pressed={Boolean(proj.is_active)}
+              aria-label={`${proj.is_active ? 'Hide' : 'Show'} ${proj.title} on the website`}
             >
-              {proj.is_active ? (
-                <Eye size={14} />
-              ) : (
-                <EyeOff size={14} />
-              )}
+              <span
+                className={`
+                  ${proj.is_active ? 'text-green-600' : 'text-gray-400'}
+                `}
+              >
+                {proj.is_active ? 'Visible' : 'Hidden'}
+              </span>
 
-              {proj.is_active
-                ? 'Shown'
-                : 'Hidden'}
+              <span
+                className={`
+                  relative
+                  h-7 w-12
+                  shrink-0
+                  rounded-full
+                  transition-colors
+                  ${
+                    proj.is_active
+                      ? 'bg-green-500 hover:bg-green-600'
+                      : 'bg-gray-300 hover:bg-gray-400'
+                  }
+                `}
+              >
+                <span
+                  className={`
+                    absolute top-1
+                    h-5 w-5
+                    rounded-full
+                    bg-white
+                    shadow-sm
+                    transition-all
+                    ${proj.is_active ? 'left-6' : 'left-1'}
+                  `}
+                />
+              </span>
             </button>
-
           </div>
 
 
@@ -1665,6 +1663,7 @@ function SystemModulesManager() {
   );
 }
 function NavbarProjectsManager({ checkPerm }: ManagerProps) {
+  const router = useRouter();
   const supabase = createClient();
   const [navProjects, setNavProjects] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -1675,8 +1674,6 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const [itemToArchive, setItemToArchive] = useState<{ id: number, nav_title: string } | null>(null);
-  const [isArchiving, setIsArchiving] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -1723,7 +1720,7 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      showError('Navigation images must be 5 MB or smaller.');
+      showError('Navigation logos must be 5 MB or smaller.');
       return;
     }
 
@@ -1748,7 +1745,7 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
         nav_image_url: publicUrl,
       }));
     } catch (error: any) {
-      showError(`Image upload failed: ${error.message}`);
+      showError(`Logo upload failed: ${error.message}`);
     } finally {
       setIsUploading(false);
     }
@@ -1759,9 +1756,25 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
       setIsLoading(true);
       setErrorMessage('');
 
+      try {
+        // Keep the project/navigation relationship complete for legacy data
+        // as well as newly created projects.
+        await ensureProjectNavigationEntriesAction();
+      } catch (syncError: any) {
+        console.warn(
+          'Navigation link sync failed:',
+          syncError
+        );
+        showError(
+          `Some projects could not be linked to navigation automatically: ${
+            syncError?.message || 'Unknown error.'
+          }`
+        );
+      }
+
       const { data, error } = await supabase
         .from('navbar_projects')
-        .select('*, project_table(title)')
+        .select('*, project_table(title, is_active, deleted_at)')
         .order('display_order', { ascending: true });
 
       if (error) {
@@ -1925,47 +1938,22 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
     }
   };
 
-  const handleArchiveClick = (id: number, nav_title: string) => {
-    setEditModalOpen(false);
-    setEditingData(null);
-    setItemToArchive({ id, nav_title });
+  const openProjects = () => {
+    router.push('/admin/dashboard?section=Projects');
   };
 
-  const confirmArchive = async () => {
-    if (!itemToArchive) return;
+  const isProjectAvailable = (item: any) => {
+    const project = Array.isArray(item.project_table)
+      ? item.project_table[0]
+      : item.project_table;
 
-    setIsArchiving(true);
-    try {
-      await deleteRecordAction('navbar_projects', itemToArchive.id);
-      await createAuditLogAction(
-        'DELETE',
-        'Navigation Setup',
-        itemToArchive.nav_title,
-        'Removed project item from website navigation. The project itself was not deleted.'
-      );
-
-      const remaining = navProjects
-        .filter(item => item.id !== itemToArchive.id)
-        .map((item, index) => ({ ...item, display_order: index + 1 }));
-
-      setNavProjects(remaining);
-      setItemToArchive(null);
-
-      try {
-        await persistNavigationOrder(remaining);
-      } catch (reorderError) {
-        console.warn('Navigation item deleted, but order cleanup failed:', reorderError);
-      }
-
-      showSuccess('Navigation item removed.');
-    } catch (error: any) {
-      showError(`Failed to remove navigation item: ${error.message}`);
-    } finally {
-      setIsArchiving(false);
-    }
+    return Boolean(project && project.is_active && !project.deleted_at);
   };
 
-  const visibleCount = navProjects.filter(item => item.is_active).length;
+  const isNavigationEffectivelyVisible = (item: any) =>
+    Boolean(item.is_active && isProjectAvailable(item));
+
+  const visibleCount = navProjects.filter(isNavigationEffectivelyVisible).length;
   const hiddenCount = navProjects.length - visibleCount;
 
   if (isLoading) {
@@ -1992,38 +1980,6 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
         </div>
       )}
 
-      {itemToArchive && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white p-7 shadow-2xl">
-            <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-red-500">
-              <Trash2 size={24} />
-            </div>
-            <h2 className="text-center text-2xl font-serif font-bold text-brand-blue">Remove from navigation?</h2>
-            <p className="mt-3 text-center text-sm leading-relaxed text-gray-500">
-              <strong className="text-brand-blue">{itemToArchive.nav_title}</strong> will be removed from the website navigation setup. The actual project and its project page will not be deleted.
-            </p>
-            <div className="mt-6 flex gap-3">
-              <button
-                type="button"
-                onClick={() => setItemToArchive(null)}
-                disabled={isArchiving}
-                className="flex-1 rounded-xl bg-gray-100 px-4 py-3 text-xs font-bold uppercase tracking-wider text-gray-600 hover:bg-gray-200 disabled:opacity-60"
-              >
-                Keep Item
-              </button>
-              <button
-                type="button"
-                onClick={confirmArchive}
-                disabled={isArchiving}
-                className="flex-1 rounded-xl bg-red-600 px-4 py-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-red-700 disabled:opacity-60 flex items-center justify-center gap-2"
-              >
-                {isArchiving ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
-                Remove
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {editModalOpen && editingData && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm p-4">
@@ -2073,7 +2029,7 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
               </div>
 
               <div>
-                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-gray-500">Navigation Image</label>
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-gray-500">Navigation Logo</label>
                 <div
                   className={`relative flex min-h-52 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed text-center transition-all duration-200 ${
                     isDragging
@@ -2096,7 +2052,7 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                   {isUploading ? (
                     <div className="flex flex-col items-center gap-3 py-8">
                       <Loader2 className="animate-spin text-brand-blue" size={30} />
-                      <span className="text-xs font-bold uppercase tracking-widest text-brand-blue">Uploading image...</span>
+                      <span className="text-xs font-bold uppercase tracking-widest text-brand-blue">Uploading logo...</span>
                     </div>
                   ) : editingData.nav_image_url ? (
                     <div className="relative h-52 w-full bg-gray-100">
@@ -2105,12 +2061,12 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                       </div>
                       <img
                         src={editingData.nav_image_url}
-                        alt={`${editingData.nav_title || 'Project'} navigation preview`}
-                        className="relative h-full w-full object-cover"
+                        alt={`${editingData.nav_title || 'Project'} navigation logo preview`}
+                        className="relative h-full w-full object-contain p-5"
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                       />
                       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-4 pb-4 pt-12 text-left">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-white">Click or drag to replace image</span>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-white">Click or drag to replace logo</span>
                       </div>
                     </div>
                   ) : (
@@ -2118,57 +2074,118 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                       <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-full bg-brand-blue/5 text-brand-blue">
                         <Upload size={20} />
                       </div>
-                      <span className="text-sm font-bold text-brand-blue">Add navigation image</span>
+                      <span className="text-sm font-bold text-brand-blue">Add navigation logo</span>
                       <span className="text-[10px] uppercase tracking-widest">PNG, JPG, WEBP or SVG · max 5 MB</span>
                     </div>
                   )}
                 </div>
-              </div>
-
-              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-bold text-brand-blue">Visible in website navigation</p>
-                    <p className="mt-1 text-[10px] leading-relaxed text-gray-400">Hide this item without deleting its configuration.</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setEditingData({ ...editingData, is_active: !editingData.is_active })}
-                    className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
-                      editingData.is_active ? 'bg-green-500' : 'bg-gray-300'
-                    }`}
-                    aria-pressed={Boolean(editingData.is_active)}
-                    aria-label="Toggle navigation visibility"
-                  >
-                    <span
-                      className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-all ${
-                        editingData.is_active ? 'left-6' : 'left-1'
-                      }`}
-                    />
-                  </button>
+                <div className="mt-2 flex items-start justify-between gap-4">
+                  <p className="text-[10px] leading-relaxed text-gray-400">
+                    This logo is independent from the project hero image. Transparent PNG, WEBP, or SVG files work best.
+                  </p>
+                  {editingData.nav_image_url && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditingData({
+                          ...editingData,
+                          nav_image_url: null,
+                        })
+                      }
+                      className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-red-500 hover:text-red-600"
+                    >
+                      Remove Logo
+                    </button>
+                  )}
                 </div>
               </div>
+
+              {(() => {
+                const linkedProject = Array.isArray(editingData.project_table)
+                  ? editingData.project_table[0]
+                  : editingData.project_table;
+                const projectIsVisible = Boolean(
+                  linkedProject?.is_active && !linkedProject?.deleted_at
+                );
+                const effectiveVisible = Boolean(
+                  projectIsVisible && editingData.is_active
+                );
+
+                return (
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-bold text-brand-blue">
+                          Visible in website navigation
+                        </p>
+                        <p className="mt-1 text-[10px] leading-relaxed text-gray-400">
+                          {!projectIsVisible
+                            ? editingData.is_active
+                              ? 'Hidden automatically because the project is hidden. It will return when the project is shown.'
+                              : 'The project is hidden, and this navigation item is also intentionally set to stay hidden.'
+                            : 'Turn this off to keep the navigation item hidden even while the project itself is shown.'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!projectIsVisible) return;
+                          setEditingData({
+                            ...editingData,
+                            is_active: !editingData.is_active,
+                          });
+                        }}
+                        disabled={!projectIsVisible}
+                        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+                          projectIsVisible
+                            ? 'cursor-pointer'
+                            : 'cursor-not-allowed'
+                        } ${
+                          effectiveVisible
+                            ? 'bg-green-500 hover:bg-green-600'
+                            : 'bg-gray-300 hover:bg-gray-400'
+                        } disabled:opacity-70`}
+                        aria-pressed={effectiveVisible}
+                        aria-label="Toggle navigation visibility"
+                        title={
+                          projectIsVisible
+                            ? 'Toggle navigation visibility'
+                            : 'Show the project first to change this setting'
+                        }
+                      >
+                        <span
+                          className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-all ${
+                            effectiveVisible ? 'left-6' : 'left-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {!projectIsVisible && editingData.is_active && (
+                      <div className="mt-3 inline-flex rounded-full bg-brand-gold/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-brand-gold">
+                        Will show with project
+                      </div>
+                    )}
+
+                    {!projectIsVisible && !editingData.is_active && (
+                      <div className="mt-3 inline-flex rounded-full bg-gray-200 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-gray-500">
+                        Keep hidden
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue/60">Linked Project</p>
                 <p className="mt-1 text-sm font-semibold text-brand-blue">{editingData.project_table?.title || 'Project unavailable'}</p>
+                <p className="mt-1.5 text-[10px] leading-relaxed text-gray-400">
+                  Created automatically with the project. The link stays fixed; hide the item instead of removing it.
+                </p>
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-3 border-t border-gray-100 bg-gray-50 px-6 py-4">
-              <div>
-                {checkPerm('edit_project', 'can_delete') && (
-                  <button
-                    type="button"
-                    onClick={() => handleArchiveClick(editingData.id, editingData.nav_title)}
-                    className="inline-flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold text-red-500 transition-colors hover:bg-red-50"
-                  >
-                    <Trash2 size={14} />
-                    Remove from Navigation
-                  </button>
-                )}
-              </div>
-
+            <div className="flex items-center justify-end gap-3 border-t border-gray-100 bg-gray-50 px-6 py-4">
               <div className="flex gap-3">
                 <button
                   type="button"
@@ -2195,12 +2212,33 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
         </div>
       )}
 
+      {/* PROJECTS SUB-NAVIGATION */}
+      <div className="mb-7 flex items-center gap-6 border-b border-gray-200">
+        <button
+          type="button"
+          onClick={openProjects}
+          className="pb-3 text-sm font-medium text-gray-400 transition-colors hover:text-brand-blue"
+        >
+          Projects
+        </button>
+
+        <button
+          type="button"
+          className="relative pb-3 text-sm font-bold text-brand-blue"
+          aria-current="page"
+        >
+          Navigation Setup
+          <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-brand-blue" />
+        </button>
+      </div>
+
+      {/* PAGE INTRO */}
       <div className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-gold">Projects · Navigation</p>
           <h2 className="mt-1 text-2xl font-serif font-bold text-brand-blue">Website Navigation Order</h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
-            Arrange how projects appear in the website navigation. Drag cards to change their order, toggle visibility directly, and edit the title, tagline, or image when needed.
+            Every project gets one navigation item automatically. Project visibility temporarily hides its navigation item without overwriting your navigation preference.
           </p>
         </div>
 
@@ -2239,15 +2277,24 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-blue/5 text-brand-blue/50">
                 <Building2 size={24} />
               </div>
-              <h3 className="font-serif text-lg font-bold text-brand-blue">No navigation projects configured</h3>
+              <h3 className="font-serif text-lg font-bold text-brand-blue">No projects available for navigation</h3>
               <p className="mt-2 max-w-md text-sm leading-relaxed text-gray-400">
-                Navigation entries will appear here once they are connected to projects.
+                Create a project first. Its linked navigation item will be created automatically and follow the project's website visibility.
               </p>
             </div>
           ) : (
             navProjects.map((item, index) => {
               const canEdit = checkPerm('edit_project', 'can_edit');
               const isBeingDragged = draggedId === item.id;
+              const linkedProject = Array.isArray(item.project_table)
+                ? item.project_table[0]
+                : item.project_table;
+              const projectIsVisible = Boolean(
+                linkedProject?.is_active && !linkedProject?.deleted_at
+              );
+              const effectiveVisible = Boolean(
+                projectIsVisible && item.is_active
+              );
 
               return (
                 <div
@@ -2292,7 +2339,7 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                       <img
                         src={item.nav_image_url}
                         alt=""
-                        className="relative h-full w-full object-cover"
+                        className="relative h-full w-full object-contain p-2"
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                       />
                     )}
@@ -2307,9 +2354,15 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                       <h3 className="truncate text-sm font-bold text-brand-blue transition-colors group-hover:text-brand-gold sm:text-base">
                         {item.nav_title || item.project_table?.title || 'Untitled Project'}
                       </h3>
-                      {!item.is_active && (
-                        <span className="shrink-0 rounded-full bg-gray-200 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gray-500">
-                          Hidden
+                      {!effectiveVisible && (
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                          !projectIsVisible && item.is_active
+                            ? 'bg-brand-gold/10 text-brand-gold'
+                            : 'bg-gray-200 text-gray-500'
+                        }`}>
+                          {!projectIsVisible && item.is_active
+                            ? 'Hidden with project'
+                            : 'Hidden'}
                         </span>
                       )}
                     </div>
@@ -2317,28 +2370,64 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                       {item.tagline || 'No tagline added yet.'}
                     </p>
                     <p className="mt-1.5 text-[10px] font-medium text-gray-400">
-                      Linked to {item.project_table?.title || 'project unavailable'}
+                      Linked to {linkedProject?.title || 'project unavailable'}
                     </p>
                   </button>
 
                   <div className="col-start-2 flex items-center justify-between gap-3 sm:col-start-auto sm:justify-end">
                     <div className="flex items-center gap-2">
-                      <span className={`hidden text-[10px] font-bold uppercase tracking-wider md:inline ${item.is_active ? 'text-green-600' : 'text-gray-400'}`}>
-                        {item.is_active ? 'Visible' : 'Hidden'}
+                      <span className={`hidden text-[10px] font-bold uppercase tracking-wider md:inline ${
+                        effectiveVisible
+                          ? 'text-green-600'
+                          : !projectIsVisible && item.is_active
+                            ? 'text-brand-gold'
+                            : 'text-gray-400'
+                      }`}>
+                        {effectiveVisible
+                          ? 'Visible'
+                          : !projectIsVisible && item.is_active
+                            ? 'Hidden with project'
+                            : 'Hidden'}
                       </span>
                       <button
                         type="button"
-                        onClick={() => handleToggleActive(item.id, Boolean(item.is_active), item.nav_title)}
-                        disabled={!canEdit}
-                        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                          item.is_active ? 'bg-green-500' : 'bg-gray-300'
-                        }`}
-                        aria-pressed={Boolean(item.is_active)}
-                        aria-label={`${item.is_active ? 'Hide' : 'Show'} ${item.nav_title} in navigation`}
+                        onClick={() => {
+                          if (!projectIsVisible) return;
+                          handleToggleActive(
+                            item.id,
+                            Boolean(item.is_active),
+                            item.nav_title
+                          );
+                        }}
+                        disabled={!canEdit || !projectIsVisible}
+                        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+                          canEdit && projectIsVisible
+                            ? 'cursor-pointer'
+                            : 'cursor-not-allowed'
+                        } ${
+                          effectiveVisible
+                            ? 'bg-green-500 hover:bg-green-600'
+                            : 'bg-gray-300 hover:bg-gray-400'
+                        } ${!canEdit ? 'opacity-50' : ''}`}
+                        aria-pressed={effectiveVisible}
+                        aria-label={
+                          projectIsVisible
+                            ? `${effectiveVisible ? 'Hide' : 'Show'} ${item.nav_title} in navigation`
+                            : `${item.nav_title} is hidden because its project is hidden`
+                        }
+                        title={
+                          projectIsVisible
+                            ? effectiveVisible
+                              ? 'Hide from navigation'
+                              : 'Show in navigation'
+                            : item.is_active
+                              ? 'Hidden automatically with the project. It will turn back on when the project is shown.'
+                              : 'Project is hidden and this navigation item is intentionally disabled.'
+                        }
                       >
                         <span
                           className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-all ${
-                            item.is_active ? 'left-6' : 'left-1'
+                            effectiveVisible ? 'left-6' : 'left-1'
                           }`}
                         />
                       </button>
