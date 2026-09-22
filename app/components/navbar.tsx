@@ -11,18 +11,27 @@ export default function Navbar() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const pathname = usePathname();
   
-  const [dynamicProjects, setDynamicProjects] = useState<any[]>([]);
-  const [activeProject, setActiveProject] = useState<any>({ name: '', image: '', description: '', path: '' });
+  type NavigationProject = {
+    name: string;
+    path: string;
+    image: string;
+    logo: string;
+    description: string;
+  };
+
+  const emptyProject: NavigationProject = {
+    name: '',
+    image: '',
+    logo: '',
+    description: '',
+    path: '',
+  };
+
+  const [dynamicProjects, setDynamicProjects] = useState<NavigationProject[]>([]);
+  const [activeProject, setActiveProject] = useState<NavigationProject>(emptyProject);
   const [activeModules, setActiveModules] = useState<Record<string, boolean>>({});
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [mobileSubmenuOpen, setMobileSubmenuOpen] = useState(false);
-
- const PROJECT_LOGOS: Record<string, { src: string; height: string }> = {
-  'city clou': { src: '/images/logos/city-clou-logo.png', height: 'h-10 md:h-10 -ml-2' },
-  'el sol': { src: '/images/logos/el-sol-logo.png', height: 'h-12 md:h-22 -ml-2 -mb-2' },
-  'la vida': { src: '/images/logos/la-vida-logo.png', height: 'h-11 md:h-21 -ml-4 -mb-2' },
-  'park one': { src: '/images/logos/park-one-logo.png', height: 'h-9 md:h-8 -ml-2' },
-};
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -30,31 +39,54 @@ export default function Navbar() {
       const { data, error } = await supabase
         .from('navbar_projects')
         .select(`
-          nav_title, 
+          nav_title,
           nav_image_url,
-          tagline, 
-          project_table ( slug )
+          tagline,
+          display_order,
+          project_table!inner (
+            slug,
+            image,
+            is_active,
+            deleted_at
+          )
         `)
         .eq('is_active', true)
+        .eq('project_table.is_active', true)
+        .is('project_table.deleted_at', null)
         .order('display_order', { ascending: true });
 
-      if (data) {
-        const formattedProjects = data.map((p: any) => {
-          const projectData = Array.isArray(p.project_table) ? p.project_table[0] : p.project_table;
-          const slug = projectData?.slug || '';
+      if (error) {
+        console.error('Navbar failed to fetch project navigation:', error.message);
+        setDynamicProjects([]);
+        setActiveProject(emptyProject);
+        return;
+      }
 
-          return {
-            name: p.nav_title,
-            path: `/projects/${slug.replace(/^\//, '')}`, 
-            image: p.nav_image_url || '/images/placeholder.webp',
-            description: p.tagline || ""
-          };
-        });
-        
+      if (data) {
+        const formattedProjects: NavigationProject[] = data
+          .map((p: any) => {
+            const projectData = Array.isArray(p.project_table)
+              ? p.project_table[0]
+              : p.project_table;
+            const slug = String(projectData?.slug || '').trim();
+
+            if (!slug) return null;
+
+            return {
+              name: String(p.nav_title || '').trim() || 'Project',
+              path: `/projects/${slug.replace(/^\//, '')}`,
+
+              // The large showcase image comes from the linked project itself.
+              // Navigation Setup controls nav_image_url separately as the logo.
+              image: projectData?.image || '/images/placeholder.webp',
+              logo: p.nav_image_url || '',
+              description: p.tagline || '',
+            };
+          })
+          .filter(Boolean) as NavigationProject[];
+
         setDynamicProjects(formattedProjects);
-        if (formattedProjects.length > 0) {
-          setActiveProject(formattedProjects[0]);
-        }
+        setActiveProject(formattedProjects[0] || emptyProject);
       }
     };
     fetchProjects();
@@ -243,29 +275,30 @@ export default function Navbar() {
                             src={activeProject.image} 
                             alt={activeProject.name} 
                             className="absolute inset-0 w-full h-full object-cover transition-transform duration-[1.5s] ease-out scale-100 group-hover/showcase:scale-105"
-                            onError={(e) => { e.currentTarget.src = 'https://via.placeholder.com/800x600/142f72/D0B370?text=Image+Not+Found' }}
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = '/images/placeholder.webp';
+                            }}
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none"></div>
 
                           <div className="absolute bottom-0 left-0 w-full p-10 flex flex-col items-start transform transition-transform duration-500 translate-y-4 group-hover/showcase:translate-y-0">
-                            {(() => {
-                              const key = (activeProject.name || '').toLowerCase().trim();
-                              const logo = PROJECT_LOGOS[key];
-
-                              return logo ? (
-                                <div className="mb-4 drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]">
-                                  <img
-                                    src={logo.src}
-                                    alt={activeProject.name}
-                                    className={`${logo.height} w-auto object-contain`}
-                                  />
-                                </div>
-                              ) : (
-                                <h2 className="text-4xl font-serif text-white mb-3 drop-shadow-xl">
-                                  {activeProject.name}
-                                </h2>
-                              );
-                            })()}
+                            {activeProject.logo ? (
+                              <div className="mb-4 flex min-h-14 items-end drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]">
+                                <img
+                                  src={activeProject.logo}
+                                  alt={`${activeProject.name} logo`}
+                                  className="max-h-20 max-w-[280px] w-auto object-contain object-left"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <h2 className="text-4xl font-serif text-white mb-3 drop-shadow-xl">
+                                {activeProject.name}
+                              </h2>
+                            )}
 
                             <p className="text-sm text-gray-200 font-light leading-relaxed mb-6 line-clamp-3 normal-case tracking-normal drop-shadow-md max-w-md">
                               {activeProject.description}

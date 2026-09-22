@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo } from 'react';
 import Image from "next/image";
-import { Layers, Target, Key, MapPin, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Layers, Target, Key, MapPin, ArrowRight, ChevronLeft, ChevronRight, PlusCircle } from 'lucide-react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
@@ -13,11 +13,39 @@ if (typeof window !== 'undefined') {
 const BLANK_IMAGE = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
 
 interface Amenity {
-  id: number;
+  id: number | string;
+  editorIndex?: number;
   title: string;
   description: string;
   thumbnail: string;
   tower?: string | null;
+}
+
+export type ProjectEditorRegion =
+  | 'hero-image'
+  | 'project-title'
+  | 'location'
+  | 'awards'
+  | 'tags'
+  | 'editorial-title'
+  | 'editorial-description'
+  | 'editorial-visuals'
+  | 'amenities'
+  | `amenity:${number}`
+  | 'unit-layouts'
+  | `unit-layout:${number}`
+  | 'points-of-interest'
+  | `landmark:${number}`;
+
+interface PreviewSkeletonProps {
+  data: any;
+  editorMode?: boolean;
+  selectedRegion?: ProjectEditorRegion | null;
+  onSelectRegion?: (region: ProjectEditorRegion) => void;
+  onAddAmenity?: () => void;
+  onAddLayout?: () => void;
+  onAddLandmark?: () => void;
+  pendingRemovedLandmarkIds?: Array<number | string>;
 }
 
 function formatTowerName(raw?: string | null): string {
@@ -32,58 +60,717 @@ function formatTowerName(raw?: string | null): string {
   return trimmed;
 }
 
-function DummyMapSection() {
+function PointsOfInterestPreview({
+  data,
+  editorMode,
+  selectedRegion,
+  onSelectRegion,
+  onAddLandmark,
+  pendingRemovedLandmarkIds = [],
+}: {
+  data: any;
+  editorMode: boolean;
+  selectedRegion: ProjectEditorRegion | null;
+  onSelectRegion?: (region: ProjectEditorRegion) => void;
+  onAddLandmark?: () => void;
+  pendingRemovedLandmarkIds?: Array<number | string>;
+}) {
+  const landmarks = Array.isArray(
+    data.child_markers
+  )
+    ? data.child_markers
+    : [];
+
+  const pendingRemovalSet =
+    new Set(
+      pendingRemovedLandmarkIds.map(
+        (id) => String(id)
+      )
+    );
+
+  const select = (
+    e: React.MouseEvent,
+    region: ProjectEditorRegion
+  ) => {
+    if (!editorMode) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    onSelectRegion?.(region);
+  };
+
+  const sectionSelected =
+    selectedRegion ===
+    'points-of-interest';
+
+  const projectLocation =
+    data.map_latitude &&
+    data.map_longitude
+      ? `${data.map_latitude}, ${data.map_longitude}`
+      : 'Project coordinates not set';
+
   return (
-    <section className="relative py-24 bg-[#0A1128] overflow-hidden flex items-center min-h-[900px]">
-      <div className="absolute inset-0 z-0 opacity-20" style={{ backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
-      <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-brand-gold/10 rounded-full blur-[120px] pointer-events-none z-0" />
-      <div className="absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] bg-brand-blue/30 rounded-full blur-[150px] pointer-events-none z-0" />
-      <div className="max-w-[90rem] mx-auto px-6 md:px-12 relative z-20 flex flex-col items-center w-full">
-        <div className="mb-12 text-center">
-          <h2 className="text-5xl md:text-6xl lg:text-7xl font-serif font-light leading-tight mb-4 text-white">
-            Points of <span className="text-brand-gold">Interest</span>
+    <section
+      className="
+        relative
+        overflow-hidden
+        bg-[#0A1128]
+        py-20 md:py-24
+      "
+    >
+      <div
+        className="
+          absolute inset-0 z-0
+          opacity-20
+        "
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)',
+          backgroundSize: '40px 40px',
+        }}
+      />
+
+      <div className="absolute top-[-10%] left-[-10%] h-[50vw] w-[50vw] rounded-full bg-brand-gold/10 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-20%] right-[-10%] h-[60vw] w-[60vw] rounded-full bg-brand-blue/30 blur-[150px] pointer-events-none" />
+
+      <div
+        className="
+          relative z-20
+          mx-auto
+          w-full
+          max-w-[90rem]
+          px-6 md:px-12
+        "
+      >
+        <div
+          onClick={(e) =>
+            select(
+              e,
+              'points-of-interest'
+            )
+          }
+          className={`
+            relative
+            mx-auto
+            mb-10
+            max-w-3xl
+            rounded-xl
+            px-4 py-3
+            text-center
+            transition-all
+            ${
+              editorMode
+                ? 'cursor-pointer'
+                : ''
+            }
+            ${
+              editorMode &&
+              sectionSelected
+                ? 'ring-2 ring-brand-gold ring-offset-4 ring-offset-[#0A1128]'
+                : editorMode
+                ? 'hover:ring-2 hover:ring-white/60'
+                : ''
+            }
+          `}
+        >
+          {editorMode &&
+            sectionSelected && (
+              <span
+                className="
+                  absolute
+                  -top-3 left-1/2
+                  -translate-x-1/2
+                  rounded-md
+                  bg-brand-gold
+                  px-2.5 py-1
+                  text-[9px]
+                  font-bold
+                  uppercase
+                  tracking-wider
+                  text-brand-blue
+                  shadow-lg
+                "
+              >
+                Points of Interest
+              </span>
+            )}
+
+          <p
+            className="
+              mb-3
+              text-[10px]
+              font-bold
+              uppercase
+              tracking-[0.25em]
+              text-brand-gold
+            "
+          >
+            Nearby Places
+          </p>
+
+          <h2
+            className="
+              text-4xl md:text-5xl
+              lg:text-6xl
+              font-serif
+              font-light
+              leading-tight
+              text-white
+            "
+          >
+            Points of{' '}
+            <span className="text-brand-gold">
+              Interest
+            </span>
           </h2>
-          <p className="text-center font-light leading-relaxed text-white/70 text-lg md:text-xl max-w-2xl mx-auto">
-            Everything you need, strategically positioned right around your sanctuary.
+
+          <p
+            className="
+              mx-auto mt-4
+              max-w-2xl
+              text-sm md:text-base
+              font-light
+              leading-relaxed
+              text-white/65
+            "
+          >
+            {data.map_subtitle ||
+              'Everything you need, strategically positioned right around your sanctuary.'}
           </p>
         </div>
-        <div className="w-full h-[500px] p-2 md:p-4 rounded-sm bg-white/5 border border-white/10 flex items-center justify-center backdrop-blur-md shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
-           <span className="text-brand-gold font-bold uppercase tracking-widest text-sm">Interactive Map disabled in Live Preview</span>
+
+        <div
+          onClick={(e) =>
+            select(
+              e,
+              'points-of-interest'
+            )
+          }
+          className={`
+            relative
+            overflow-hidden
+            rounded-2xl
+            border
+            bg-white/5
+            p-4 md:p-6
+            shadow-[0_20px_50px_rgba(0,0,0,0.35)]
+            backdrop-blur-md
+            transition-all
+            ${
+              editorMode
+                ? 'cursor-pointer'
+                : ''
+            }
+            ${
+              editorMode &&
+              sectionSelected
+                ? 'border-brand-gold/70'
+                : 'border-white/10'
+            }
+          `}
+        >
+          <div
+            className="
+              relative
+              flex
+              min-h-[320px]
+              items-center
+              justify-center
+              overflow-hidden
+              rounded-xl
+              border
+              border-white/10
+              bg-[#0d1b3e]
+            "
+          >
+            <div
+              className="
+                absolute inset-0
+                opacity-35
+              "
+              style={{
+                backgroundImage:
+                  'radial-gradient(circle at 20% 30%, rgba(212,175,55,.35) 0 2px, transparent 3px), radial-gradient(circle at 80% 60%, rgba(255,255,255,.25) 0 2px, transparent 3px), linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px)',
+                backgroundSize:
+                  '180px 180px, 220px 220px, 36px 36px, 36px 36px',
+              }}
+            />
+
+            <div
+              className="
+                relative z-10
+                flex
+                max-w-md
+                flex-col
+                items-center
+                px-6
+                text-center
+              "
+            >
+              <div
+                className="
+                  flex h-16 w-16
+                  items-center
+                  justify-center
+                  overflow-hidden
+                  rounded-full
+                  border
+                  border-brand-gold/40
+                  bg-brand-blue
+                  shadow-xl
+                "
+              >
+                {data.map_icon ? (
+                  <Image
+                    src={data.map_icon}
+                    alt="Project map pin"
+                    width={44}
+                    height={44}
+                    className="h-11 w-11 object-contain"
+                  />
+                ) : (
+                  <MapPin
+                    size={28}
+                    className="text-brand-gold"
+                  />
+                )}
+              </div>
+
+              <p
+                className="
+                  mt-4
+                  text-xs
+                  font-bold
+                  uppercase
+                  tracking-[0.2em]
+                  text-white
+                "
+              >
+                Project Location
+              </p>
+
+              <p
+                className="
+                  mt-1
+                  text-[10px]
+                  leading-relaxed
+                  text-white/45
+                "
+              >
+                {projectLocation}
+              </p>
+
+              {editorMode && (
+                <p
+                  className="
+                    mt-5
+                    rounded-full
+                    border border-white/10
+                    bg-black/20
+                    px-4 py-2
+                    text-[9px]
+                    font-medium
+                    uppercase
+                    tracking-wider
+                    text-white/55
+                  "
+                >
+                  Interactive map disabled while editing
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-8">
+          <div
+            className="
+              mb-3
+              flex
+              items-end
+              justify-between
+              gap-4
+            "
+          >
+            <div>
+              <p
+                className="
+                  text-[10px]
+                  font-bold
+                  uppercase
+                  tracking-[0.2em]
+                  text-white/45
+                "
+              >
+                Landmarks
+              </p>
+
+              <p
+                className="
+                  mt-1
+                  text-xs
+                  text-white/35
+                "
+              >
+                {landmarks.length}{' '}
+                {landmarks.length === 1
+                  ? 'place'
+                  : 'places'}{' '}
+                configured
+              </p>
+            </div>
+          </div>
+
+          <div
+            className="
+              grid
+              grid-cols-1
+              gap-4
+              md:grid-cols-2
+              xl:grid-cols-3
+            "
+          >
+            {landmarks.map(
+              (
+                marker: any,
+                index: number
+              ) => {
+                const editorIndex =
+                  Number.isInteger(
+                    marker.editorIndex
+                  )
+                    ? marker.editorIndex
+                    : index;
+
+                const region =
+                  `landmark:${editorIndex}` as ProjectEditorRegion;
+
+                const selected =
+                  selectedRegion ===
+                  region;
+
+                const isPendingRemoval =
+                  marker.id !== undefined &&
+                  marker.id !== null &&
+                  pendingRemovalSet.has(
+                    String(marker.id)
+                  );
+
+                return (
+                  <button
+                    key={
+                      marker.id ??
+                      editorIndex
+                    }
+                    type="button"
+                    onClick={(e) =>
+                      select(e, region)
+                    }
+                    className={`
+                      group
+                      overflow-hidden
+                      rounded-xl
+                      border
+                      bg-white/[0.06]
+                      text-left
+                      transition-all
+                      ${
+                        editorMode
+                          ? 'cursor-pointer hover:bg-white/[0.09]'
+                          : 'cursor-default'
+                      }
+                      ${
+                        isPendingRemoval
+                          ? 'border-amber-400/70 bg-amber-500/[0.08] opacity-75'
+                          : selected
+                          ? 'border-brand-gold ring-2 ring-brand-gold/30'
+                          : 'border-white/10'
+                      }
+                    `}
+                  >
+                    <div
+                      className="
+                        flex
+                        min-h-[110px]
+                        items-stretch
+                      "
+                    >
+                      <div
+                        className="
+                          relative
+                          w-28
+                          shrink-0
+                          overflow-hidden
+                          bg-white/5
+                        "
+                      >
+                        {marker.thumbnail ? (
+                          <Image
+                            src={
+                              marker.thumbnail
+                            }
+                            alt={
+                              marker.interest_name ||
+                              'Landmark'
+                            }
+                            fill
+                            sizes="112px"
+                            className="object-cover transition-transform duration-500 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div
+                            className="
+                              flex
+                              h-full
+                              flex-col
+                              items-center
+                              justify-center
+                              gap-1
+                            "
+                          >
+                            <MapPin
+                              size={24}
+                              className="text-brand-gold/70"
+                            />
+
+                            {editorMode && (
+                              <span className="text-[8px] font-bold uppercase tracking-wider text-white/35">
+                                Add Photo
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <div
+                        className="
+                          min-w-0
+                          flex-1
+                          p-4
+                        "
+                      >
+                        <div
+                          className="
+                            flex
+                            items-start
+                            justify-between
+                            gap-3
+                          "
+                        >
+                          <h3
+                            className="
+                              truncate
+                              font-serif
+                              text-lg
+                              text-white
+                            "
+                          >
+                            {marker.interest_name ||
+                              `Landmark ${index + 1}`}
+                          </h3>
+
+                          {isPendingRemoval ? (
+                            <span
+                              className="
+                                shrink-0
+                                rounded-full
+                                border
+                                border-amber-300/40
+                                bg-amber-400/10
+                                px-2 py-1
+                                text-[8px]
+                                font-bold
+                                uppercase
+                                tracking-wider
+                                text-amber-300
+                              "
+                            >
+                              Pending removal
+                            </span>
+                          ) : marker.marker_type && (
+                            <span
+                              className="
+                                shrink-0
+                                rounded-full
+                                border
+                                border-brand-gold/20
+                                bg-brand-gold/10
+                                px-2 py-1
+                                text-[8px]
+                                font-bold
+                                uppercase
+                                tracking-wider
+                                text-brand-gold
+                              "
+                            >
+                              {marker.marker_type}
+                            </span>
+                          )}
+                        </div>
+
+                        <p
+                          className="
+                            mt-2
+                            line-clamp-2
+                            text-[10px]
+                            leading-relaxed
+                            text-white/45
+                          "
+                        >
+                          {marker.address ||
+                            marker.phrase ||
+                            'No address added yet.'}
+                        </p>
+
+                        {marker.distance_km && (
+                          <p
+                            className="
+                              mt-3
+                              text-[9px]
+                              font-semibold
+                              uppercase
+                              tracking-wider
+                              text-white/35
+                            "
+                          >
+                            {marker.distance_km}{' '}
+                            km away
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              }
+            )}
+
+            {editorMode && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onAddLandmark?.();
+                }}
+                className="
+                  flex
+                  min-h-[110px]
+                  items-center
+                  justify-center
+                  gap-2
+                  rounded-xl
+                  border
+                  border-dashed
+                  border-brand-gold/40
+                  bg-brand-gold/[0.04]
+                  px-5
+                  text-[10px]
+                  font-bold
+                  uppercase
+                  tracking-wider
+                  text-brand-gold
+                  transition-all
+                  hover:border-brand-gold
+                  hover:bg-brand-gold/[0.08]
+                "
+              >
+                <PlusCircle size={16} />
+                Add Landmark
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-export default function PreviewSkeleton({ data }: { data: any }) {
+export default function PreviewSkeleton({
+  data,
+  editorMode = false,
+  selectedRegion = null,
+  onSelectRegion,
+  onAddAmenity,
+  onAddLayout,
+  onAddLandmark,
+  pendingRemovedLandmarkIds = [],
+}: PreviewSkeletonProps) {
   const blueprintSectionRef = useRef<HTMLElement>(null);
   
   // --- DRAG TO SCROLL STATE ---
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const startX = useRef(0);
+  const didDrag = useRef(false);
   const targetScroll = useRef(0);
   const currentScroll = useRef(0);
   const rafId = useRef<number | null>(null);
   const [isGrabbing, setIsGrabbing] = useState(false);
 
- const availableTowers = useMemo<string[]>(() => {
-    const amenities = data.amenities ?? [];
-    const uniqueTowers: string[] = Array.from(
-      new Set<string>(
-        amenities
-          .map((item: any) => (item.tower ? String(item.tower).trim() : ''))
-          .filter((tower: string) => Boolean(tower))
-      )
-    );
-    return uniqueTowers.sort((a: string, b: string) =>
-      a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
-    );
-  }, [data.amenities]);
+  const selectRegion = (
+  e: React.MouseEvent,
+  region: ProjectEditorRegion
+) => {
+  if (!editorMode) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  onSelectRegion?.(region);
+};
+
+const regionStyle = (region: ProjectEditorRegion) => {
+  if (!editorMode) return '';
+
+  return `
+    pointer-events-auto
+    cursor-pointer
+    transition-all
+    duration-150
+    ${
+      selectedRegion === region
+        ? 'ring-2 ring-brand-gold ring-offset-2 ring-offset-transparent'
+        : 'hover:ring-2 hover:ring-white/70'
+    }
+  `;
+};
+
+    const availableTowers = useMemo<string[]>(() => {
+      const towers = data.towers ?? [];
+
+      return towers
+        .map((tower: any) =>
+          String(tower.name || '').trim()
+        )
+        .filter(Boolean);
+    }, [data.towers]);
 
   const [selectedTower, setSelectedTower] = useState<string | null>(
     () => availableTowers[0] ?? null
   );
+
+  useEffect(() => {
+    if (availableTowers.length === 0) {
+      if (selectedTower !== null) {
+        setSelectedTower(null);
+      }
+      return;
+    }
+
+    const stillExists =
+      selectedTower &&
+      availableTowers.some(
+        (tower) =>
+          tower.toLowerCase() ===
+          selectedTower.toLowerCase()
+      );
+
+    if (!stillExists) {
+      setSelectedTower(
+        availableTowers[0]
+      );
+    }
+  }, [availableTowers, selectedTower]);
 
   const filteredAmenities = useMemo(() => {
     const amenities = data.amenities ?? [];
@@ -127,24 +814,68 @@ export default function PreviewSkeleton({ data }: { data: any }) {
   }, [selectedTower]);
 
   // 2. DRAG HANDLERS
-  const onDragStart = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!scrollContainerRef.current) return;
-    isDragging.current = true; setIsGrabbing(true);
-    const pageX = 'touches' in e ? e.touches[0].pageX : e.pageX;
-    startX.current = pageX;
-    targetScroll.current = scrollContainerRef.current.scrollLeft;
-    currentScroll.current = scrollContainerRef.current.scrollLeft;
-  };
+  const onDragStart = (
+          e: React.MouseEvent | React.TouchEvent
+        ) => {
+          if (!scrollContainerRef.current) return;
 
-  const onDragMove = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDragging.current || !scrollContainerRef.current) return;
-    const pageX = 'touches' in e ? e.touches[0].pageX : e.pageX;
-    const delta = (startX.current - pageX) * 2;
-    targetScroll.current += delta;
-    startX.current = pageX;
-    const maxScroll = scrollContainerRef.current.scrollWidth - scrollContainerRef.current.clientWidth;
-    targetScroll.current = Math.max(0, Math.min(targetScroll.current, maxScroll));
-  };
+          isDragging.current = true;
+          didDrag.current = false;
+          setIsGrabbing(true);
+
+          const pageX =
+            'touches' in e
+              ? e.touches[0].pageX
+              : e.pageX;
+
+          startX.current = pageX;
+
+          targetScroll.current =
+            scrollContainerRef.current.scrollLeft;
+
+          currentScroll.current =
+            scrollContainerRef.current.scrollLeft;
+        };
+
+  const onDragMove = (
+        e: React.MouseEvent | React.TouchEvent
+      ) => {
+        if (
+          !isDragging.current ||
+          !scrollContainerRef.current
+        ) {
+          return;
+        }
+
+        const pageX =
+          'touches' in e
+            ? e.touches[0].pageX
+            : e.pageX;
+
+        const rawMovement =
+          startX.current - pageX;
+
+        if (Math.abs(rawMovement) > 3) {
+          didDrag.current = true;
+        }
+
+        const delta = rawMovement * 2;
+
+        targetScroll.current += delta;
+        startX.current = pageX;
+
+        const maxScroll =
+          scrollContainerRef.current.scrollWidth -
+          scrollContainerRef.current.clientWidth;
+
+        targetScroll.current = Math.max(
+          0,
+          Math.min(
+            targetScroll.current,
+            maxScroll
+          )
+        );
+      };
 
   const onDragEnd = () => { isDragging.current = false; setIsGrabbing(false); };
 
@@ -201,140 +932,1043 @@ export default function PreviewSkeleton({ data }: { data: any }) {
     { label: data.unit_total, icon: <Key size={16} /> },
   ].filter(tag => tag.label && tag.label !== '0-0 SQM' && tag.label !== '0 Units');
 
-  const groupedLayouts = useMemo<Record<string, any[]>>(() => {
-    if (!data?.unit_layout || !Array.isArray(data.unit_layout)) return {};
+  const groupedLayouts = useMemo<
+    Array<{
+      towerName: string;
+      plans: any[];
+    }>
+  >(() => {
+    if (
+      !data?.unit_layout ||
+      !Array.isArray(data.unit_layout)
+    ) {
+      return [];
+    }
 
-    const cleanName = (val: string) =>
+    const cleanName = (
+      val: string
+    ) =>
       val
-        .replace(/[\u2013\u2014]/g, '-')
+        .replace(
+          /[\u2013\u2014]/g,
+          '-'
+        )
         .replace(/\s+/g, ' ')
         .trim();
 
-    return data.unit_layout.reduce((acc: Record<string, any[]>, item: any) => {
-      const rawTower = item?.tower_name ? cleanName(String(item.tower_name)) : 'Tower A - Residential';
-      const fallbackTower = rawTower || 'Tower A - Residential';
+    const normalize = (
+      val: string
+    ) =>
+      cleanName(val).toLowerCase();
 
-      const matchKey = Object.keys(acc).find(
-        (key) => cleanName(key).toLowerCase() === fallbackTower.toLowerCase()
+    const towerOrder =
+      (data.towers || [])
+        .map((tower: any) =>
+          cleanName(
+            String(
+              tower?.name || ''
+            )
+          )
+        )
+        .filter(Boolean);
+
+    const groups = new Map<
+      string,
+      {
+        towerName: string;
+        plans: any[];
+      }
+    >();
+
+    data.unit_layout.forEach(
+      (item: any) => {
+        const towerName =
+          item?.tower_name
+            ? cleanName(
+                String(
+                  item.tower_name
+                )
+              )
+            : 'Unassigned';
+
+        const key =
+          normalize(towerName);
+
+        if (!groups.has(key)) {
+          groups.set(key, {
+            towerName,
+            plans: [],
+          });
+        }
+
+        groups.get(key)!.plans.push(
+          item
+        );
+      }
+    );
+
+    groups.forEach((group) => {
+      group.plans.sort(
+        (a: any, b: any) => {
+          const parseOrder = (
+            value: unknown
+          ) => {
+            const parsed =
+              Number(value);
+
+            return Number.isFinite(
+              parsed
+            ) && parsed > 0
+              ? parsed
+              : Number.MAX_SAFE_INTEGER;
+          };
+
+          const orderDiff =
+            parseOrder(
+              a.sort_order
+            ) -
+            parseOrder(
+              b.sort_order
+            );
+
+          if (orderDiff !== 0) {
+            return orderDiff;
+          }
+
+          return (
+            Number(
+              a.editorIndex ?? 0
+            ) -
+            Number(
+              b.editorIndex ?? 0
+            )
+          );
+        }
+      );
+    });
+
+    const ordered: Array<{
+      towerName: string;
+      plans: any[];
+    }> = [];
+
+    towerOrder.forEach(
+      (towerName: string) => {
+        const key =
+          normalize(towerName);
+
+        const group =
+          groups.get(key);
+
+        if (group) {
+          ordered.push(group);
+          groups.delete(key);
+        }
+      }
+    );
+
+    const remaining =
+      Array.from(
+        groups.values()
+      ).sort((a, b) =>
+        a.towerName.localeCompare(
+          b.towerName,
+          undefined,
+          {
+            numeric: true,
+            sensitivity: 'base',
+          }
+        )
       );
 
-      const resolvedKey = matchKey || fallbackTower;
-      if (!acc[resolvedKey]) {
-        acc[resolvedKey] = [];
-      }
-      acc[resolvedKey].push(item);
-      return acc;
-    }, {});
-  }, [data?.unit_layout]);
+    return [
+      ...ordered,
+      ...remaining,
+    ];
+  }, [
+    data?.unit_layout,
+    data?.towers,
+  ]);
 
   return (
     <div className="relative font-sans text-gray-900 bg-[#E7E7E7] overflow-x-hidden">
       
       {/* --- HERO SECTION --- */}
-      <section className="relative h-[85vh] w-full overflow-hidden pointer-events-none bg-gray-900">
-        <div className="absolute inset-0">
-          <Image 
-            src={data.image || BLANK_IMAGE}
-            alt={data.title} fill sizes="100vw" priority className="object-cover"
-          />
-        </div>
-        <div className="absolute inset-0 bg-black/40" />
+        <section
+          className={`
+            relative
+            h-[85vh]
+            w-full
+            overflow-hidden
+            bg-gray-900
+            ${
+              editorMode
+                ? 'pointer-events-auto'
+                : 'pointer-events-none'
+            }
+          `}
+        >
 
-        <div className="absolute inset-0 flex flex-col justify-end px-6 pb-16 md:px-12 md:pb-24 max-w-[90rem] mx-auto w-full">
-          <div className="flex flex-col md:flex-row justify-between items-end w-full">
-            <div className="flex flex-col w-full md:w-auto">
-              <h1 className="text-5xl md:text-8xl font-serif mb-5 drop-shadow-2xl py-2">
-                <span className="inline-block text-transparent bg-clip-text bg-gradient-to-r from-brand-gold via-[#fff2cd] to-brand-gold pr-4 pb-2 pt-1">
-                  {data.title || 'Project Title'}
-                </span>
-              </h1>
-              <div className="flex items-center gap-2 mb-10 text-white/80">
-                <span className="text-brand-gold"><MapPin size={18} /></span>
-                <span className="text-xs md:text-sm font-bold uppercase tracking-[0.3em]">
-                  {data.city || 'City'}, {data.country || 'Country'}
-                </span>
-              </div>
-            </div>
+          {/* EDITABLE HERO IMAGE */}
+          <div
+            onClick={(e) =>
+              selectRegion(e, 'hero-image')
+            }
+            className={`
+              absolute inset-0
+              ${regionStyle('hero-image')}
+            `}
+          >
+            <Image
+              src={data.image || BLANK_IMAGE}
+              alt={data.title || 'Project hero'}
+              fill
+              sizes="100vw"
+              priority
+              className="object-cover"
+            />
 
-            {data.img_awards && data.img_awards !== '' && (
-              <div className="hidden lg:block mb-10">
-                <Image 
-                  src={data.img_awards} alt="Award" width={350} height={120}
-                  className="object-contain drop-shadow-2xl"
-                />
+            {editorMode && !data.image && (
+              <div
+                className="
+                  absolute inset-0
+                  z-20
+                  flex
+                  items-center
+                  justify-center
+                  bg-gray-900
+                "
+              >
+                <div className="text-center text-white/70">
+                  <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-white/30">
+                    <PlusCircle size={20} />
+                  </span>
+
+                  <p className="mt-3 text-[10px] font-bold uppercase tracking-[0.2em]">
+                    Add Hero Image
+                  </p>
+                </div>
               </div>
             )}
+
+            {editorMode &&
+              selectedRegion === 'hero-image' && (
+                <span
+                  className="
+                    absolute
+                    top-5 left-5
+                    z-30
+                    rounded-md
+                    bg-brand-gold
+                    px-3 py-1.5
+                    text-[10px]
+                    font-bold
+                    uppercase
+                    tracking-wider
+                    text-brand-blue
+                    shadow-lg
+                  "
+                >
+                  Hero Image
+                </span>
+              )}
           </div>
 
-          <div className="flex flex-col gap-8">
-            <div className="flex flex-wrap gap-4">
-              {displayTags.map((tag, index) => (
-                <span key={index} className="flex items-center gap-3 px-6 py-3 rounded-sm border border-white/30 bg-black/30 backdrop-blur-xl text-white text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] shadow-2xl">
-                  <span className="text-brand-gold">{tag.icon}</span>
-                  {tag.label}
-                </span>
-              ))}
-            </div>
-            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 w-full sm:w-auto">
-              <div className="group relative flex items-center justify-center gap-6 w-fit bg-brand-blue px-8 py-4 overflow-hidden rounded-sm shadow-lg">
-                <span className="relative z-10 text-[11px] tracking-[0.25em] font-bold text-white uppercase">Inquire Now</span>
-                <ArrowRight size={16} className="relative z-10 text-white" />
+          {/* DARK OVERLAY */}
+          <div
+            className="
+              absolute inset-0
+              bg-black/40
+              pointer-events-none
+              z-10
+            "
+          />
+
+          {/* HERO CONTENT */}
+          <div
+            className="
+              absolute inset-0
+              z-20
+              flex flex-col
+              justify-end
+              px-6 pb-16
+              md:px-12 md:pb-24
+              max-w-[90rem]
+              mx-auto
+              w-full
+              pointer-events-none
+            "
+          >
+            <div
+              className="
+                flex flex-col
+                md:flex-row
+                justify-between
+                items-end
+                w-full
+              "
+            >
+
+              <div
+                className="
+                  flex flex-col
+                  w-full md:w-auto
+                "
+              >
+
+                {/* EDITABLE PROJECT TITLE */}
+                <div
+                  onClick={(e) =>
+                    selectRegion(
+                      e,
+                      'project-title'
+                    )
+                  }
+                  className={`
+                    relative
+                    w-fit
+                    rounded-sm
+                    ${regionStyle(
+                      'project-title'
+                    )}
+                  `}
+                >
+                  {editorMode &&
+                    selectedRegion ===
+                      'project-title' && (
+                      <span
+                        className="
+                          absolute
+                          -top-7 left-0
+                          rounded-md
+                          bg-brand-gold
+                          px-2 py-1
+                          text-[9px]
+                          font-bold
+                          uppercase
+                          tracking-wider
+                          text-brand-blue
+                          shadow-lg
+                        "
+                      >
+                        Project Title
+                      </span>
+                    )}
+
+                  <h1
+                    className="
+                      text-5xl
+                      md:text-8xl
+                      font-serif
+                      mb-5
+                      drop-shadow-2xl
+                      py-2
+                    "
+                  >
+                    <span
+                      className="
+                        inline-block
+                        text-transparent
+                        bg-clip-text
+                        bg-gradient-to-r
+                        from-brand-gold
+                        via-[#fff2cd]
+                        to-brand-gold
+                        pr-4 pb-2 pt-1
+                      "
+                    >
+                      {data.title ||
+                        'Project Title'}
+                    </span>
+                  </h1>
+                </div>
+
+
+                {/* EDITABLE LOCATION */}
+                <div
+                  onClick={(e) =>
+                    selectRegion(
+                      e,
+                      'location'
+                    )
+                  }
+                  className={`
+                    relative
+                    flex
+                    items-center
+                    gap-2
+                    mb-10
+                    text-white/80
+                    rounded-sm
+                    w-fit
+                    px-1 py-1
+                    ${regionStyle(
+                      'location'
+                    )}
+                  `}
+                >
+                  {editorMode &&
+                    selectedRegion ===
+                      'location' && (
+                      <span
+                        className="
+                          absolute
+                          -top-7 left-0
+                          rounded-md
+                          bg-brand-gold
+                          px-2 py-1
+                          text-[9px]
+                          font-bold
+                          uppercase
+                          tracking-wider
+                          text-brand-blue
+                          shadow-lg
+                        "
+                      >
+                        Location
+                      </span>
+                    )}
+
+                  <span className="text-brand-gold">
+                    <MapPin size={18} />
+                  </span>
+
+                  <span
+                    className="
+                      text-xs md:text-sm
+                      font-bold
+                      uppercase
+                      tracking-[0.3em]
+                    "
+                  >
+                    {data.city || 'City'},{' '}
+                    {data.country ||
+                      'Country'}
+                  </span>
+                </div>
+
               </div>
+
+
+      {/* EDITABLE AWARD BADGE */}
+      {(data.img_awards || editorMode) && (
+        <div
+          onClick={(e) =>
+            selectRegion(
+              e,
+              'awards'
+            )
+          }
+          className={`
+            relative
+            hidden
+            lg:block
+            mb-10
+            rounded-sm
+            ${regionStyle(
+              'awards'
+            )}
+          `}
+        >
+          {editorMode &&
+            selectedRegion ===
+              'awards' && (
+              <span
+                className="
+                  absolute
+                  -top-7 left-0
+                  z-20
+                  rounded-md
+                  bg-brand-gold
+                  px-2 py-1
+                  text-[9px]
+                  font-bold
+                  uppercase
+                  tracking-wider
+                  text-brand-blue
+                  shadow-lg
+                "
+              >
+                Awards
+              </span>
+            )}
+
+          {data.img_awards ? (
+            <Image
+              src={data.img_awards}
+              alt="Award"
+              width={350}
+              height={120}
+              className="
+                object-contain
+                drop-shadow-2xl
+              "
+            />
+          ) : (
+            <div
+              className="
+                flex
+                h-[92px]
+                w-[280px]
+                items-center
+                justify-center
+                gap-2
+                rounded-xl
+                border-2
+                border-dashed
+                border-white/25
+                bg-black/20
+                text-[10px]
+                font-bold
+                uppercase
+                tracking-wider
+                text-white/55
+              "
+            >
+              <PlusCircle size={15} />
+              Add Awards Badge
             </div>
-          </div>
+          )}
         </div>
-      </section>
+      )}
+    </div>
+
+
+    <div className="flex flex-col gap-8">
+
+      {/* EDITABLE TAGS / STATS */}
+      <div
+        onClick={(e) =>
+          selectRegion(
+            e,
+            'tags'
+          )
+        }
+        className={`
+          relative
+          flex
+          flex-wrap
+          gap-4
+          w-fit
+          rounded-sm
+          ${regionStyle(
+            'tags'
+          )}
+        `}
+      >
+        {editorMode &&
+          selectedRegion ===
+            'tags' && (
+            <span
+              className="
+                absolute
+                -top-7 left-0
+                rounded-md
+                bg-brand-gold
+                px-2 py-1
+                text-[9px]
+                font-bold
+                uppercase
+                tracking-wider
+                text-brand-blue
+                shadow-lg
+              "
+            >
+              Tags & Stats
+            </span>
+          )}
+
+        {displayTags.map(
+          (tag, index) => (
+            <span
+              key={index}
+              className="
+                flex items-center
+                gap-3
+                px-6 py-3
+                rounded-sm
+                border
+                border-white/30
+                bg-black/30
+                backdrop-blur-xl
+                text-white
+                text-[10px]
+                md:text-xs
+                font-bold
+                uppercase
+                tracking-[0.2em]
+                shadow-2xl
+              "
+            >
+              <span
+                className="
+                  text-brand-gold
+                "
+              >
+                {tag.icon}
+              </span>
+
+              {tag.label}
+            </span>
+          )
+        )}
+      </div>
+
+
+      <div
+        className="
+          flex flex-col
+          sm:flex-row
+          gap-4 sm:gap-6
+          w-full sm:w-auto
+        "
+      >
+        <div
+          className="
+            group
+            relative
+            flex
+            items-center
+            justify-center
+            gap-6
+            w-fit
+            bg-brand-blue
+            px-8 py-4
+            overflow-hidden
+            rounded-sm
+            shadow-lg
+          "
+        >
+          <span
+            className="
+              relative z-10
+              text-[11px]
+              tracking-[0.25em]
+              font-bold
+              text-white
+              uppercase
+            "
+          >
+            Inquire Now
+          </span>
+
+          <ArrowRight
+            size={16}
+            className="
+              relative z-10
+              text-white
+            "
+          />
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
 
       {/* --- EDITORIAL SECTION --- */}
       {data.extended_description?.length > 0 && (
-        <section 
-          className="relative min-h-screen py-24 flex items-center pointer-events-none"
-          style={{ 
-            background: `linear-gradient(to bottom, #ffffff 0%, #ffffff 65%, ${
-              data.extended_description[0]?.editorial_bg_color && data.extended_description[0]?.editorial_bg_color !== 'transparent'
-                ? data.extended_description[0].editorial_bg_color
-                : '#ffffff'
-            } 100%)` 
+        <section
+          onClick={(e) =>
+            selectRegion(e, 'editorial-visuals')
+          }
+          className={`
+            relative
+            min-h-screen
+            py-24
+            flex
+            items-center
+            transition-all
+            duration-150
+
+            ${
+              editorMode
+                ? `
+                  pointer-events-auto
+                  cursor-pointer
+                  ${
+                    selectedRegion === 'editorial-visuals'
+                      ? 'ring-2 ring-inset ring-brand-gold'
+                      : 'hover:ring-2 hover:ring-inset hover:ring-white/30'
+                  }
+                `
+                : 'pointer-events-none'
+            }
+          `}
+          style={{
+            background: `linear-gradient(
+              to bottom,
+              #ffffff 0%,
+              #ffffff 65%,
+              ${
+                data.extended_description[0]
+                  ?.editorial_bg_color &&
+                data.extended_description[0]
+                  ?.editorial_bg_color !== 'transparent'
+                  ? data.extended_description[0]
+                      .editorial_bg_color
+                  : '#ffffff'
+              } 100%
+            )`,
           }}
         >
-          <div className="max-w-[90rem] mx-auto px-6 md:px-12 w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center lg:h-[600px]">
-            <div className="relative w-full h-[400px] lg:h-full rounded-sm overflow-hidden shadow-2xl bg-gray-200 border border-gray-300">
-              <Image 
-                src={data.extended_description[0]?.editorial_img || BLANK_IMAGE} 
-                alt="Editorial" 
-                fill 
+          {editorMode &&
+            selectedRegion ===
+              'editorial-visuals' && (
+              <span
+                className="
+                  absolute
+                  top-5 left-5
+                  z-30
+                  rounded-md
+                  bg-brand-gold
+                  px-3 py-1.5
+                  text-[10px]
+                  font-bold
+                  uppercase
+                  tracking-wider
+                  text-brand-blue
+                  shadow-lg
+                "
+              >
+                Image &amp; Background
+              </span>
+            )}
+
+          <div
+            className="
+              max-w-[90rem]
+              mx-auto
+              px-6 md:px-12
+              w-full
+              grid
+              grid-cols-1
+              lg:grid-cols-2
+              gap-16
+              items-center
+              lg:h-[600px]
+            "
+          >
+            {/* EDITORIAL IMAGE + BACKGROUND SHARE ONE INSPECTOR */}
+            <div
+              onClick={(e) =>
+                selectRegion(
+                  e,
+                  'editorial-visuals'
+                )
+              }
+              className={`
+                relative
+                w-full
+                h-[400px]
+                lg:h-full
+                rounded-sm
+                overflow-hidden
+                shadow-2xl
+                bg-gray-200
+                border
+                border-gray-300
+                ${regionStyle(
+                  'editorial-visuals'
+                )}
+              `}
+            >
+              <Image
+                src={
+                  data.extended_description[0]
+                    ?.editorial_img ||
+                  BLANK_IMAGE
+                }
+                alt="Editorial"
+                fill
                 className="object-cover"
               />
+
+              {editorMode &&
+                !data.extended_description[0]
+                  ?.editorial_img && (
+                  <div
+                    className="
+                      absolute inset-0
+                      z-10
+                      flex
+                      items-center
+                      justify-center
+                      bg-gray-100
+                    "
+                  >
+                    <div className="text-center text-brand-blue/55">
+                      <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-brand-blue/20">
+                        <PlusCircle size={18} />
+                      </span>
+
+                      <p className="mt-3 text-[10px] font-bold uppercase tracking-wider">
+                        Add Editorial Image
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+              {editorMode &&
+                selectedRegion ===
+                  'editorial-visuals' && (
+                  <span
+                    className="
+                      absolute
+                      bottom-4 left-4
+                      z-20
+                      rounded-md
+                      bg-brand-gold
+                      px-2.5 py-1
+                      text-[9px]
+                      font-bold
+                      uppercase
+                      tracking-wider
+                      text-brand-blue
+                      shadow-lg
+                    "
+                  >
+                    Editorial Image
+                  </span>
+                )}
             </div>
 
-            <div className="flex flex-col gap-8 items-start justify-center h-full overflow-hidden">
-              <h2 
-                className="font-serif text-2xl sm:text-3xl lg:text-[36px] xl:text-[44px] leading-[1.18] transition-colors duration-300 shrink-0"
-                style={{ color: data.extended_description[0]?.editorial_title_color || '#132243' }}
+            {/* EDITORIAL COPY */}
+            <div
+              className="
+                flex
+                flex-col
+                gap-8
+                items-start
+                justify-center
+                h-full
+                overflow-hidden
+              "
+            >
+              {/* EDITABLE EDITORIAL HEADING */}
+              <div
+                onClick={(e) =>
+                  selectRegion(
+                    e,
+                    'editorial-title'
+                  )
+                }
+                className={`
+                  relative
+                  w-full
+                  rounded-sm
+                  ${regionStyle(
+                    'editorial-title'
+                  )}
+                `}
               >
-                {(data.extended_description[0]?.editorial_title || 'Editorial Headline').split('\n').map((line: string, idx: number) => (
-                  <span key={idx} className="block whitespace-nowrap">
-                    {line}
-                  </span>
-                ))}
-              </h2>
-              <div className="space-y-6 overflow-y-auto w-full pr-2" style={{ scrollbarWidth: 'thin' }}>
-                <p 
-                  className="text-lg leading-relaxed text-justify whitespace-pre-line transition-colors duration-300"
-                  style={{ color: data.extended_description[0]?.editorial_desc_color || '#4B5563' }}
+                {editorMode &&
+                  selectedRegion ===
+                    'editorial-title' && (
+                    <span
+                      className="
+                        absolute
+                        -top-7 left-0
+                        z-20
+                        rounded-md
+                        bg-brand-gold
+                        px-2 py-1
+                        text-[9px]
+                        font-bold
+                        uppercase
+                        tracking-wider
+                        text-brand-blue
+                        shadow-lg
+                      "
+                    >
+                      Headline
+                    </span>
+                  )}
+
+                <h2
+                  className="
+                    font-serif
+                    text-2xl
+                    sm:text-3xl
+                    lg:text-[36px]
+                    xl:text-[44px]
+                    leading-[1.18]
+                    transition-colors
+                    duration-300
+                    shrink-0
+                  "
+                  style={{
+                    color:
+                      data.extended_description[0]
+                        ?.editorial_title_color ||
+                      '#132243',
+                  }}
                 >
-                  {data.extended_description[0]?.editorial_long || 'Write your description here...'}
+                  {(
+                    data.extended_description[0]
+                      ?.editorial_title ||
+                    'Editorial Headline'
+                  )
+                    .split('\n')
+                    .map(
+                      (
+                        line: string,
+                        idx: number
+                      ) => (
+                        <span
+                          key={idx}
+                          className="block"
+                        >
+                          {line}
+                        </span>
+                      )
+                    )}
+                </h2>
+              </div>
+
+              {/* EDITABLE EDITORIAL PARAGRAPH */}
+              <div
+                onClick={(e) =>
+                  selectRegion(
+                    e,
+                    'editorial-description'
+                  )
+                }
+                className={`
+                  relative
+                  space-y-6
+                  overflow-y-auto
+                  w-full
+                  pr-2
+                  rounded-sm
+                  ${regionStyle(
+                    'editorial-description'
+                  )}
+                `}
+                style={{
+                  scrollbarWidth: 'thin',
+                }}
+              >
+                {editorMode &&
+                  selectedRegion ===
+                    'editorial-description' && (
+                    <span
+                      className="
+                        absolute
+                        top-0 right-2
+                        z-20
+                        rounded-md
+                        bg-brand-gold
+                        px-2 py-1
+                        text-[9px]
+                        font-bold
+                        uppercase
+                        tracking-wider
+                        text-brand-blue
+                        shadow-lg
+                      "
+                    >
+                      Description
+                    </span>
+                  )}
+
+                <p
+                  className="
+                    text-lg
+                    leading-relaxed
+                    text-justify
+                    whitespace-pre-line
+                    transition-colors
+                    duration-300
+                  "
+                  style={{
+                    color:
+                      data.extended_description[0]
+                        ?.editorial_desc_color ||
+                      '#4B5563',
+                  }}
+                >
+                  {data.extended_description[0]
+                    ?.editorial_long ||
+                    'Write your description here...'}
                 </p>
               </div>
             </div>
           </div>
         </section>
       )}
-      
+
       {/* --- AMENITIES DRAGGABLE CAROUSEL SECTION --- */}
-      {data.amenities?.length > 0 && (
-        <section className="relative w-full bg-[#132243] flex flex-col justify-center py-24 md:py-32 overflow-hidden group/amenities">
-          <div className="max-w-[90rem] px-6 md:px-12 w-full mx-auto mb-8 md:mb-10 shrink-0 pointer-events-none">
+      {(
+          data.amenities?.length > 0 ||
+          editorMode
+        ) && (
+              <section
+        className={`
+          relative
+          w-full
+          bg-[#132243]
+          flex
+          flex-col
+          justify-center
+          py-24 md:py-32
+          overflow-hidden
+          group/amenities
+          transition-all
+          ${
+            editorMode &&
+            selectedRegion === 'amenities'
+              ? 'ring-2 ring-inset ring-brand-gold'
+              : ''
+          }
+        `}
+      >
+                {editorMode &&
+          selectedRegion === 'amenities' && (
+            <span
+              className="
+                absolute
+                top-5 left-5
+                z-40
+                rounded-md
+                bg-brand-gold
+                px-3 py-1.5
+                text-[10px]
+                font-bold
+                uppercase
+                tracking-wider
+                text-brand-blue
+                shadow-lg
+              "
+            >
+              Amenities Section
+            </span>
+          )}
+                      <div
+              onClick={(e) =>
+                selectRegion(e, 'amenities')
+              }
+              className={`
+                max-w-[90rem]
+                px-6 md:px-12
+                w-full
+                mx-auto
+                mb-8 md:mb-10
+                shrink-0
+                rounded-sm
+                transition-all
+                ${
+                  editorMode
+                    ? `
+                      pointer-events-auto
+                      cursor-pointer
+                      hover:ring-2
+                      hover:ring-white/50
+                    `
+                    : 'pointer-events-none'
+                }
+              `}
+            >
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 w-full text-white">
               <div>
                 <div className="text-xs tracking-[0.25em] uppercase text-brand-gold font-bold mb-2 md:mb-4 flex items-center gap-3">
@@ -388,23 +2022,27 @@ export default function PreviewSkeleton({ data }: { data: any }) {
 
           {/* CAROUSEL WRAPPER */}
           <div className="relative w-full">
-            <button
-              type="button"
-              onClick={scrollPrev}
-              aria-label="Previous Amenities"
-              className="absolute left-4 md:left-8 top-[36%] -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-[#132243]/80 hover:bg-brand-gold border border-brand-gold/100 hover:border-[#132243]/100 text-brand-gold hover:text-[#132243] backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer outline-none group active:scale-95"
-            >
-              <ChevronLeft size={24} strokeWidth={2.5} className="transition-transform duration-300 group-hover:-translate-x-0.5" />
-            </button>
+            {filteredAmenities.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={scrollPrev}
+                  aria-label="Previous Amenities"
+                  className="absolute left-4 md:left-8 top-[36%] -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-[#132243]/80 hover:bg-brand-gold border border-brand-gold/100 hover:border-[#132243]/100 text-brand-gold hover:text-[#132243] backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer outline-none group active:scale-95"
+                >
+                  <ChevronLeft size={24} strokeWidth={2.5} className="transition-transform duration-300 group-hover:-translate-x-0.5" />
+                </button>
 
-            <button
-              type="button"
-              onClick={scrollNext}
-              aria-label="Next Amenities"
-              className="absolute right-4 md:right-8 top-[36%] -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-[#132243]/80 hover:bg-brand-gold border border-brand-gold/100 hover:border-[#132243]/100 text-brand-gold hover:text-[#132243] backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer outline-none group active:scale-95"
-            >
-              <ChevronRight size={24} strokeWidth={2.5} className="transition-transform duration-300 group-hover:translate-x-0.5" />
-            </button>
+                <button
+                  type="button"
+                  onClick={scrollNext}
+                  aria-label="Next Amenities"
+                  className="absolute right-4 md:right-8 top-[36%] -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-[#132243]/80 hover:bg-brand-gold border border-brand-gold/100 hover:border-[#132243]/100 text-brand-gold hover:text-[#132243] backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer outline-none group active:scale-95"
+                >
+                  <ChevronRight size={24} strokeWidth={2.5} className="transition-transform duration-300 group-hover:translate-x-0.5" />
+                </button>
+              </>
+            )}
 
             <div 
               ref={scrollContainerRef}
@@ -415,11 +2053,92 @@ export default function PreviewSkeleton({ data }: { data: any }) {
             >
               <style dangerouslySetInnerHTML={{ __html: `::-webkit-scrollbar { display: none; }` }} />
               
-              {filteredAmenities.map((item: any, index: number) => (
-                <div key={item.id || index} className="shrink-0 w-[82vw] sm:w-[50vw] md:w-[40vw] lg:w-[30vw] flex flex-col group pointer-events-none select-none">
+              {filteredAmenities.map(
+              (item: any, index: number) => (
+                <div
+                  key={item.id || index}
+
+                  onClick={(e) => {
+                    if (
+                      !editorMode ||
+                      didDrag.current
+                    ) {
+                      return;
+                    }
+
+                    const sourceIndex =
+                      Number.isInteger(
+                        item.editorIndex
+                      )
+                        ? item.editorIndex
+                        : index;
+
+                    selectRegion(
+                      e,
+                      `amenity:${sourceIndex}` as ProjectEditorRegion
+                    );
+                  }}
+
+                  className={`
+                    shrink-0
+                    w-[82vw]
+                    sm:w-[50vw]
+                    md:w-[40vw]
+                    lg:w-[30vw]
+                    flex
+                    flex-col
+                    group
+                    select-none
+                    rounded-xl
+                    transition-all
+                    ${
+                      editorMode
+                        ? `
+                          pointer-events-auto
+                          cursor-pointer
+                          hover:ring-2
+                          hover:ring-white/60
+                          hover:ring-offset-4
+                          hover:ring-offset-[#132243]
+                        `
+                        : 'pointer-events-none'
+                    }
+
+                    ${
+                      selectedRegion ===
+                      `amenity:${
+                        Number.isInteger(
+                          item.editorIndex
+                        )
+                          ? item.editorIndex
+                          : index
+                      }`
+                        ? `
+                          ring-2
+                          ring-brand-gold
+                          ring-offset-4
+                          ring-offset-[#132243]
+                        `
+                        : ''
+                    }
+                  `}
+                >
                   <div className="relative h-[38vh] min-h-[240px] max-h-[380px] w-full overflow-hidden rounded-xl bg-gray-800 shadow-2xl pointer-events-auto">
-                    <Image src={item.thumbnail || BLANK_IMAGE} alt={item.title} fill draggable="false" sizes="(max-width: 768px) 82vw, (max-width: 1024px) 40vw, 30vw" className="object-cover group-hover:scale-105 transition-transform duration-[1.5s] ease-out pointer-events-none select-none" />
+                    <Image src={item.thumbnail || BLANK_IMAGE} alt={item.title || 'Amenity'} fill draggable="false" sizes="(max-width: 768px) 82vw, (max-width: 1024px) 40vw, 30vw" className="object-cover group-hover:scale-105 transition-transform duration-[1.5s] ease-out pointer-events-none select-none" />
                     <div className="absolute inset-0 bg-black/15 group-hover:bg-transparent transition-colors duration-500 pointer-events-none" />
+
+                    {editorMode && !item.thumbnail && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-[#0d1b3e] text-white/60 pointer-events-none">
+                        <div className="text-center">
+                          <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-white/25">
+                            <PlusCircle size={18} />
+                          </span>
+                          <p className="mt-3 text-[10px] font-bold uppercase tracking-wider">
+                            Add Amenity Image
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="mt-5 flex flex-col gap-2 pr-4">
                     <div className="flex items-center gap-3">
@@ -432,6 +2151,92 @@ export default function PreviewSkeleton({ data }: { data: any }) {
                   </div>
                 </div>
               ))}
+
+              {editorMode &&
+                onAddAmenity && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+
+                      if (
+                        didDrag.current
+                      ) {
+                        return;
+                      }
+
+                      onAddAmenity();
+                    }}
+                    className="
+                      shrink-0
+                      w-[82vw]
+                      sm:w-[50vw]
+                      md:w-[40vw]
+                      lg:w-[30vw]
+                      min-h-[300px]
+                      rounded-xl
+                      border-2
+                      border-dashed
+                      border-white/20
+                      bg-white/[0.03]
+                      text-white/70
+                      hover:text-brand-gold
+                      hover:border-brand-gold/70
+                      hover:bg-white/[0.06]
+                      transition-all
+                      flex
+                      flex-col
+                      items-center
+                      justify-center
+                      gap-3
+                      cursor-pointer
+                      pointer-events-auto
+                    "
+                  >
+                    <span
+                      className="
+                        flex
+                        h-12 w-12
+                        items-center
+                        justify-center
+                        rounded-full
+                        border
+                        border-current
+                      "
+                    >
+                      <PlusCircle
+                        size={22}
+                      />
+                    </span>
+
+                    <span
+                      className="
+                        text-xs
+                        font-bold
+                        uppercase
+                        tracking-[0.2em]
+                      "
+                    >
+                      Add Amenity
+                    </span>
+
+                    <span
+                      className="
+                        max-w-[220px]
+                        text-center
+                        text-xs
+                        font-normal
+                        normal-case
+                        tracking-normal
+                        text-white/40
+                      "
+                    >
+                      Add a new amenity and edit it in the side panel.
+                    </span>
+                  </button>
+                )}
+
               <div className="w-[5vw] md:w-[10vw] shrink-0 pointer-events-none" />
             </div>
           </div>
@@ -439,71 +2244,414 @@ export default function PreviewSkeleton({ data }: { data: any }) {
       )}
 
       {/* --- ROOM BLUEPRINTS SECTION --- */}
-      {data.unit_layout?.length > 0 && (
-        <section id="blueprints" ref={blueprintSectionRef} className="relative w-full py-32 bg-transparent z-10">
+      {(
+        data.unit_layout?.length > 0 ||
+        editorMode
+      ) && (
+        <section
+          id="blueprints"
+          ref={blueprintSectionRef}
+          className={`
+            relative
+            w-full
+            py-32
+            bg-transparent
+            z-10
+            transition-all
+            ${
+              editorMode &&
+              selectedRegion ===
+                'unit-layouts'
+                ? 'ring-2 ring-inset ring-brand-gold'
+                : ''
+            }
+          `}
+        >
           <div className="max-w-[75rem] mx-auto px-6 md:px-12 relative">
-            <div className="mb-20 text-center">
+
+            {/* SECTION HEADING */}
+            <div
+              onClick={(e) =>
+                selectRegion(
+                  e,
+                  'unit-layouts'
+                )
+              }
+              className={`
+                relative
+                mb-20
+                text-center
+                rounded-sm
+                ${
+                  editorMode
+                    ? `
+                        pointer-events-auto
+                        cursor-pointer
+                        hover:ring-2
+                        hover:ring-brand-blue/30
+                      `
+                    : ''
+                }
+              `}
+            >
+              {editorMode &&
+                selectedRegion ===
+                  'unit-layouts' && (
+                  <span
+                    className="
+                      absolute
+                      -top-8
+                      left-1/2
+                      -translate-x-1/2
+                      z-30
+                      rounded-md
+                      bg-brand-gold
+                      px-3 py-1.5
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      tracking-wider
+                      text-brand-blue
+                      shadow-lg
+                    "
+                  >
+                    Unit Layouts
+                  </span>
+                )}
+
               <div className="text-xs tracking-widest uppercase text-brand-blue font-bold mb-4 flex items-center justify-center gap-4">
                 Room Blueprints
               </div>
+
               <h2 className="text-4xl md:text-5xl lg:text-7xl font-serif text-brand-blue leading-tight">
-                Design Your <span className="text-brand-gold">Sanctuary</span>
+                Design Your{' '}
+                <span className="text-brand-gold">
+                  Sanctuary
+                </span>
               </h2>
             </div>
 
-            {/* Grouped by Tower */}
-            {Object.entries(groupedLayouts).map(([towerName, plans]) => (
-              <div key={towerName} className="tower-group relative mb-32 last:mb-0">
-                
-                {/* Sticky Tower Header Pill */}
-                <div className="sticky top-20 md:top-24 z-20 pb-8 pt-2 flex justify-center pointer-events-none">
-                  <div className="inline-flex items-center gap-3 px-6 py-2.5 rounded-full bg-brand-blue backdrop-blur-md border border-brand-gold/40 shadow-xl pointer-events-auto">
-                    <span className="w-2 h-2 rounded-full bg-brand-gold animate-pulse" />
-                    <span className="text-xs md:text-sm uppercase tracking-[0.25em] font-serif text-white font-medium">
-                      {towerName}
-                    </span>
+            {/* EMPTY EDITOR STATE */}
+            {editorMode &&
+              groupedLayouts.length ===
+                0 && (
+                <div
+                  className="
+                    mb-16
+                    rounded-2xl
+                    border-2
+                    border-dashed
+                    border-brand-blue/20
+                    bg-white/70
+                    px-8 py-14
+                    text-center
+                    shadow-sm
+                  "
+                >
+                  <p className="text-lg font-serif text-brand-blue">
+                    No unit layouts yet
+                  </p>
+
+                  <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-gray-500">
+                    Add the first floorplan,
+                    then assign it to one of
+                    this project's towers.
+                  </p>
+
+                  {onAddLayout && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onAddLayout();
+                      }}
+                      className="
+                        mt-6
+                        inline-flex
+                        items-center
+                        justify-center
+                        rounded-xl
+                        bg-brand-blue
+                        px-5 py-3
+                        text-xs
+                        font-bold
+                        uppercase
+                        tracking-wider
+                        text-white
+                        shadow-md
+                        hover:bg-brand-gold
+                        hover:text-brand-blue
+                        transition-colors
+                      "
+                    >
+                      Add Unit Layout
+                    </button>
+                  )}
+                </div>
+              )}
+
+            {/* GROUPED BY TOWER */}
+            {groupedLayouts.map(
+              ({
+                towerName,
+                plans,
+              }) => (
+                <div
+                  key={towerName}
+                  className="
+                    tower-group
+                    relative
+                    mb-32
+                    last:mb-0
+                  "
+                >
+                  {/* STICKY TOWER HEADER */}
+                  <div className="sticky top-20 md:top-24 z-20 pb-8 pt-2 flex justify-center pointer-events-none">
+                    <div className="inline-flex items-center gap-3 px-6 py-2.5 rounded-full bg-brand-blue backdrop-blur-md border border-brand-gold/40 shadow-xl pointer-events-auto">
+                      <span className="w-2 h-2 rounded-full bg-brand-gold" />
+
+                      <span className="text-xs md:text-sm uppercase tracking-[0.25em] font-serif text-white font-medium">
+                        {towerName}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* STACKING CARDS */}
+                  <div className="relative">
+                    {plans.map(
+                      (
+                        plan: any,
+                        index: number
+                      ) => {
+                        const editorIndex =
+                          Number(
+                            plan.editorIndex
+                          );
+
+                        const region =
+                          Number.isInteger(
+                            editorIndex
+                          )
+                            ? (`unit-layout:${editorIndex}` as ProjectEditorRegion)
+                            : 'unit-layouts';
+
+                        const isSelected =
+                          editorMode &&
+                          selectedRegion ===
+                            region;
+
+                        return (
+                          <div
+                            key={
+                              plan.id ||
+                              `${towerName}-${index}`
+                            }
+                            onClick={(e) =>
+                              selectRegion(
+                                e,
+                                region
+                              )
+                            }
+                            className={`
+                              blueprint-card
+                              sticky
+                              top-[22vh]
+                              w-full
+                              min-h-[60vh]
+                              lg:h-[65vh]
+                              bg-white
+                              rounded-xl
+                              shadow-[0_-10px_40px_rgba(0,0,0,0.08)]
+                              border
+                              overflow-hidden
+                              flex
+                              flex-col
+                              lg:flex-row
+                              mb-12
+                              origin-top
+                              transition-all
+                              ${
+                                editorMode
+                                  ? `
+                                      pointer-events-auto
+                                      cursor-pointer
+                                      ${
+                                        isSelected
+                                          ? 'border-brand-gold ring-2 ring-brand-gold ring-offset-4 ring-offset-[#E7E7E7]'
+                                          : 'border-gray-100 hover:border-brand-gold/60 hover:shadow-xl'
+                                      }
+                                    `
+                                  : 'border-gray-100'
+                              }
+                            `}
+                            style={{
+                              zIndex:
+                                index + 1,
+                            }}
+                          >
+                            {editorMode &&
+                              isSelected && (
+                                <span
+                                  className="
+                                    absolute
+                                    top-4 left-4
+                                    z-30
+                                    rounded-md
+                                    bg-brand-gold
+                                    px-3 py-1.5
+                                    text-[10px]
+                                    font-bold
+                                    uppercase
+                                    tracking-wider
+                                    text-brand-blue
+                                    shadow-lg
+                                  "
+                                >
+                                  Unit Layout
+                                </span>
+                              )}
+
+                            <div
+                              className="w-full lg:w-2/5 text-white p-8 md:p-12 lg:p-16 flex flex-col justify-center border-b lg:border-b-0 lg:border-r border-white/10 transition-colors"
+                              style={{
+                                backgroundColor:
+                                  plan.bg_color ||
+                                  '#051431',
+                              }}
+                            >
+                              <div className="text-brand-gold font-mono text-sm mb-4">
+                                {String(
+                                  index + 1
+                                ).padStart(
+                                  2,
+                                  '0'
+                                )}
+                              </div>
+
+                              <h3 className="text-3xl md:text-4xl lg:text-5xl font-serif text-white mb-4">
+                                {plan.title}
+                              </h3>
+
+                              <p className="font-sans tracking-widest text-white/70 font-bold text-sm md:text-base mb-8 uppercase">
+                                {Number(
+                                  plan.min_sqm
+                                ) ===
+                                  Number(
+                                    plan.max_sqm
+                                  ) ||
+                                !plan.max_sqm
+                                  ? `± ${
+                                      plan.min_sqm ||
+                                      0
+                                    } SQM`
+                                  : `± ${
+                                      plan.min_sqm ||
+                                      0
+                                    } - ± ${
+                                      plan.max_sqm ||
+                                      0
+                                    } SQM`}
+                              </p>
+
+                              <p className="text-white/80 leading-relaxed text-sm md:text-base">
+                                {
+                                  plan.description
+                                }
+                              </p>
+                            </div>
+
+                            <div className="w-full lg:w-3/5 relative p-8 md:p-12 bg-white flex items-center justify-center group">
+                              <div className="relative w-full h-full min-h-[350px] lg:min-h-full transition-transform duration-700 ease-out group-hover:scale-105">
+                                <Image
+                                  src={
+                                    plan.thumbnail ||
+                                    BLANK_IMAGE
+                                  }
+                                  alt={
+                                    plan.title || 'Unit layout'
+                                  }
+                                  fill
+                                  sizes="(max-width: 1024px) 100vw, 60vw"
+                                  className="object-contain drop-shadow-2xl"
+                                />
+
+                                {editorMode &&
+                                  !plan.thumbnail && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-white text-brand-blue/45">
+                                      <div className="text-center">
+                                        <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-brand-blue/15">
+                                          <PlusCircle size={18} />
+                                        </span>
+                                        <p className="mt-3 text-[10px] font-bold uppercase tracking-wider">
+                                          Add Floorplan Image
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+                    )}
                   </div>
                 </div>
+              )
+            )}
 
-                {/* Stacking Cards for this Tower */}
-                <div className="relative">
-                  {plans.map((plan: any, index: number) => (
-                    <div
-                      key={plan.id || index}
-                      className="blueprint-card sticky top-[22vh] w-full min-h-[60vh] lg:h-[65vh] bg-white rounded-xl shadow-[0_-10px_40px_rgba(0,0,0,0.08)] border border-gray-100 overflow-hidden flex flex-col lg:flex-row mb-12 origin-top"
-                      style={{ zIndex: index + 1 }}
-                    >
-                      <div 
-                        className="w-full lg:w-2/5 text-white p-8 md:p-12 lg:p-16 flex flex-col justify-center border-b lg:border-b-0 lg:border-r border-white/10 transition-colors"
-                        style={{ backgroundColor: plan.bg_color || '#051431' }}
-                      >
-                        <div className="text-brand-gold font-mono text-sm mb-4">0{index + 1}</div>
-                        <h3 className="text-3xl md:text-4xl lg:text-5xl font-serif text-white mb-4">{plan.title}</h3>
-                        <p className="font-sans tracking-widest text-white/70 font-bold text-sm md:text-base mb-8 uppercase">
-                          {Number(plan.min_sqm) === Number(plan.max_sqm) || !plan.max_sqm
-                            ? `± ${plan.min_sqm || 0} SQM`
-                            : `± ${plan.min_sqm || 0} - ± ${plan.max_sqm || 0} SQM`}
-                        </p>
-                        <p className="text-white/80 leading-relaxed text-sm md:text-base">{plan.description}</p>
-                      </div>
-
-                      <div className="w-full lg:w-3/5 relative p-8 md:p-12 bg-white flex items-center justify-center group">
-                        <div className="relative w-full h-full min-h-[350px] lg:min-h-full transition-transform duration-700 ease-out group-hover:scale-105">
-                          <Image src={plan.thumbnail || BLANK_IMAGE} alt={plan.title} fill sizes="(max-width: 1024px) 100vw, 60vw" className="object-contain drop-shadow-2xl" />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+            {/* ADD ANOTHER LAYOUT */}
+            {editorMode &&
+              groupedLayouts.length > 0 &&
+              onAddLayout && (
+                <div className="mt-10 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onAddLayout();
+                    }}
+                    className="
+                      inline-flex
+                      items-center
+                      justify-center
+                      rounded-xl
+                      border
+                      border-dashed
+                      border-brand-blue/30
+                      bg-white/70
+                      px-6 py-3
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      tracking-wider
+                      text-brand-blue
+                      hover:border-brand-gold
+                      hover:bg-brand-gold/10
+                      transition-colors
+                    "
+                  >
+                    <PlusCircle size={14} />
+                    Add Unit Layout
+                  </button>
                 </div>
-
-              </div>
-            ))}
+              )}
           </div>
         </section>
       )}
 
-      {/* --- MAP SECTION --- */}
-      <DummyMapSection />
+      {/* --- POINTS OF INTEREST --- */}
+      <PointsOfInterestPreview
+        data={data}
+        editorMode={editorMode}
+        selectedRegion={selectedRegion}
+        onSelectRegion={onSelectRegion}
+        onAddLandmark={onAddLandmark}
+        pendingRemovedLandmarkIds={
+          pendingRemovedLandmarkIds
+        }
+      />
     </div>
   );
 }

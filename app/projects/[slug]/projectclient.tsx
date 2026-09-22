@@ -15,9 +15,6 @@ import dynamic from "next/dynamic";
 import Link from 'next/link';
 import PageTransition from '@/app/components/page-transitions';
 
-
-
-
 interface Amenity {
   id: number;
   project_id: number;
@@ -30,13 +27,21 @@ interface Amenity {
 interface UnitLayout {
   id: number;
   project_id: number;
-  tower_name?: string;
-  bg_color?: string; 
+  tower_name?: string | null;
+  bg_color?: string | null;
   title: string;
   description: string;
   thumbnail: string;
-  min_sqm: number;
-  max_sqm: number;
+  min_sqm: number | null;
+  max_sqm: number | null;
+  sort_order?: number | null;
+}
+
+interface ProjectTower {
+  id: number;
+  project_id: number;
+  name: string;
+  sort_order?: number | null;
 }
 
 interface ExtendedDescription {
@@ -73,7 +78,8 @@ interface Project {
   amenities: Amenity[];
   unit_layout: UnitLayout[];
   extended_description: ExtendedDescription[];
-  project_tag: ProjectTag[]; 
+  project_tag: ProjectTag[];
+  project_towers?: ProjectTower[];
 }
 
 const UnifiedProjectMap = dynamic(() => import('@/app/components/unifiedprojectmap'), { 
@@ -83,8 +89,7 @@ const UnifiedProjectMap = dynamic(() => import('@/app/components/unifiedprojectm
 
 function ModernMapSection({ projectSlug, subtitle }: { projectSlug: string; subtitle?: string }) {
   return (
-    <section className="relative py-24 bg-[#0A1128] overflow-hidden flex items-center min-h-[900px]">
-      {/* ... gradients ... */}
+    <section className="relative py-20 md:py-24 bg-[#0A1128] overflow-hidden flex items-center min-h-[720px] lg:min-h-[900px]">
       <div className="max-w-[90rem] mx-auto px-6 md:px-12 relative z-20 flex flex-col items-center w-full">
         <motion.div className="mb-12 text-center" initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }} variants={{ hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.2 } } }}>
           <motion.h2 variants={{ hidden: { opacity: 0, y: 40, filter: "blur(10px)" }, visible: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 1.2, ease: [0.22, 1, 0.36, 1] } } }} className="text-5xl md:text-6xl lg:text-7xl font-serif font-light leading-tight mb-4 text-white">
@@ -124,11 +129,10 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
   const searchParams = useSearchParams(); 
   const blueprintIdParam = searchParams.get('blueprint');
 
-  const blueprintSectionRef = useRef<HTMLElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const lenisRef = useRef<any>(null);
 
-  // --- SMOOTH LERP DRAG STATE ---
+  // Amenities carousel drag state
   const isDragging = useRef(false);
   const startX = useRef(0);
   const targetScroll = useRef(0);
@@ -136,19 +140,48 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
   const rafId = useRef<number | null>(null);
   const [isGrabbing, setIsGrabbing] = useState(false);
 
-// --- DYNAMIC AMENITIES TOWER FILTER ---
+  // Keep public-facing tower controls in the same sequence configured in the CMS.
   const availableTowers = useMemo<string[]>(() => {
-    const amenities = initialProjectData.amenities ?? [];
-    return Array.from(
+    const amenityTowerNames = Array.from(
       new Set(
-        amenities
+        (initialProjectData.amenities ?? [])
           .map((item) => item.tower?.trim())
-          .filter((t): t is string => Boolean(t))
+          .filter((tower): tower is string => Boolean(tower))
       )
-    ).sort((a, b) =>
-      a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
     );
-  }, [initialProjectData.amenities]);
+
+    if (amenityTowerNames.length === 0) {
+      return [];
+    }
+
+    const amenityTowerKeys = new Set(
+      amenityTowerNames.map((tower) => tower.toLowerCase())
+    );
+
+    const registered = [...(initialProjectData.project_towers ?? [])]
+      .sort(
+        (a, b) =>
+          (a.sort_order ?? Number.MAX_SAFE_INTEGER) -
+            (b.sort_order ?? Number.MAX_SAFE_INTEGER) ||
+          a.id - b.id
+      )
+      .map((tower) => tower.name.trim())
+      .filter(
+        (tower) => tower && amenityTowerKeys.has(tower.toLowerCase())
+      );
+
+    const registeredKeys = new Set(
+      registered.map((tower) => tower.toLowerCase())
+    );
+
+    const legacyOrUnregistered = amenityTowerNames
+      .filter((tower) => !registeredKeys.has(tower.toLowerCase()))
+      .sort((a, b) =>
+        a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+      );
+
+    return [...registered, ...legacyOrUnregistered];
+  }, [initialProjectData.amenities, initialProjectData.project_towers]);
 
   const [selectedTower, setSelectedTower] = useState<string | null>(
     () => availableTowers[0] ?? null
@@ -189,7 +222,7 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
   }, [initialProjectData.amenities, selectedTower]);
 
   
-  // 1. LERP ANIMATION LOOP (The magic that makes it smooth)
+  // Smooth carousel interpolation loop
   useEffect(() => {
     const smoothDrag = () => {
       if (scrollContainerRef.current) {
@@ -216,7 +249,7 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
     }
   }, [selectedTower]);
 
-  // 2. URL PARAMETER SYNC
+  // Preserve deep links to a specific blueprint.
   useEffect(() => {
     window.history.scrollRestoration = 'manual';
     if (!blueprintIdParam) window.scrollTo(0, 0);
@@ -241,7 +274,7 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
     }
   }, [blueprintIdParam, initialProjectData]); 
 
-  // 3. GSAP & LENIS SETUP
+  // Page scrolling and blueprint stack animations.
   useEffect(() => {
     if (!initialProjectData) return;
 
@@ -255,38 +288,46 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
     if (!blueprintIdParam) lenis.scrollTo(0, { immediate: true });
 
     lenis.on('scroll', ScrollTrigger.update);
-    gsap.ticker.add((time) => lenis.raf(time * 1000));
 
-    let ctx = gsap.context(() => {
-  const towerGroups = gsap.utils.toArray('.tower-group');
-  towerGroups.forEach((group: any) => {
-    const cards = group.querySelectorAll('.blueprint-card');
-    cards.forEach((card: any, i: number) => {
-      if (i !== cards.length - 1) {
-        gsap.to(card, {
-          scale: 0.92,
-          opacity: 0.4,
-          filter: "blur(4px)",
-          scrollTrigger: {
-            trigger: cards[i + 1] as HTMLElement,
-            start: "top 85%",
-            end: "top 20%",
-            scrub: true,
-          }
+    const updateLenis = (time: number) => {
+      lenis.raf(time * 1000);
+    };
+
+    gsap.ticker.add(updateLenis);
+
+    const ctx = gsap.context(() => {
+      const towerGroups = gsap.utils.toArray('.tower-group');
+
+      towerGroups.forEach((group: any) => {
+        const cards = group.querySelectorAll('.blueprint-card');
+
+        cards.forEach((card: any, index: number) => {
+          if (index === cards.length - 1) return;
+
+          gsap.to(card, {
+            scale: 0.92,
+            opacity: 0.4,
+            filter: 'blur(4px)',
+            scrollTrigger: {
+              trigger: cards[index + 1] as HTMLElement,
+              start: 'top 85%',
+              end: 'top 20%',
+              scrub: true,
+            },
+          });
         });
-      }
+      });
     });
-  });
-});
 
     return () => {
+      gsap.ticker.remove(updateLenis);
       lenis.destroy();
-      lenisRef.current = null; 
+      lenisRef.current = null;
       ctx.revert();
     };
   }, [initialProjectData, blueprintIdParam]); 
 
-  // --- DRAG EVENT HANDLERS ---
+  // Amenities carousel interactions
   const onDragStart = (e: React.MouseEvent | React.TouchEvent) => {
     if (!scrollContainerRef.current) return;
     isDragging.current = true;
@@ -342,31 +383,107 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
     { label: initialProjectData.unit_total, icon: <Key size={16} /> },
   ].filter(tag => tag.label);
 
-  const groupedLayouts = useMemo<Record<string, UnitLayout[]>>(() => {
-    if (!initialProjectData?.unit_layout || !Array.isArray(initialProjectData.unit_layout)) return {};
+  const layoutGroups = useMemo(() => {
+    const layouts = Array.isArray(initialProjectData.unit_layout)
+      ? initialProjectData.unit_layout
+      : [];
 
-    const cleanName = (val: string) =>
-      val
+    if (layouts.length === 0) {
+      return [] as Array<{ towerName: string; plans: UnitLayout[] }>;
+    }
+
+    const cleanName = (value?: string | null) =>
+      String(value || '')
         .replace(/[\u2013\u2014]/g, '-')
         .replace(/\s+/g, ' ')
         .trim();
 
-    return initialProjectData.unit_layout.reduce((acc: Record<string, UnitLayout[]>, item: UnitLayout) => {
-      const rawTower = item?.tower_name ? cleanName(item.tower_name) : 'Tower A - Residential';
-      const fallbackTower = rawTower || 'Tower A - Residential';
+    const registeredTowers = [...(initialProjectData.project_towers ?? [])]
+      .sort(
+        (a, b) =>
+          (a.sort_order ?? Number.MAX_SAFE_INTEGER) -
+            (b.sort_order ?? Number.MAX_SAFE_INTEGER) ||
+          a.id - b.id
+      )
+      .map((tower) => ({
+        name: cleanName(tower.name),
+        key: cleanName(tower.name).toLowerCase(),
+      }))
+      .filter((tower) => Boolean(tower.name));
 
-      const matchKey = Object.keys(acc).find(
-        (key) => cleanName(key).toLowerCase() === fallbackTower.toLowerCase()
-      );
+    const towerNameByKey = new Map(
+      registeredTowers.map((tower) => [tower.key, tower.name])
+    );
 
-      const resolvedKey = matchKey || fallbackTower;
-      if (!acc[resolvedKey]) {
-        acc[resolvedKey] = [];
+    const towerOrderByKey = new Map(
+      registeredTowers.map((tower, index) => [tower.key, index])
+    );
+
+    const defaultTower = registeredTowers[0]?.name || 'Tower A - Residential';
+    const groups = new Map<string, { towerName: string; plans: UnitLayout[] }>();
+
+    for (const layout of layouts) {
+      const rawTower = cleanName(layout.tower_name) || defaultTower;
+      const key = rawTower.toLowerCase();
+      const canonicalTowerName = towerNameByKey.get(key) || rawTower;
+      const canonicalKey = canonicalTowerName.toLowerCase();
+
+      if (!groups.has(canonicalKey)) {
+        groups.set(canonicalKey, {
+          towerName: canonicalTowerName,
+          plans: [],
+        });
       }
-      acc[resolvedKey].push(item);
-      return acc;
-    }, {});
-  }, [initialProjectData?.unit_layout]);
+
+      groups.get(canonicalKey)!.plans.push(layout);
+    }
+
+    const comparePlans = (a: UnitLayout, b: UnitLayout) =>
+      (a.sort_order ?? Number.MAX_SAFE_INTEGER) -
+        (b.sort_order ?? Number.MAX_SAFE_INTEGER) ||
+      a.id - b.id ||
+      a.title.localeCompare(b.title, undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      });
+
+    return Array.from(groups.entries())
+      .map(([key, group]) => ({
+        key,
+        towerName: group.towerName,
+        plans: [...group.plans].sort(comparePlans),
+      }))
+      .sort((a, b) => {
+        const aOrder = towerOrderByKey.get(a.key);
+        const bOrder = towerOrderByKey.get(b.key);
+
+        if (aOrder !== undefined || bOrder !== undefined) {
+          return (aOrder ?? Number.MAX_SAFE_INTEGER) -
+            (bOrder ?? Number.MAX_SAFE_INTEGER);
+        }
+
+        return a.towerName.localeCompare(b.towerName, undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        });
+      })
+      .map(({ towerName, plans }) => ({ towerName, plans }));
+  }, [initialProjectData.project_towers, initialProjectData.unit_layout]);
+
+  const formatSqmRange = (plan: UnitLayout) => {
+    const min = Number(plan.min_sqm);
+    const max = Number(plan.max_sqm);
+
+    if (!Number.isFinite(min) || min <= 0) {
+      return 'Floor area available on request';
+    }
+
+    if (!Number.isFinite(max) || max <= 0 || min === max) {
+      return `± ${min} SQM`;
+    }
+
+    return `± ${min} - ${max} SQM`;
+  };
 
   return (
     <PageTransition> 
@@ -567,6 +684,7 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
                   key={tower}
                   type="button"
                   onClick={() => setSelectedTower(tower)}
+                  aria-pressed={isActive}
                   className={`
                     px-5 md:px-7 py-3
                     rounded-full
@@ -662,7 +780,7 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
             <div className="relative h-[38vh] min-h-[240px] max-h-[380px] w-full overflow-hidden rounded-xl bg-gray-800 shadow-2xl pointer-events-auto">
 
               <Image
-                src={item.thumbnail}
+                src={item.thumbnail || "/images/placeholder.webp"}
                 alt={item.title}
                 fill
                 draggable="false"
@@ -708,29 +826,32 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
 
         {/* --- ROOM BLUEPRINTS SECTION (STACKED CARDS) --- */}
         {initialProjectData.unit_layout?.length > 0 && (
-            <section id="blueprints" ref={blueprintSectionRef} className="relative w-full py-32 bg-transparent z-10">
+            <section id="blueprints" className="relative w-full py-24 md:py-32 bg-transparent z-10">
               <div className="max-w-[75rem] mx-auto px-6 md:px-12 relative">
                 
                 {/* Section Header */}
-                <div className="mb-20 text-center">
+                <div className="mb-14 md:mb-20 text-center">
                   <div className="text-xs tracking-widest uppercase text-brand-blue font-bold mb-4 flex items-center justify-center gap-4">
                     Room Blueprints
                   </div>
                   <h2 className="text-4xl md:text-5xl lg:text-7xl font-serif text-brand-blue leading-tight">
                     Design Your <span className="text-brand-gold">Sanctuary</span>
                   </h2>
+                  <p className="mt-5 mx-auto max-w-xl text-sm md:text-base text-gray-500 leading-relaxed">
+                    Explore available floor plans and unit sizes by tower.
+                  </p>
                 </div>
 
-                {/* Render Each Tower Group */}
-                {Object.entries(groupedLayouts).map(([towerName, plans]) => (
+                {/* Render each tower and its layouts in CMS order. */}
+                {layoutGroups.map(({ towerName, plans }) => (
                   <div key={towerName} className="tower-group relative mb-32 last:mb-0">
                     
                     {/* STICKY TOWER HEADER: Sticks while scrolling this tower, moves up when tower ends */}
-                    <div className="sticky top-20 md:top-24 z-20 pb-8 pt-2 flex justify-center pointer-events-none">
+                    <div className="md:sticky md:top-24 z-20 pb-6 md:pb-8 pt-2 flex justify-center pointer-events-none">
                       <div className="inline-flex items-center gap-3 px-6 py-2.5 rounded-full bg-brand-blue backdrop-blur-md border border-brand-gold/40 shadow-xl pointer-events-auto">
-                        <span className="w-2 h-2 rounded-full bg-brand-gold animate-pulse" />
+                        <span className="w-2 h-2 rounded-full bg-brand-gold" />
                         <span className="text-xs md:text-sm uppercase tracking-[0.25em] font-serif text-white font-medium">
-                          {towerName}
+                          {formatTowerName(towerName)}
                         </span>
                       </div>
                     </div>
@@ -741,7 +862,7 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
                         <div
                           key={plan.id}
                           id={`blueprint-${plan.id}`}
-                          className="blueprint-card sticky top-[22vh] w-full min-h-[60vh] lg:h-[65vh] bg-white rounded-xl shadow-[0_-10px_40px_rgba(0,0,0,0.08)] border border-gray-100 overflow-hidden flex flex-col lg:flex-row mb-12 origin-top"
+                          className="blueprint-card w-full lg:sticky lg:top-[22vh] lg:h-[65vh] bg-white rounded-xl shadow-[0_-10px_40px_rgba(0,0,0,0.08)] border border-gray-100 overflow-hidden flex flex-col lg:flex-row mb-8 md:mb-12 origin-top"
                           style={{ zIndex: index + 1 }}
                         >
                           <div 
@@ -751,16 +872,20 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
                             <div className="text-brand-gold font-mono text-sm mb-4">0{index + 1}</div>
                             <h3 className="text-3xl md:text-4xl lg:text-5xl font-serif text-white mb-4">{plan.title}</h3>
                             <p className="font-sans tracking-widest text-white/70 font-bold text-sm md:text-base mb-8 uppercase">
-                              {Number(plan.min_sqm) === Number(plan.max_sqm) || !plan.max_sqm
-                                ? `± ${plan.min_sqm} SQM`
-                                : `± ${plan.min_sqm} - ± ${plan.max_sqm} SQM`}
+                              {formatSqmRange(plan)}
                             </p>
                             <p className="text-white/80 leading-relaxed text-sm md:text-base">{plan.description}</p>
                           </div>
                           
                           <div className="w-full lg:w-3/5 relative p-8 md:p-12 bg-white flex items-center justify-center group">
                             <div className="relative w-full h-full min-h-[350px] lg:min-h-full transition-transform duration-700 ease-out group-hover:scale-105">
-                              <Image src={plan.thumbnail} alt={plan.title} fill sizes="(max-width: 1024px) 100vw, 60vw" className="object-contain drop-shadow-2xl" />
+                              <Image
+                                src={plan.thumbnail || '/images/placeholder.webp'}
+                                alt={plan.title}
+                                fill
+                                sizes="(max-width: 1024px) 100vw, 60vw"
+                                className="object-contain drop-shadow-2xl"
+                              />
                             </div>
                           </div>
                         </div>
