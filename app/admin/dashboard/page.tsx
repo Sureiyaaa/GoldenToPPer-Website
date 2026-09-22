@@ -1,7 +1,7 @@
 // app/admin/dashboard/page.tsx
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { z } from 'zod';
@@ -3219,7 +3219,7 @@ const handleSaveSectionChanges = async () => {
 // ==========================================
 // MAIN DASHBOARD WRAPPER
 // ==========================================
-export default function AdminMainDashboard() {
+function AdminMainDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
@@ -3984,5 +3984,19 @@ const contentMenuItems = allowedMenuItems.filter(
         </div>
       </main>
     </div>
+  );
+}
+
+export default function AdminMainDashboard() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#f8f9fa] flex items-center justify-center">
+          <Loader2 className="animate-spin text-brand-blue" size={40} />
+        </div>
+      }
+    >
+      <AdminMainDashboardContent />
+    </Suspense>
   );
 }
