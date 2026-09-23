@@ -507,8 +507,7 @@ function UsersManager() {
                     <input type="text" required value={formData.username} onChange={(e) => setFormData({...formData, username: e.target.value})} className="w-full bg-transparent border-b border-gray-200 py-2 text-base text-[var(--color-brand-blue)] outline-none focus:border-[var(--color-brand-blue)] transition-colors placeholder:text-gray-300" placeholder="e.g. admin" disabled={!!editingUser} />
                   </div>
 
-                  {!editingUser && (
-                    <div>
+                  <div>
                     <label className="text-[10px] font-bold tracking-widest uppercase text-gray-400 mb-4 block">
                       {editingUser ? 'New Password (Leave blank to keep current)' : 'Password'}
                     </label>
@@ -528,10 +527,11 @@ function UsersManager() {
                     {passwordError ? (
                       <p className="text-red-500 text-[11px] mt-2 font-medium">{passwordError}</p>
                     ) : (
-                      <p className="text-gray-400 text-[11px] mt-2">Must be at least 8 characters with 1 uppercase, 1 number, and 1 special character.</p>
+                      <p className="text-gray-400 text-[11px] mt-2">
+                        {editingUser ? "Only enter a value if you want to reset this user's password." : "Must be at least 8 characters with 1 uppercase, 1 number, and 1 special character."}
+                      </p>
                     )}
                   </div>
-                  )}
 
                   <div>
                     <label className="text-[10px] font-bold tracking-widest uppercase text-gray-400 mb-4 block">Access Role</label>

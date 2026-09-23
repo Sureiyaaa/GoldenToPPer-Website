@@ -907,6 +907,15 @@ export async function saveProjectAction(payload: any) {
       }
     }
 
+    const { data: savedMarkerData, error: savedMarkerFetchError } = await supabaseAdmin
+      .from('child_marker_table')
+      .select('*, marker_type_table(*)')
+      .eq('project_id', targetProjectId);
+
+    if (savedMarkerFetchError) {
+      throw new Error(`Marker refresh error: ${savedMarkerFetchError.message}`);
+    }
+
     // 5. Unit Layouts
     // Preserve existing unit_layout IDs instead of deleting/recreating every row.
     //
@@ -1715,7 +1724,8 @@ if (savedMarkerFetchError) {
     savedAmenityData || [],
   layoutData:
     savedLayoutData || [],
-  markerData:
+  layoutData: savedLayoutData || [],
+  markerData: savedMarkerData || [],
     savedMarkerData || [],
 };
   } catch (error: any) {
@@ -2307,7 +2317,7 @@ export async function fetchProjectForEdit(editId: string | number) {
     ] = await Promise.all([
     supabaseAdmin
       .from('project_table')
-      .select('*')
+      .select('*, virtual_tours (*)')
       .eq('id', editId)
       .limit(1),
 
@@ -2351,6 +2361,7 @@ export async function fetchProjectForEdit(editId: string | number) {
       .from('project_tag')
       .select('tags(tag_name)')
       .eq('project_id', editId),
+      
   ]);
 
   if (projRes.error) throw projRes.error;

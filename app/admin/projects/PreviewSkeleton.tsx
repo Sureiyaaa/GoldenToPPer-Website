@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo } from 'react';
 import Image from "next/image";
-import { Layers, Target, Key, MapPin, ArrowRight, ChevronLeft, ChevronRight, PlusCircle } from 'lucide-react';
+import { Layers, Target, Key, MapPin, ArrowRight, ChevronLeft, ChevronRight, PlusCircle, Move3d } from 'lucide-react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
@@ -46,6 +46,16 @@ interface PreviewSkeletonProps {
   onAddLayout?: () => void;
   onAddLandmark?: () => void;
   pendingRemovedLandmarkIds?: Array<number | string>;
+}
+
+function parseViewAreas(tour: any): any[] {
+  if (!tour) return [];
+  let raw = tour.view_areas || tour.rooms;
+  if (!raw) return [];
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw); } catch { raw = []; }
+  }
+  return Array.isArray(raw) ? raw : [];
 }
 
 function formatTowerName(raw?: string | null): string {
@@ -1560,6 +1570,31 @@ const regionStyle = (region: ProjectEditorRegion) => {
             "
           />
         </div>
+        
+      {(() => {
+          const validTours = (data.virtual_tours || []).filter((tour: any) => {
+            const areas = parseViewAreas(tour);
+            return tour.status === 'Active' && areas.length > 0;
+          });
+
+          const hasTour = validTours.length > 0;
+
+          return hasTour ? (
+            <div className="flex items-center gap-3 px-8 py-4 rounded-sm border border-white/30 bg-black/40 backdrop-blur-md shadow-lg text-white">
+              <Move3d size={16} className="text-brand-gold" />
+              <span className="text-[11px] tracking-[0.25em] font-bold uppercase text-white">
+                Virtual Tour
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2.5 px-6 py-4 rounded-sm border border-white/15 bg-black/30 backdrop-blur-md text-white/50">
+              <Move3d size={16} className="text-white/40" />
+              <span className="text-[11px] tracking-[0.25em] font-bold uppercase text-white/50">
+                Coming Soon
+              </span>
+            </div>
+          );
+        })()}
       </div>
 
     </div>
