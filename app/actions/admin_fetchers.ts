@@ -13,7 +13,8 @@ export async function fetchAdminVirtualToursList() {
   const session = await getCustomSession();
   if (!session) throw new Error("Unauthorized");
 
-  // Fetch projects and their associated virtual tours
+  // The dashboard represents Virtual Tours at the PROJECT level.
+  // Individual virtual_tours rows are units/models that belong to that project.
   const { data, error } = await supabaseAdmin
     .from('project_table')
     .select(`
@@ -36,26 +37,70 @@ export async function fetchAdminVirtualToursList() {
     throw new Error(error.message);
   }
 
-  // Format one entry per project
-  return (data || []).map((project: any) => {
-    const tours = project.virtual_tours || [];
-    const hasActiveTours = tours.some((t: any) => t.status === 'Active');
-    const totalTours = tours.length;
+  const parseAreas = (rawAreas: any): any[] => {
+    if (!rawAreas) return [];
+    if (Array.isArray(rawAreas)) return rawAreas;
 
-    // Count unique towers configured
+    if (typeof rawAreas === 'string') {
+      try {
+        const parsed = JSON.parse(rawAreas);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+
+    return [];
+  };
+
+  // Return one summary row per project. Do not expose a project id as though
+  // it were a virtual_tours row id; destructive/unit-level actions belong in
+  // the project Virtual Tour editor instead.
+  return (data || []).map((project: any) => {
+    const tours = Array.isArray(project.virtual_tours)
+      ? project.virtual_tours
+      : [];
+
     const uniqueTowers = Array.from(
-      new Set(tours.map((t: any) => t.tower_name?.trim()).filter(Boolean))
+      new Set(
+        tours
+          .map((tour: any) => tour.tower_name?.trim())
+          .filter(Boolean)
+      )
     );
 
+    const visibleUnits = tours.filter(
+      (tour: any) => tour.status === 'Active'
+    ).length;
+
+    const hiddenUnits = Math.max(0, tours.length - visibleUnits);
+
+    const areasByTour = tours.map((tour: any) =>
+      parseAreas(tour.view_areas)
+    );
+
+    const totalViewAreas = areasByTour.reduce(
+      (total: number, areas: any[]) => total + areas.length,
+      0
+    );
+
+    const firstPanorama = areasByTour
+      .flat()
+      .find((area: any) => area?.image)?.image;
+
     return {
-      id: project.id,
       project_id: project.id,
       title: `${project.title} Virtual Tours`,
       project_name: project.title,
-      image: project.image || '/images/placeholder.webp',
-      status: totalTours > 0 && hasActiveTours ? 'Active' : 'Draft',
-      total_units: totalTours,
+      preview_image:
+        firstPanorama ||
+        project.image ||
+        null,
       total_towers: uniqueTowers.length,
+      total_units: tours.length,
+      total_view_areas: totalViewAreas,
+      visible_units: visibleUnits,
+      hidden_units: hiddenUnits,
     };
   });
 }
@@ -63,11 +108,17 @@ export async function fetchAdminVirtualToursList() {
 export async function fetchProjectsForDropdown() {
   const session = await getCustomSession();
   if (!session) throw new Error("Unauthorized");
+
   const { data, error } = await supabaseAdmin
     .from('project_table')
     .select(`
-      id, 
+      id,
       title,
+      project_towers (
+        id,
+        name,
+        sort_order
+      ),
       unit_layout (
         tower_name
       )
@@ -75,8 +126,17 @@ export async function fetchProjectsForDropdown() {
     .is('deleted_at', null)
     .order('title', { ascending: true });
 
-  if (error) throw error; 
-  return data || [];
+  if (error) throw error;
+
+  return (data || []).map((project: any) => ({
+    ...project,
+    project_towers: [...(project.project_towers || [])].sort((a: any, b: any) => {
+      const aOrder = a.sort_order ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = b.sort_order ?? Number.MAX_SAFE_INTEGER;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true });
+    }),
+  }));
 }
 
 export async function fetchVirtualTourForEdit(editId: string | number) {
@@ -176,7 +236,15 @@ export async function saveProjectVirtualToursAction(
     }
   }
 
-  return { success: true };
+  const { data: savedTours, error: refreshError } = await supabaseAdmin
+    .from('virtual_tours')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('id', { ascending: true });
+
+  if (refreshError) throw new Error(refreshError.message);
+
+  return { success: true, tours: savedTours || [] };
 }
 
 export async function deleteRecordAction(table: string, id: number | string) {
@@ -235,14 +303,31 @@ export async function savePromotionAction(payload: any, editId: string | null) {
   if (!session) throw new Error("Unauthorized");
 
   if (editId) {
-    const { error } = await supabaseAdmin.from('promotions').update(payload).eq('id', editId);
+    const { error } = await supabaseAdmin
+      .from('promotions')
+      .update(payload)
+      .eq('id', editId);
+
     if (error) throw error;
-  } else {
-    // Force is_active to true on creation
-    const { error } = await supabaseAdmin.from('promotions').insert([{ ...payload, is_active: true }]);
-    if (error) throw error;
+
+    return {
+      success: true,
+      id: Number(editId),
+    };
   }
-  return { success: true };
+
+  const { data, error } = await supabaseAdmin
+    .from('promotions')
+    .insert([{ ...payload, is_active: true }])
+    .select('id')
+    .limit(1);
+
+  if (error) throw error;
+
+  return {
+    success: true,
+    id: data?.[0]?.id ? Number(data[0].id) : null,
+  };
 }
 
 export async function fetchBankForEdit(editId: string | number) {
@@ -252,6 +337,27 @@ export async function fetchBankForEdit(editId: string | number) {
   const { data, error } = await supabaseAdmin.from('banks').select('*').eq('id', editId).limit(1);
   if (error) throw error; 
   return data?.[0] || null;
+}
+
+export async function fetchBankProjectLinksAction(bankId: string | number) {
+  const session = await getCustomSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const normalizedBankId = Number(bankId);
+  if (!Number.isFinite(normalizedBankId)) {
+    throw new Error('Invalid bank ID.');
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('project_banks')
+    .select('project_id')
+    .eq('banks_id', normalizedBankId);
+
+  if (error) throw error;
+
+  return (data || [])
+    .map((row: any) => row.project_id)
+    .filter((projectId: any) => projectId !== null && projectId !== undefined);
 }
 
 export async function saveBankAction(payload: any, editId: string | null) {

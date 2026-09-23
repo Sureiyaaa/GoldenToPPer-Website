@@ -14,8 +14,11 @@ import { createClient } from '@/utils/supabase/client';
 import { toggleActiveStatus, archiveRecord } from '@/app/actions/updates';
 import {
   fetchAdminProjectsList,
+  fetchArchivedProjectsList,
+  archiveProjectAction,
+  restoreArchivedProjectAction,
+  permanentlyDeleteArchivedProjectAction,
   ensureProjectNavigationEntriesAction,
-  hideProjectNavigationEntryAction,
   setProjectWebsiteVisibilityAction,
 } from '@/app/actions/projects';
 import {
@@ -23,8 +26,6 @@ import {
   fetchAdminPromotionsList,
   fetchAdminBanksList,
   fetchAdminStoryList,
-  deleteRecordAction,
-  toggleVirtualTourStatus,
   createAuditLogAction,
   fetchRecentAuditLogsAction,
   fetchNotificationsAction,
@@ -45,6 +46,8 @@ interface Project {
   status: string;
   is_active: boolean;
   image: string;
+  slug?: string | null;
+  deleted_at?: string | null;
 }
 interface Bank { id: number; bank_name: string; max_loan: string; terms: string; image: string; is_active: boolean; }
 interface AuditLog { id: number; created_at: string; user_email: string; action_type: string; entity_type: string; entity_name: string; details: string; }
@@ -293,6 +296,10 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
           router.push('/admin/dashboard?section=Navbar%20Setup');
         };
 
+        const openArchivedProjects = () => {
+          router.push('/admin/dashboard?section=Archived%20Projects');
+        };
+
   useEffect(() => {
     const fetchProjects = async () => {
       try {
@@ -316,23 +323,19 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
     setIsArchiving(true);
 
     try {
-      // A project and its navigation item are tied together. Hide the
-      // navigation entry first so an archived project can never leave a
-      // visible navigation card pointing to unavailable content.
-      await hideProjectNavigationEntryAction(projectToArchive.id);
-      await archiveRecord('project_table', projectToArchive.id, 'deleted_at');
+      await archiveProjectAction(projectToArchive.id);
 
-      // ✅ SERVER-SIDE AUDIT LOG
       await createAuditLogAction(
         'DELETE',
         'Projects',
         projectToArchive.title,
-        'Deleted project from dashboard and hid its linked navigation item.'
+        'Archived project. Removed it from active CMS views and hid its linked navigation item while retaining project data for recovery.'
       );
 
+      const archivedTitle = projectToArchive.title;
       setProjects(prevProjects => prevProjects.filter(p => p.id !== projectToArchive.id));
       setProjectToArchive(null);
-      setSuccessMessage(`Project "${projectToArchive.title}" successfully deleted.`);
+      setSuccessMessage(`Project "${archivedTitle}" archived.`);
       setTimeout(() => setSuccessMessage(''), 2500);
 
     } catch (error: any) {
@@ -385,17 +388,15 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
             <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center shadow-inner mb-2">
               <AlertCircle size={40} />
             </div>
-            <h2 className="text-2xl font-serif text-brand-blue text-center font-bold">Delete Project?</h2>
+            <h2 className="text-2xl font-serif text-brand-blue text-center font-bold">Archive Project?</h2>
             <p className="text-gray-600 text-center text-sm font-medium leading-relaxed">
-              Are you sure you want to delete{' '}
-              <strong>{projectToArchive.title}</strong>?
-              It will be removed from the admin project list.
+              Archive <strong>{projectToArchive.title}</strong>? It will be removed from the website and active admin lists, but its content will be retained and can be restored later.
             </p>
 
             <div className="flex gap-3 w-full mt-4">
               <button type="button" onClick={() => setProjectToArchive(null)} disabled={isArchiving} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors text-xs uppercase tracking-widest outline-none">Cancel</button>
               <button type="button" onClick={confirmArchive} disabled={isArchiving} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors text-xs uppercase tracking-widest flex items-center justify-center gap-2 outline-none">
-                {isArchiving ? <Loader2 size={16} className="animate-spin" /> : 'Yes'}
+                {isArchiving ? <Loader2 size={16} className="animate-spin" /> : 'Archive'}
               </button>
             </div>
           </div>
@@ -432,6 +433,14 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
           className="pb-3 text-sm font-medium text-gray-400 transition-colors hover:text-brand-blue"
         >
           Navigation Setup
+        </button>
+
+        <button
+          type="button"
+          onClick={openArchivedProjects}
+          className="pb-3 text-sm font-medium text-gray-400 transition-colors hover:text-brand-blue"
+        >
+          Archived
         </button>
       </div>
 
@@ -769,7 +778,7 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
           </div>
 
 
-          {/* DELETE */}
+          {/* ARCHIVE */}
           <div
             className="
               md:col-span-1
@@ -798,8 +807,8 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
                   hover:bg-red-50
                   transition-colors
                 "
-                title={`Delete ${proj.title}`}
-                aria-label={`Delete ${proj.title}`}
+                title={`Archive ${proj.title}`}
+                aria-label={`Archive ${proj.title}`}
               >
                 <Trash2 size={16} />
               </button>
@@ -819,173 +828,543 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
   );
 }
 
-// --- VIRTUAL TOURS MANAGER ---
-function VirtualToursManager({ checkPerm }: ManagerProps) {
+// --- ARCHIVED PROJECTS MANAGER ---
+function ArchivedProjectsManager({ checkPerm }: ManagerProps) {
   const router = useRouter();
-  const [tours, setTours] = useState<any[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-
-  const [tourToArchive, setTourToArchive] = useState<{ id: number, title: string } | null>(null);
-  const [isArchiving, setIsArchiving] = useState(false);
+  const [isWorking, setIsWorking] = useState(false);
+  const [restoreTarget, setRestoreTarget] = useState<Project | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
-  useEffect(() => {
-    const fetchTours = async () => {
-      try {
-        const data = await fetchAdminVirtualToursList();
-        setTours(data || []);
-      } catch (error) { console.error(error); } finally { setIsLoading(false); }
-    };
-    fetchTours();
-  }, []);
-
-  const handleArchiveClick = (id: number, title: string) => {
-    setTourToArchive({ id, title });
-  };
-
-  const confirmArchive = async () => {
-    if (!tourToArchive) return;
-    setIsArchiving(true);
+  const loadArchivedProjects = async () => {
+    setIsLoading(true);
+    setErrorMessage('');
     try {
-      await deleteRecordAction('virtual_tours', tourToArchive.id);
-
-      // ✅ SERVER-SIDE AUDIT LOG
-      await createAuditLogAction('DELETE', 'Virtual Tours', tourToArchive.title, 'Deleted 360 virtual tour.');
-
-      setTours(prev => prev.filter(t => t.id !== tourToArchive.id));
-      setTourToArchive(null);
-      setSuccessMessage(`Tour "${tourToArchive.title}" deleted.`);
-      setTimeout(() => setSuccessMessage(''), 2500);
+      const data = await fetchArchivedProjectsList();
+      setProjects((data || []) as Project[]);
     } catch (error: any) {
-      alert(`Failed to delete: ${error.message}`);
+      setErrorMessage(error?.message || 'Failed to load archived projects.');
     } finally {
-      setIsArchiving(false);
+      setIsLoading(false);
     }
   };
 
-  const handleToggleStatus = async (id: number, currentStatus: string, title: string) => {
-    try {
-      const newStatus = currentStatus === 'Active' ? 'Hidden' : 'Active';
-      await toggleVirtualTourStatus(id, newStatus);
+  useEffect(() => {
+    loadArchivedProjects();
+  }, []);
 
-      // ✅ SERVER-SIDE AUDIT LOG
-      await createAuditLogAction('EDIT', 'Virtual Tours', title, `Changed active status to ${newStatus}.`);
-
-      setTours(prev => prev.map(t => t.id === id ? { ...t, status: newStatus } : t));
-    } catch (error: any) { alert(`Failed to toggle: ${error.message}`); }
+  const openProjects = () => {
+    router.push('/admin/dashboard?section=Projects');
   };
 
-  const filtered = tours.filter(t => t.title.toLowerCase().includes(searchQuery.toLowerCase()));
+  const openNavigationSetup = () => {
+    router.push('/admin/dashboard?section=Navbar%20Setup');
+  };
 
-  if (isLoading) return <div className="flex justify-center items-center h-64"><Loader2 className="animate-spin text-brand-blue" size={40} /></div>;
+  const confirmRestore = async () => {
+    if (!restoreTarget) return;
+    setIsWorking(true);
+    setErrorMessage('');
+
+    try {
+      await restoreArchivedProjectAction(restoreTarget.id);
+      await createAuditLogAction(
+        'EDIT',
+        'Projects',
+        restoreTarget.title,
+        'Restored archived project as Hidden. Linked navigation remains hidden until intentionally republished.'
+      );
+
+      const restoredTitle = restoreTarget.title;
+      setProjects((current) => current.filter((project) => project.id !== restoreTarget.id));
+      setRestoreTarget(null);
+      setSuccessMessage(`Project "${restoredTitle}" restored as Hidden.`);
+      window.setTimeout(() => setSuccessMessage(''), 2600);
+    } catch (error: any) {
+      setErrorMessage(error?.message || 'Failed to restore project.');
+    } finally {
+      setIsWorking(false);
+    }
+  };
+
+  const confirmPermanentDelete = async () => {
+    if (!deleteTarget) return;
+    setIsWorking(true);
+    setErrorMessage('');
+
+    try {
+      const result = await permanentlyDeleteArchivedProjectAction(
+        deleteTarget.id,
+        deleteConfirmation
+      );
+
+      if (!result.success) {
+        setErrorMessage(result.error || 'Permanent deletion was blocked.');
+        return;
+      }
+
+      await createAuditLogAction(
+        'DELETE',
+        'Projects',
+        deleteTarget.title,
+        'Permanently deleted archived project after explicit name confirmation and historical-record safety checks.'
+      );
+
+      const deletedTitle = deleteTarget.title;
+      setProjects((current) => current.filter((project) => project.id !== deleteTarget.id));
+      setDeleteTarget(null);
+      setDeleteConfirmation('');
+      setSuccessMessage(`Project "${deletedTitle}" permanently deleted.`);
+      window.setTimeout(() => setSuccessMessage(''), 2600);
+    } catch (error: any) {
+      setErrorMessage(error?.message || 'Permanent deletion failed.');
+    } finally {
+      setIsWorking(false);
+    }
+  };
+
+  const filteredProjects = projects.filter((project) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+    return (
+      String(project.title || '').toLowerCase().includes(query) ||
+      String(project.city || '').toLowerCase().includes(query)
+    );
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="animate-spin text-brand-blue" size={40} />
+      </div>
+    );
+  }
 
   return (
-    <div className="animate-in fade-in duration-300">
-      {/* Archive Modal */}
-      {tourToArchive && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm p-4">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 max-w-sm w-full">
-            <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-2"><AlertCircle size={40} /></div>
-            <h2 className="text-2xl font-serif text-brand-blue font-bold">Delete Tour?</h2>
-            <p className="text-gray-600 text-center text-sm font-medium">Permanently delete <strong>{tourToArchive.title}</strong>?</p>
-            <div className="flex gap-3 w-full mt-4">
-              <button onClick={() => setTourToArchive(null)} className="flex-1 py-3 bg-gray-100 font-bold rounded-xl text-xs uppercase">Cancel</button>
-              <button onClick={confirmArchive} disabled={isArchiving} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl text-xs uppercase flex items-center justify-center">
-                {isArchiving ? <Loader2 size={16} className="animate-spin" /> : 'Delete'}
+    <div className="animate-in fade-in duration-300 max-w-6xl mx-auto">
+      {successMessage && (
+        <div className="fixed top-24 right-8 z-[120] flex items-center gap-2 rounded-xl border border-green-200 bg-white px-4 py-3 shadow-xl">
+          <CheckCircle2 size={17} className="text-green-500" />
+          <span className="text-xs font-semibold text-brand-blue">{successMessage}</span>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="fixed top-24 right-8 z-[120] flex max-w-lg items-start gap-2 rounded-xl border border-red-200 bg-white px-4 py-3 shadow-xl">
+          <AlertCircle size={17} className="mt-0.5 shrink-0 text-red-500" />
+          <span className="text-xs font-semibold leading-relaxed text-red-600">{errorMessage}</span>
+        </div>
+      )}
+
+      {restoreTarget && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-brand-blue/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl">
+            <h2 className="text-center font-serif text-2xl font-bold text-brand-blue">Restore Project?</h2>
+            <p className="mt-3 text-center text-sm leading-relaxed text-gray-500">
+              <strong className="text-brand-blue">{restoreTarget.title}</strong> will return to the active CMS as <strong>Hidden</strong>. It will not be published automatically.
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button type="button" disabled={isWorking} onClick={() => setRestoreTarget(null)} className="flex-1 rounded-xl bg-gray-100 py-3 text-xs font-bold uppercase tracking-widest text-gray-600 hover:bg-gray-200 disabled:opacity-60">Cancel</button>
+              <button type="button" disabled={isWorking} onClick={confirmRestore} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand-blue py-3 text-xs font-bold uppercase tracking-widest text-white hover:bg-brand-gold disabled:opacity-60">
+                {isWorking ? <Loader2 size={15} className="animate-spin" /> : null}
+                Restore
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Success Modal */}
-      {successMessage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm p-4">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-3 max-w-sm w-full">
-            <div className="w-20 h-20 bg-green-50 text-green-500 rounded-full flex items-center justify-center mb-2"><CheckCircle2 size={40} /></div>
-            <h2 className="text-2xl font-serif text-brand-blue font-bold">Success!</h2>
-            <p className="text-gray-600 text-sm">{successMessage}</p>
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-brand-blue/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-500">
+              <AlertCircle size={30} />
+            </div>
+            <h2 className="text-center font-serif text-2xl font-bold text-brand-blue">Permanently Delete?</h2>
+            <p className="mt-3 text-center text-sm leading-relaxed text-gray-500">
+              This cannot be undone. Historical inquiries or loan applications will block deletion automatically.
+            </p>
+            <label className="mt-6 block text-[10px] font-bold uppercase tracking-widest text-brand-blue">
+              Type <span className="text-red-500">{deleteTarget.title}</span> to confirm
+            </label>
+            <input
+              value={deleteConfirmation}
+              onChange={(event) => setDeleteConfirmation(event.target.value)}
+              autoFocus
+              className="mt-2 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-brand-blue outline-none transition-colors focus:border-red-300 focus:bg-white"
+              placeholder={deleteTarget.title}
+            />
+            <div className="mt-6 flex gap-3">
+              <button type="button" disabled={isWorking} onClick={() => { setDeleteTarget(null); setDeleteConfirmation(''); }} className="flex-1 rounded-xl bg-gray-100 py-3 text-xs font-bold uppercase tracking-widest text-gray-600 hover:bg-gray-200 disabled:opacity-60">Cancel</button>
+              <button
+                type="button"
+                disabled={isWorking || deleteConfirmation.trim() !== deleteTarget.title.trim()}
+                onClick={confirmPermanentDelete}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 py-3 text-xs font-bold uppercase tracking-widest text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isWorking ? <Loader2 size={15} className="animate-spin" /> : null}
+                Delete Forever
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="flex justify-between items-center mb-6">
-        <div className="text-sm font-medium"><span className="text-brand-blue font-bold">Showing ({filtered.length})</span> | Virtual Tours</div>
-        <div className="relative w-72">
-          <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input type="text" placeholder="Search tours..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-2 text-sm outline-none focus:border-brand-gold" />
+      <div className="mb-7 flex items-center gap-6 border-b border-gray-200">
+        <button type="button" onClick={openProjects} className="pb-3 text-sm font-medium text-gray-400 transition-colors hover:text-brand-blue">Projects</button>
+        <button type="button" onClick={openNavigationSetup} className="pb-3 text-sm font-medium text-gray-400 transition-colors hover:text-brand-blue">Navigation Setup</button>
+        <button type="button" className="relative pb-3 text-sm font-bold text-brand-blue" aria-current="page">
+          Archived
+          <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-brand-blue" />
+        </button>
+      </div>
+
+      <div className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-gold">Projects · Archive</p>
+          <h2 className="mt-1 text-2xl font-serif font-bold text-brand-blue">Archived Projects</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
+            Archived projects are removed from the website and active admin lists but retain their content for recovery. Restore them safely or permanently delete them when appropriate.
+          </p>
+        </div>
+        <span className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+          {projects.length} Archived
+        </span>
+      </div>
+
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-gray-400">Showing <span className="font-semibold text-brand-blue">{filteredProjects.length}</span> of {projects.length}</p>
+        <div className="relative w-full sm:w-80">
+          <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input type="text" placeholder="Search archived projects..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-blue shadow-sm outline-none transition-all focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/10" />
         </div>
       </div>
 
-      <div className="w-full overflow-x-auto pb-4">
-        <div className="min-w-[600px]">
-          <div className="grid grid-cols-12 gap-4 py-4 border-y border-gray-200 text-[10px] font-bold tracking-widest uppercase text-brand-blue/60">
-            <div className="col-span-4">Tour Title</div>
-            <div className="col-span-3">Linked Project</div>
-            <div className="col-span-2">Status</div>
-            <div className="col-span-3 text-right">Actions</div>
+      <div className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
+        <div className="hidden grid-cols-12 gap-4 border-b border-gray-100 bg-gray-50/70 px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-brand-blue/50 md:grid">
+          <div className="col-span-4">Project</div>
+          <div className="col-span-2">Location</div>
+          <div className="col-span-2">Status</div>
+          <div className="col-span-2">Archived</div>
+          <div className="col-span-2 text-right">Actions</div>
+        </div>
+
+        {filteredProjects.length === 0 ? (
+          <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center">
+            <History size={30} className="mb-3 text-gray-300" />
+            <p className="text-sm font-semibold text-brand-blue">No archived projects</p>
+            <p className="mt-1 text-xs text-gray-400">Projects you archive will appear here.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {filteredProjects.map((project) => (
+              <div key={project.id} className="grid grid-cols-1 items-center gap-4 px-6 py-4 md:grid-cols-12">
+                <div className="col-span-4 flex min-w-0 items-center gap-4">
+                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-gray-100 bg-gray-100">
+                    <img src={project.image || 'https://via.placeholder.com/150?text=No+Image'} alt={project.title} className="h-full w-full object-cover" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-brand-blue">{project.title}</p>
+                    <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">Archived</p>
+                  </div>
+                </div>
+                <div className="col-span-2 text-sm text-gray-500">{project.city || '—'}</div>
+                <div className="col-span-2"><span className="inline-flex rounded-lg bg-brand-gold/10 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-wider text-brand-gold">{project.status || 'No status'}</span></div>
+                <div className="col-span-2 text-xs text-gray-400">{project.deleted_at ? formatDateTime(project.deleted_at) : '—'}</div>
+                <div className="col-span-2 flex items-center gap-2 md:justify-end">
+                  {checkPerm('edit_project', 'can_edit') && (
+                    <button type="button" onClick={() => setRestoreTarget(project)} className="rounded-lg border border-brand-blue/15 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-brand-blue transition-colors hover:bg-brand-blue hover:text-white">Restore</button>
+                  )}
+                  {checkPerm('edit_project', 'can_delete') && (
+                    <button type="button" onClick={() => { setDeleteTarget(project); setDeleteConfirmation(''); setErrorMessage(''); }} className="rounded-lg border border-red-100 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-red-500 transition-colors hover:bg-red-500 hover:text-white">Delete Forever</button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue/60">
+          Safe deletion
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-gray-500">
+          Permanent deletion is available only from the archive and is blocked when customer inquiries or loan pre-applications still reference the project.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// --- VIRTUAL TOURS MANAGER ---
+
+function VirtualToursManager({ checkPerm }: ManagerProps) {
+  const router = useRouter();
+  const [tours, setTours] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    const fetchTours = async () => {
+      try {
+        const data = await fetchAdminVirtualToursList();
+        setTours(data || []);
+      } catch (error) {
+        console.error('Failed to fetch virtual tour project summaries:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchTours();
+  }, []);
+
+  const filtered = tours.filter((tour) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+
+    return (
+      String(tour.title || '').toLowerCase().includes(query) ||
+      String(tour.project_name || '').toLowerCase().includes(query)
+    );
+  });
+
+  const totalProjects = tours.length;
+  const configuredProjects = tours.filter(
+    (tour) => Number(tour.total_units || 0) > 0
+  ).length;
+  const totalVisibleUnits = tours.reduce(
+    (sum, tour) => sum + Number(tour.visible_units || 0),
+    0
+  );
+
+  const openProjectTours = (projectId: number) => {
+    if (!checkPerm('virtual_tours', 'can_edit')) return;
+    router.push(`/admin/virtualtours?project=${projectId}`);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="animate-spin text-brand-blue" size={40} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="animate-in fade-in duration-300">
+      <div className="max-w-6xl mx-auto w-full">
+        <div className="mb-7">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-2xl">
+              <p className="text-[11px] font-bold tracking-[0.24em] uppercase text-brand-gold">
+                Content · Virtual Tours
+              </p>
+
+              <h2 className="mt-2 text-4xl font-serif text-brand-blue leading-none">
+                360° Virtual Tours
+              </h2>
+
+              <p className="mt-3 text-sm text-gray-500 leading-relaxed">
+                Select a project to manage its towers, unit tours, visibility, and 360° view areas.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                {totalProjects} {totalProjects === 1 ? 'project' : 'projects'}
+              </span>
+
+              <span className="inline-flex items-center rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-green-700">
+                {configuredProjects} configured
+              </span>
+
+              <span className="inline-flex items-center rounded-full bg-brand-blue/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-brand-blue">
+                {totalVisibleUnits} visible units
+              </span>
+            </div>
           </div>
 
-          <div className="flex flex-col">
+          <div className="mt-7 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <div className="text-sm font-bold text-brand-blue">
+                Showing {filtered.length} of {tours.length}
+              </div>
+
+              <p className="text-xs text-gray-400 mt-1">
+                Select a project to manage its virtual tour content.
+              </p>
+            </div>
+
+            <div className="relative w-full sm:w-80">
+              <Search
+                size={16}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+              />
+
+              <input
+                type="text"
+                placeholder="Search project tours..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-brand-blue text-sm outline-none shadow-sm focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/10 transition-all"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full overflow-x-auto pb-4">
+          <div className="min-w-[920px] bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+            <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3.5 bg-gray-50/70 border-b border-gray-100 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              <div className="col-span-4">Virtual Tour Project</div>
+              <div className="col-span-2">Towers</div>
+              <div className="col-span-2">Units</div>
+              <div className="col-span-2">View Areas</div>
+              <div className="col-span-2 text-right">Visibility</div>
+            </div>
+
             {filtered.length === 0 ? (
-              <div className="py-12 text-center text-gray-400 text-sm">
-                No virtual tours found. Click 'Add Tour' to create one.
+              <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+                <div className="w-12 h-12 rounded-xl bg-brand-blue/5 text-brand-blue/40 flex items-center justify-center mb-4">
+                  <Move3d size={22} />
+                </div>
+
+                <p className="text-sm font-bold text-brand-blue">
+                  {tours.length === 0 ? 'No virtual tours available yet' : 'No virtual tours found'}
+                </p>
+
+                <p className="text-xs text-gray-400 mt-1">
+                  {tours.length === 0
+                    ? 'Add a tour to start linking projects, towers, and units.'
+                    : 'Try another search term.'}
+                </p>
               </div>
             ) : (
-              filtered.map((tour) => {
-                const firstRoomImage = tour.rooms && tour.rooms.length > 0 ? tour.rooms[0].image : null;
+              <div className="divide-y divide-gray-100">
+                {filtered.map((tour) => {
+                  const hasUnits = Number(tour.total_units || 0) > 0;
+                  const canEdit = checkPerm('virtual_tours', 'can_edit');
+                  const previewImage = tour.preview_image || null;
 
-                return (
-                  <div key={tour.id} className="grid grid-cols-12 gap-4 py-4 items-center border-b border-gray-100 hover:bg-gray-50 transition-colors group">
+                  return (
+                    <div
+                      key={tour.project_id}
+                      role={canEdit ? 'button' : undefined}
+                      tabIndex={canEdit ? 0 : -1}
+                      onClick={() => {
+                        if (canEdit) {
+                          openProjectTours(tour.project_id);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (!canEdit) return;
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          openProjectTours(tour.project_id);
+                        }
+                      }}
+                      className={`group grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-4 items-center transition-colors ${
+                        canEdit ? 'cursor-pointer hover:bg-gray-50/80 focus:outline-none focus:bg-gray-50/80' : ''
+                      }`}
+                    >
+                      <div className="md:col-span-4 flex items-center gap-4 min-w-0">
+                        <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden shrink-0 border border-gray-100 flex items-center justify-center">
+                          {previewImage ? (
+                            <img
+                              src={previewImage}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <Move3d size={18} className="text-gray-300" />
+                          )}
+                        </div>
 
-                    <div className="col-span-4 flex items-center gap-4">
-                      <div className="w-10 h-10 rounded bg-gray-200 overflow-hidden shrink-0">
-                        <img src={firstRoomImage || 'https://via.placeholder.com/150'} alt={tour.title} className="w-full h-full object-cover" />
+                        <div className="min-w-0">
+                          <div className="text-sm font-bold text-brand-blue truncate group-hover:text-brand-gold transition-colors">
+                            {tour.title}
+                          </div>
+
+                          <div className="text-xs text-gray-400 mt-1 truncate">
+                            Linked to {tour.project_name}
+                          </div>
+                        </div>
                       </div>
-                      <span className="font-bold text-sm text-brand-blue truncate">{tour.title}</span>
-                    </div>
 
-                    <div className="col-span-3 text-sm text-gray-500 truncate">
-                      {tour.project_table ? (Array.isArray(tour.project_table) ? tour.project_table[0]?.title : tour.project_table?.title) : 'None'}
-                    </div>
+                      <div className="md:col-span-2">
+                        <span className="text-sm font-bold text-brand-blue">
+                          {tour.total_towers}
+                        </span>
+                        <span className="text-xs text-gray-400 ml-1.5">
+                          {Number(tour.total_towers) === 1 ? 'tower' : 'towers'}
+                        </span>
+                      </div>
 
-                    <div className="col-span-2">
-                      <span className={`text-[10px] font-bold uppercase tracking-widest ${tour.status === 'Active' ? 'bg-brand-gold/10 text-brand-gold' : 'bg-gray-100 text-gray-500'} px-3 py-1.5 rounded-md`}>
-                        {tour.status}
-                      </span>
-                    </div>
+                      <div className="md:col-span-2">
+                        <span className="text-sm font-bold text-brand-blue">
+                          {tour.total_units}
+                        </span>
+                        <span className="text-xs text-gray-400 ml-1.5">
+                          {Number(tour.total_units) === 1 ? 'unit' : 'units'}
+                        </span>
+                      </div>
 
-                    <div className="col-span-3 flex items-center justify-end gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                      {checkPerm('virtual_tours', 'can_edit') && (
-                        <Link 
-                          href={`/admin/virtualtours?project=${tour.project_id || tour.id}`}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-white shadow-sm border border-gray-200 text-brand-blue hover:bg-brand-blue hover:text-white rounded-lg transition-colors text-xs font-bold uppercase tracking-wider"
-                        >
-                          <Edit2 size={13} />
-                          <span>Manage Tours</span>
-                        </Link>
-                      )}
-                      {checkPerm('virtual_tours', 'can_delete') && (
-                        <button 
-                          onClick={() => handleArchiveClick(tour.id, tour.title)} 
-                          className="p-2 bg-white shadow-sm border border-gray-200 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors"
-                          title="Delete Project Tours"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
+                      <div className="md:col-span-2">
+                        <span className="text-sm font-bold text-brand-blue">
+                          {tour.total_view_areas}
+                        </span>
+                        <span className="text-xs text-gray-400 ml-1.5">
+                          {Number(tour.total_view_areas) === 1 ? 'area' : 'areas'}
+                        </span>
+                      </div>
+
+                      <div className="md:col-span-2 flex items-center justify-start md:justify-end gap-1.5 flex-nowrap whitespace-nowrap">
+                        {!hasUnits ? (
+                          <span className="inline-flex shrink-0 items-center rounded-lg bg-gray-100 px-2 py-1.5 text-[8px] font-bold uppercase tracking-wider text-gray-500">
+                            Not configured
+                          </span>
+                        ) : (
+                          <>
+                            <span className="inline-flex items-center rounded-lg bg-green-50 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-wider text-green-700 whitespace-nowrap">
+                              {tour.visible_units} visible
+                            </span>
+
+                            {Number(tour.hidden_units || 0) > 0 && (
+                              <span className="inline-flex items-center rounded-lg bg-gray-100 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-wider text-gray-500 whitespace-nowrap">
+                                {tour.hidden_units} hidden
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })
+                  );
+                })}
+              </div>
             )}
           </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue/60">
+            Visibility tip
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-gray-500">
+            Visibility is managed per unit inside each project's Virtual Tour editor. Open a
+            project to manage its towers, units, and 360° view areas.
+          </p>
         </div>
       </div>
     </div>
   );
 }
+
 
 // --- PROMOTIONS MANAGER ---
 function PromotionsManager({ checkPerm }: ManagerProps) {
@@ -994,19 +1373,38 @@ function PromotionsManager({ checkPerm }: ManagerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const [promoToArchive, setPromoToArchive] = useState<{ id: number, title: string } | null>(null);
+  const [promoToArchive, setPromoToArchive] = useState<{ id: number; title: string } | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     const fetchPromos = async () => {
       try {
         const data = await fetchAdminPromotionsList();
         setPromotions(data || []);
-      } catch (error) { console.error(error); } finally { setIsLoading(false); }
+      } catch (error: any) {
+        console.error(error);
+        setErrorMessage(error?.message || 'Failed to load promotions.');
+      } finally {
+        setIsLoading(false);
+      }
     };
+
     fetchPromos();
   }, []);
+
+  const showSuccess = (message: string) => {
+    setErrorMessage('');
+    setSuccessMessage(message);
+    window.setTimeout(() => setSuccessMessage(''), 2500);
+  };
+
+  const showError = (message: string) => {
+    setSuccessMessage('');
+    setErrorMessage(message);
+    window.setTimeout(() => setErrorMessage(''), 3500);
+  };
 
   const handleArchiveClick = (id: number, title: string) => {
     setPromoToArchive({ id, title });
@@ -1014,136 +1412,394 @@ function PromotionsManager({ checkPerm }: ManagerProps) {
 
   const confirmArchive = async () => {
     if (!promoToArchive) return;
+
+    const target = promoToArchive;
     setIsArchiving(true);
 
     try {
-      await archiveRecord('promotions', promoToArchive.id, 'is_archived');
+      await archiveRecord('promotions', target.id, 'is_archived');
 
-      // ✅ SERVER-SIDE AUDIT LOG
-      await createAuditLogAction('DELETE', 'Promotions', promoToArchive.title, 'Archived promotion. (Soft Delete)');
+      await createAuditLogAction(
+        'DELETE',
+        'Promotions',
+        target.title,
+        'Archived promotion. (Soft Delete)'
+      );
 
-      setPromotions(prev => prev.filter(p => p.id !== promoToArchive.id));
+      setPromotions((prev) => prev.filter((promo) => promo.id !== target.id));
       setPromoToArchive(null);
-      setSuccessMessage(`Promotion "${promoToArchive.title}" successfully deleted.`);
-      setTimeout(() => setSuccessMessage(''), 2500);
-
+      showSuccess(`Promotion "${target.title}" archived.`);
     } catch (error: any) {
-      alert(`Failed to archive promotion: ${error.message}`);
+      setPromoToArchive(null);
+      showError(error?.message || 'Failed to archive promotion.');
     } finally {
       setIsArchiving(false);
     }
   };
 
-  const handleToggleStatus = async (id: number, currentStatus: boolean, title: string) => {
+  const handleToggleStatus = async (
+    id: number,
+    currentStatus: boolean,
+    title: string
+  ) => {
     try {
       await toggleActiveStatus('promotions', id, currentStatus);
 
-      // ✅ SERVER-SIDE AUDIT LOG
-      await createAuditLogAction('EDIT', 'Promotions', title, `Changed active status to ${!currentStatus ? 'Visible' : 'Hidden'}.`);
+      await createAuditLogAction(
+        'EDIT',
+        'Promotions',
+        title,
+        `Changed website visibility to ${!currentStatus ? 'Visible' : 'Hidden'}.`
+      );
 
-      setPromotions(prev => prev.map(p => p.id === id ? { ...p, is_active: !currentStatus } : p));
-    } catch (error: any) { alert(`Failed to toggle: ${error.message}`); }
+      setPromotions((prev) =>
+        prev.map((promo) =>
+          promo.id === id ? { ...promo, is_active: !currentStatus } : promo
+        )
+      );
+
+      showSuccess(
+        `"${title}" is now ${!currentStatus ? 'visible' : 'hidden'} on the website.`
+      );
+    } catch (error: any) {
+      showError(error?.message || 'Failed to update promotion visibility.');
+    }
   };
 
-  const filtered = promotions.filter(p => p.title.toLowerCase().includes(searchQuery.toLowerCase()));
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const filtered = promotions.filter((promo) =>
+    String(promo.title || '')
+      .toLowerCase()
+      .includes(normalizedSearch)
+  );
 
-  if (isLoading) return <div className="flex justify-center items-center h-64"><Loader2 className="animate-spin text-brand-blue" size={40} /></div>;
+  const visibleCount = promotions.filter((promo) => Boolean(promo.is_active)).length;
+  const hiddenCount = promotions.length - visibleCount;
+
+  const openPromotion = (id: number) => {
+    if (!checkPerm('promotion_code', 'can_edit')) return;
+    router.push(`/admin/promotions?edit=${id}`);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="animate-spin text-brand-blue" size={40} />
+      </div>
+    );
+  }
 
   return (
     <div className="animate-in fade-in duration-300">
-      {/* === ARCHIVE CONFIRMATION MODAL === */}
       {promoToArchive && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm animate-in fade-in duration-300 p-4">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 max-w-sm w-full animate-in zoom-in-95 duration-300">
-            <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center shadow-inner mb-2">
-              <AlertCircle size={40} />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-3xl bg-white p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="mb-1 flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-500 shadow-inner">
+              <AlertCircle size={32} />
             </div>
-            <h2 className="text-2xl font-serif text-brand-blue text-center font-bold">Delete Promotion?</h2>
-            <p className="text-gray-600 text-center text-sm font-medium">
-              Are you sure you want to delete <strong>{promoToArchive.title}</strong>? It will no longer be visible on the public site.
+
+            <h2 className="text-center font-serif text-2xl font-bold text-brand-blue">
+              Archive Promotion?
+            </h2>
+
+            <p className="text-center text-sm leading-relaxed text-gray-500">
+              <strong className="text-brand-blue">{promoToArchive.title}</strong> will be
+              removed from the active Promotions list and will no longer appear on the
+              public website.
             </p>
 
-            <div className="flex gap-3 w-full mt-4">
+            <div className="mt-3 flex w-full gap-3">
               <button
                 type="button"
                 onClick={() => setPromoToArchive(null)}
                 disabled={isArchiving}
-                className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors text-xs uppercase tracking-widest outline-none"
+                className="flex-1 rounded-xl bg-gray-100 py-3 text-xs font-bold uppercase tracking-widest text-gray-700 outline-none transition-colors hover:bg-gray-200 disabled:opacity-60"
               >
                 Cancel
               </button>
+
               <button
                 type="button"
                 onClick={confirmArchive}
                 disabled={isArchiving}
-                className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors text-xs uppercase tracking-widest flex items-center justify-center gap-2 outline-none"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 py-3 text-xs font-bold uppercase tracking-widest text-white outline-none transition-colors hover:bg-red-700 disabled:opacity-60"
               >
-                {isArchiving ? <Loader2 size={16} className="animate-spin" /> : 'Yes'}
+                {isArchiving ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  'Archive'
+                )}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* === SUCCESS MODAL === */}
       {successMessage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm animate-in fade-in duration-300 p-4">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-3 max-w-sm w-full animate-in zoom-in-95 duration-300">
-            <div className="w-20 h-20 bg-green-50 text-green-500 rounded-full flex items-center justify-center mb-2 shadow-inner">
-              <CheckCircle2 size={40} />
+        <div className="fixed bottom-6 right-6 z-[110] max-w-sm rounded-2xl border border-green-100 bg-white px-4 py-3 shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-50 text-green-600">
+              <CheckCircle2 size={17} />
             </div>
-            <h2 className="text-2xl font-serif text-brand-blue text-center font-bold">Success!</h2>
-            <p className="text-gray-600 text-center font-medium text-sm">{successMessage}</p>
+
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-green-700">
+                Updated
+              </p>
+              <p className="mt-1 text-sm text-gray-600">{successMessage}</p>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-        <div className="text-sm text-brand-blue/70 font-medium"><span className="text-brand-blue font-bold">Showing ({filtered.length})</span> <span className="mx-2 hidden sm:inline">|</span><br className="sm:hidden" /> Active Promos</div>
-        <div className="relative w-full sm:w-72">
-          <Search size={16} className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
-          <input type="text" placeholder="Search promotions..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-2 text-brand-blue text-sm focus:border-brand-gold outline-none shadow-sm" />
+      {errorMessage && (
+        <div className="fixed bottom-6 right-6 z-[110] max-w-sm rounded-2xl border border-red-100 bg-white px-4 py-3 shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-500">
+              <AlertCircle size={17} />
+            </div>
+
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-red-600">
+                Could not update
+              </p>
+              <p className="mt-1 text-sm text-gray-600">{errorMessage}</p>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="w-full overflow-x-auto pb-4">
-        <div className="min-w-[600px]">
-          <div className="grid grid-cols-12 gap-4 py-4 border-y border-gray-200 text-[10px] font-bold tracking-widest uppercase text-brand-blue/60">
-            <div className="col-span-5">Promotion Title</div>
-            <div className="col-span-2">Status</div>
-            <div className="col-span-3">Validity</div>
-            <div className="col-span-2 text-right">Actions</div>
+      <div className="mx-auto w-full max-w-6xl">
+        <div className="mb-7">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-2xl">
+              <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-brand-gold">
+                Content · Promotions
+              </p>
+
+              <h2 className="mt-2 font-serif text-4xl leading-none text-brand-blue">
+                Promotions
+              </h2>
+
+              <p className="mt-3 text-sm leading-relaxed text-gray-500">
+                Manage promotional offers shown on the website, including campaign status,
+                validity, and website visibility.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                {promotions.length} {promotions.length === 1 ? 'promotion' : 'promotions'}
+              </span>
+
+              <span className="inline-flex items-center rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-green-700">
+                {visibleCount} visible
+              </span>
+
+              {hiddenCount > 0 && (
+                <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                  {hiddenCount} hidden
+                </span>
+              )}
+            </div>
           </div>
 
-          <div className="flex flex-col">
-            {filtered.length === 0 ? <div className="py-12 text-center text-gray-400 text-sm">No promotions found.</div> : filtered.map((promo) => (
-              <div key={promo.id} className="grid grid-cols-12 gap-4 py-4 items-center border-b border-gray-100 hover:bg-gray-50/50 transition-colors group">
-
-                <div className="col-span-5">
-                  {checkPerm('promotion_code', 'can_edit') ? (
-                    <button onClick={() => router.push(`/admin/promotions?edit=${promo.id}`)} className="text-brand-blue font-bold text-sm hover:text-brand-gold text-left">{promo.title}</button>
-                  ) : (
-                    <span className="text-brand-blue font-bold text-sm text-left">{promo.title}</span>
-                  )}
-                </div>
-
-                <div className="col-span-2"><span className="text-[10px] font-bold uppercase tracking-widest px-2 sm:px-3 py-1.5 rounded-md bg-brand-gold/10 text-brand-gold">{promo.status}</span></div>
-                <div className="col-span-3 text-xs sm:text-sm text-gray-500 font-medium">{promo.validity_date}</div>
-
-                <div className="col-span-2 flex justify-end gap-1 sm:gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                  {checkPerm('promotion_code', 'can_edit') && (
-                    <button onClick={() => handleToggleStatus(promo.id, promo.is_active, promo.title)} className={`p-1.5 sm:p-2 bg-white shadow-sm border rounded-lg ${promo.is_active ? 'border-green-200 text-green-600' : 'border-gray-200 text-gray-400'}`}>{promo.is_active ? <Eye size={14} /> : <EyeOff size={14} />}</button>
-                  )}
-                  {checkPerm('promotion_code', 'can_edit') && (
-                    <button onClick={() => router.push(`/admin/promotions?edit=${promo.id}`)} className="p-1.5 sm:p-2 bg-white shadow-sm border border-gray-200 text-brand-blue hover:bg-brand-blue hover:text-white rounded-lg transition-colors"><Edit2 size={14} /></button>
-                  )}
-                  {checkPerm('promotion_code', 'can_delete') && (
-                    <button onClick={() => handleArchiveClick(promo.id, promo.title)} className="p-1.5 sm:p-2 bg-white shadow-sm border border-gray-200 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors"><Trash2 size={14} /></button>
-                  )}
-                </div>
+          <div className="mt-7 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-sm font-bold text-brand-blue">
+                Showing {filtered.length} of {promotions.length}
               </div>
-            ))}
+
+              <p className="mt-1 text-xs text-gray-400">
+                Select a promotion to edit its website content.
+              </p>
+            </div>
+
+            <div className="relative w-full sm:w-80">
+              <Search
+                size={16}
+                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+
+              <input
+                type="text"
+                placeholder="Search promotions..."
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-blue shadow-sm outline-none transition-all focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/10"
+              />
+            </div>
           </div>
+        </div>
+
+        <div className="w-full overflow-x-auto pb-4">
+          <div className="min-w-[820px] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <div className="hidden grid-cols-12 gap-4 border-b border-gray-100 bg-gray-50/70 px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-gray-400 md:grid">
+              <div className="col-span-4">Promotion</div>
+              <div className="col-span-2">Campaign Status</div>
+              <div className="col-span-3">Validity</div>
+              <div className="col-span-2">Website Visibility</div>
+              <div className="col-span-1 text-right">Archive</div>
+            </div>
+
+            {filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-blue/5 text-brand-blue/40">
+                  <Megaphone size={22} />
+                </div>
+
+                <p className="text-sm font-bold text-brand-blue">
+                  {promotions.length === 0 ? 'No promotions yet' : 'No promotions found'}
+                </p>
+
+                <p className="mt-1 text-xs text-gray-400">
+                  {promotions.length === 0
+                    ? 'Use Add Promo to create the first promotional offer.'
+                    : 'Try another search term.'}
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {filtered.map((promo) => {
+                  const canEdit = checkPerm('promotion_code', 'can_edit');
+
+                  return (
+                    <div
+                      key={promo.id}
+                      role={canEdit ? 'button' : undefined}
+                      tabIndex={canEdit ? 0 : -1}
+                      onClick={() => {
+                        if (canEdit) openPromotion(promo.id);
+                      }}
+                      onKeyDown={(event) => {
+                        if (!canEdit) return;
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          openPromotion(promo.id);
+                        }
+                      }}
+                      className={`group grid grid-cols-1 items-center gap-4 px-6 py-4 transition-colors md:grid-cols-12 ${
+                        canEdit
+                          ? 'cursor-pointer hover:bg-gray-50/80 focus:bg-gray-50/80 focus:outline-none'
+                          : ''
+                      }`}
+                    >
+                      <div className="flex min-w-0 items-center gap-4 md:col-span-4">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50 shadow-sm">
+                          {promo.image ? (
+                            <img
+                              src={promo.image}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              onError={(event) => {
+                                event.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <Megaphone size={18} className="text-gray-300" />
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-bold text-brand-blue transition-colors group-hover:text-brand-gold">
+                            {promo.title || 'Untitled Promotion'}
+                          </div>
+
+                          <div className="mt-1 text-xs text-gray-400 md:hidden">
+                            {promo.validity_date || 'No validity date'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <span className="inline-flex items-center rounded-lg bg-brand-gold/10 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-wider text-brand-gold">
+                          {promo.status || 'Promotion'}
+                        </span>
+                      </div>
+
+                      <div className="text-sm font-medium text-gray-500 md:col-span-3">
+                        {promo.validity_date || 'No validity date'}
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <button
+                          type="button"
+                          disabled={!canEdit}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleToggleStatus(
+                              promo.id,
+                              Boolean(promo.is_active),
+                              promo.title || 'Untitled Promotion'
+                            );
+                          }}
+                          className={`inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider transition-all ${
+                            canEdit
+                              ? 'cursor-pointer'
+                              : 'cursor-not-allowed opacity-60'
+                          }`}
+                          title={
+                            promo.is_active
+                              ? 'Hide this promotion from the website'
+                              : 'Show this promotion on the website'
+                          }
+                        >
+                          <span className={promo.is_active ? 'text-green-700' : 'text-gray-400'}>
+                            {promo.is_active ? 'Visible' : 'Hidden'}
+                          </span>
+
+                          <span
+                            className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${
+                              promo.is_active ? 'bg-green-500' : 'bg-gray-300'
+                            } ${canEdit ? 'hover:ring-4 hover:ring-brand-blue/5' : ''}`}
+                            aria-hidden="true"
+                          >
+                            <span
+                              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                                promo.is_active
+                                  ? 'translate-x-5'
+                                  : 'translate-x-0.5'
+                              }`}
+                            />
+                          </span>
+                        </button>
+                      </div>
+
+                      <div className="flex md:col-span-1 md:justify-end">
+                        {checkPerm('promotion_code', 'can_delete') && (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleArchiveClick(
+                                promo.id,
+                                promo.title || 'Untitled Promotion'
+                              );
+                            }}
+                            className="cursor-pointer rounded-lg p-2 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500"
+                            title={`Archive ${promo.title || 'promotion'}`}
+                            aria-label={`Archive ${promo.title || 'promotion'}`}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue/60">
+            Visibility & archiving
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-gray-500">
+            Hiding a promotion keeps it available for editing while removing it from the
+            public website. Archiving removes it from the active Promotions list.
+          </p>
         </div>
       </div>
     </div>
@@ -1166,8 +1822,13 @@ function PartnerBanksManager({ checkPerm }: ManagerProps) {
       try {
         const data = await fetchAdminBanksList();
         setBanks(data || []);
-      } catch (error) { console.error(error); } finally { setIsLoading(false); }
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setIsLoading(false);
+      }
     };
+
     fetchBanks();
   }, []);
 
@@ -1182,14 +1843,18 @@ function PartnerBanksManager({ checkPerm }: ManagerProps) {
     try {
       await archiveRecord('banks', bankToArchive.id, 'is_archived');
 
-      // ✅ SERVER-SIDE AUDIT LOG
-      await createAuditLogAction('DELETE', 'Partner Banks', bankToArchive.name, 'Archived bank. (Soft Delete)');
+      await createAuditLogAction(
+        'DELETE',
+        'Partner Banks',
+        bankToArchive.name,
+        'Archived bank. (Soft Delete)'
+      );
 
-      setBanks(prev => prev.filter(b => b.id !== bankToArchive.id));
+      const archivedName = bankToArchive.name;
+      setBanks((prev) => prev.filter((bank) => bank.id !== bankToArchive.id));
       setBankToArchive(null);
-      setSuccessMessage(`Bank "${bankToArchive.name}" successfully deleted.`);
+      setSuccessMessage(`Bank "${archivedName}" removed.`);
       setTimeout(() => setSuccessMessage(''), 2500);
-
     } catch (error: any) {
       alert(`Failed to archive bank: ${error.message}`);
     } finally {
@@ -1197,120 +1862,325 @@ function PartnerBanksManager({ checkPerm }: ManagerProps) {
     }
   };
 
-  const handleToggleBank = async (id: number, currentStatus: boolean, bankName: string) => {
+  const handleToggleBank = async (
+    id: number,
+    currentStatus: boolean,
+    bankName: string
+  ) => {
     try {
       await toggleActiveStatus('banks', id, currentStatus);
 
-      // ✅ SERVER-SIDE AUDIT LOG
-      await createAuditLogAction('EDIT', 'Partner Banks', bankName, `Changed active status to ${!currentStatus ? 'Visible' : 'Hidden'}.`);
+      await createAuditLogAction(
+        'EDIT',
+        'Partner Banks',
+        bankName,
+        `Changed website visibility to ${!currentStatus ? 'Visible' : 'Hidden'}.`
+      );
 
-      setBanks(prev => prev.map(b => b.id === id ? { ...b, is_active: !currentStatus } : b));
-    } catch (error: any) { alert(`Failed to toggle status: ${error.message}`); }
+      setBanks((prev) =>
+        prev.map((bank) =>
+          bank.id === id ? { ...bank, is_active: !currentStatus } : bank
+        )
+      );
+    } catch (error: any) {
+      alert(`Failed to toggle status: ${error.message}`);
+    }
   };
 
-  const filteredBanks = banks.filter(bank => bank.bank_name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredBanks = banks.filter((bank) =>
+    String(bank.bank_name || '')
+      .toLowerCase()
+      .includes(searchQuery.trim().toLowerCase())
+  );
 
-  if (isLoading) return <div className="flex justify-center items-center h-64"><Loader2 className="animate-spin text-brand-blue" size={40} /></div>;
+  const visibleCount = banks.filter((bank) => bank.is_active).length;
+  const hiddenCount = banks.length - visibleCount;
+
+  const openBank = (id: number) => {
+    if (!checkPerm('edit_banks', 'can_edit')) return;
+    router.push(`/admin/partnerbanks?edit=${id}`);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="animate-spin text-brand-blue" size={40} />
+      </div>
+    );
+  }
 
   return (
     <div className="animate-in fade-in duration-300">
-
-      {/* === ARCHIVE CONFIRMATION MODAL === */}
       {bankToArchive && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm animate-in fade-in duration-300 p-4">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 max-w-sm w-full animate-in zoom-in-95 duration-300">
-            <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center shadow-inner mb-2">
-              <AlertCircle size={40} />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm animate-in fade-in duration-200 p-4">
+          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 max-w-sm w-full animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center shadow-inner mb-1">
+              <AlertCircle size={32} />
             </div>
-            <h2 className="text-2xl font-serif text-brand-blue text-center font-bold">Delete Bank?</h2>
-            <p className="text-gray-600 text-center text-sm font-medium">
-              Are you sure you want to delete <strong>{bankToArchive.name}</strong>? It will no longer be visible on the public site.
+
+            <h2 className="text-2xl font-serif text-brand-blue text-center font-bold">
+              Delete Partner Bank?
+            </h2>
+
+            <p className="text-gray-500 text-center text-sm leading-relaxed">
+              <strong className="text-brand-blue">{bankToArchive.name}</strong> will be removed from the admin list and will no longer appear on the website.
             </p>
 
-            <div className="flex gap-3 w-full mt-4">
+            <div className="flex gap-3 w-full mt-3">
               <button
                 type="button"
                 onClick={() => setBankToArchive(null)}
                 disabled={isArchiving}
-                className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors text-xs uppercase tracking-widest outline-none"
+                className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors text-xs uppercase tracking-widest outline-none disabled:opacity-60"
               >
                 Cancel
               </button>
+
               <button
                 type="button"
                 onClick={confirmArchive}
                 disabled={isArchiving}
-                className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors text-xs uppercase tracking-widest flex items-center justify-center gap-2 outline-none"
+                className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors text-xs uppercase tracking-widest flex items-center justify-center gap-2 outline-none disabled:opacity-60"
               >
-                {isArchiving ? <Loader2 size={16} className="animate-spin" /> : 'Yes'}
+                {isArchiving ? <Loader2 size={16} className="animate-spin" /> : 'Delete'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* === SUCCESS MODAL === */}
       {successMessage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm animate-in fade-in duration-300 p-4">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-3 max-w-sm w-full animate-in zoom-in-95 duration-300">
-            <div className="w-20 h-20 bg-green-50 text-green-500 rounded-full flex items-center justify-center mb-2 shadow-inner">
-              <CheckCircle2 size={40} />
+        <div className="fixed right-6 bottom-6 z-[110] max-w-sm rounded-2xl border border-green-100 bg-white px-4 py-3 shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-50 text-green-600">
+              <CheckCircle2 size={17} />
             </div>
-            <h2 className="text-2xl font-serif text-brand-blue text-center font-bold">Success!</h2>
-            <p className="text-gray-600 text-center font-medium text-sm">{successMessage}</p>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-green-700">
+                Updated
+              </p>
+              <p className="mt-1 text-sm text-gray-600">{successMessage}</p>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-        <div className="text-sm text-brand-blue/70 font-medium"><span className="text-brand-blue font-bold">Showing ({filteredBanks.length})</span> <span className="mx-2 hidden sm:inline">|</span><br className="sm:hidden" /> Active Banks</div>
-        <div className="relative w-full sm:w-72">
-          <Search size={16} className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
-          <input type="text" placeholder="Search banks..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-2 text-brand-blue text-sm focus:border-brand-gold outline-none shadow-sm" />
-        </div>
-      </div>
+      <div className="max-w-6xl mx-auto w-full">
+        <div className="mb-7">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-2xl">
+              <p className="text-[11px] font-bold tracking-[0.24em] uppercase text-brand-gold">
+                Content · Partner Banks
+              </p>
 
-      <div className="w-full overflow-x-auto pb-4">
-        <div className="min-w-[600px]">
-          <div className="grid grid-cols-12 gap-4 py-4 border-y border-gray-200 text-[10px] font-bold tracking-widest uppercase text-brand-blue/60">
-            <div className="col-span-5">Bank Name</div>
-            <div className="col-span-2">Max Loan</div>
-            <div className="col-span-3">Terms</div>
-            <div className="col-span-2 text-right">Actions</div>
+              <h2 className="mt-2 text-4xl font-serif text-brand-blue leading-none">
+                Partner Banks
+              </h2>
+
+              <p className="mt-3 text-sm text-gray-500 leading-relaxed">
+                Manage financing partners shown on the website, including each bank's logo,
+                maximum loan value, financing terms, and website visibility.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                {banks.length} {banks.length === 1 ? 'bank' : 'banks'}
+              </span>
+
+              <span className="inline-flex items-center rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-green-700">
+                {visibleCount} visible
+              </span>
+
+              {hiddenCount > 0 && (
+                <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                  {hiddenCount} hidden
+                </span>
+              )}
+            </div>
           </div>
 
-          <div className="flex flex-col">
-            {filteredBanks.length === 0 ? <div className="py-12 text-center text-gray-400 text-sm">No banks found.</div> : filteredBanks.map((bank) => (
-              <div key={bank.id} className="grid grid-cols-12 gap-4 py-4 items-center border-b border-gray-100 hover:bg-gray-50/50 transition-colors group">
-
-                <div className="col-span-5 flex items-center gap-3 sm:gap-4">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-white shadow-sm border border-gray-100 overflow-hidden flex items-center justify-center p-1 shrink-0"><img src={bank.image} alt={bank.bank_name} className="w-full h-full object-contain" /></div>
-                  {checkPerm('edit_banks', 'can_edit') ? (
-                    <button onClick={() => router.push(`/admin/partnerbanks?edit=${bank.id}`)} className="text-brand-blue font-bold text-sm hover:text-brand-gold text-left">{bank.bank_name}</button>
-                  ) : (
-                    <span className="text-brand-blue font-bold text-sm text-left">{bank.bank_name}</span>
-                  )}
-                </div>
-
-                <div className="col-span-2"><span className="text-[10px] font-bold uppercase tracking-widest px-2 sm:px-3 py-1.5 rounded-md bg-green-50 text-green-600 border border-green-100">{bank.max_loan}% MAX</span></div>
-                <div className="col-span-3 text-xs sm:text-sm text-gray-500 font-medium truncate pr-4">{bank.terms}</div>
-
-                <div className="col-span-2 flex justify-end gap-1 sm:gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                  {checkPerm('edit_banks', 'can_edit') && (
-                    <button onClick={() => handleToggleBank(bank.id, bank.is_active, bank.bank_name)} className={`p-1.5 sm:p-2 bg-white shadow-sm border rounded-lg ${bank.is_active ? 'border-green-200 text-green-600' : 'border-gray-200 text-gray-400'}`}>{bank.is_active ? <Eye size={14} /> : <EyeOff size={14} />}</button>
-                  )}
-                  {checkPerm('edit_banks', 'can_edit') && (
-                    <button onClick={() => router.push(`/admin/partnerbanks?edit=${bank.id}`)} className="p-1.5 sm:p-2 bg-white shadow-sm border border-gray-200 text-brand-blue hover:bg-brand-blue hover:text-white rounded-lg transition-colors"><Edit2 size={14} /></button>
-                  )}
-                  {checkPerm('edit_banks', 'can_delete') && (
-                    <button onClick={() => handleArchiveClick(bank.id, bank.bank_name)} className="p-1.5 sm:p-2 bg-white shadow-sm border border-gray-200 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors">
-                      <Trash2 size={14} />
-                    </button>
-                  )}
-                </div>
+          <div className="mt-7 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <div className="text-sm font-bold text-brand-blue">
+                Showing {filteredBanks.length} of {banks.length}
               </div>
-            ))}
+
+              <p className="text-xs text-gray-400 mt-1">
+                Select a bank to edit its website content.
+              </p>
+            </div>
+
+            <div className="relative w-full sm:w-80">
+              <Search
+                size={16}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+              />
+
+              <input
+                type="text"
+                placeholder="Search banks..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-brand-blue text-sm outline-none shadow-sm focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/10 transition-all"
+              />
+            </div>
           </div>
+        </div>
+
+        <div className="w-full overflow-x-auto pb-4">
+          <div className="min-w-[820px] bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+            <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3.5 bg-gray-50/70 border-b border-gray-100 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              <div className="col-span-4">Partner Bank</div>
+              <div className="col-span-2">Max Loan</div>
+              <div className="col-span-3">Terms</div>
+              <div className="col-span-2">Website Visibility</div>
+              <div className="col-span-1 text-right">Actions</div>
+            </div>
+
+            {filteredBanks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+                <div className="w-12 h-12 rounded-xl bg-brand-blue/5 text-brand-blue/40 flex items-center justify-center mb-4">
+                  <Landmark size={22} />
+                </div>
+
+                <p className="text-sm font-bold text-brand-blue">
+                  {banks.length === 0 ? 'No partner banks yet' : 'No banks found'}
+                </p>
+
+                <p className="text-xs text-gray-400 mt-1">
+                  {banks.length === 0
+                    ? 'Use Add Bank to create the first financing partner.'
+                    : 'Try another search term.'}
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {filteredBanks.map((bank) => {
+                  const canEdit = checkPerm('edit_banks', 'can_edit');
+
+                  return (
+                    <div
+                      key={bank.id}
+                      role={canEdit ? 'button' : undefined}
+                      tabIndex={canEdit ? 0 : -1}
+                      onClick={() => {
+                        if (canEdit) openBank(bank.id);
+                      }}
+                      onKeyDown={(e) => {
+                        if (!canEdit) return;
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          openBank(bank.id);
+                        }
+                      }}
+                      className={`group grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-4 items-center transition-colors ${
+                        canEdit
+                          ? 'cursor-pointer hover:bg-gray-50/80 focus:outline-none focus:bg-gray-50/80'
+                          : ''
+                      }`}
+                    >
+                      <div className="md:col-span-4 flex items-center gap-4 min-w-0">
+                        <div className="w-12 h-12 rounded-xl bg-white overflow-hidden shrink-0 border border-gray-100 shadow-sm flex items-center justify-center p-1.5">
+                          {bank.image ? (
+                            <img
+                              src={bank.image}
+                              alt={bank.bank_name}
+                              className="w-full h-full object-contain"
+                            />
+                          ) : (
+                            <Landmark size={18} className="text-gray-300" />
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="text-sm font-bold text-brand-blue truncate group-hover:text-brand-gold transition-colors">
+                            {bank.bank_name}
+                          </div>
+
+                          <div className="md:hidden text-xs text-gray-400 mt-1">
+                            {bank.max_loan || '—'}% maximum loan
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <span className="inline-flex items-center rounded-lg bg-brand-gold/10 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-wider text-brand-gold">
+                          {bank.max_loan || '—'}% max
+                        </span>
+                      </div>
+
+                      <div className="md:col-span-3 text-sm text-gray-500 leading-relaxed md:truncate md:pr-4">
+                        {bank.terms || 'No financing terms provided.'}
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <button
+                          type="button"
+                          disabled={!canEdit}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleBank(bank.id, bank.is_active, bank.bank_name);
+                          }}
+                          className={`inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider transition-all ${
+                            canEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
+                          }`}
+                          title={
+                            bank.is_active
+                              ? 'Hide this bank from the website'
+                              : 'Show this bank on the website'
+                          }
+                        >
+                          <span className={bank.is_active ? 'text-green-700' : 'text-gray-400'}>
+                            {bank.is_active ? 'Visible' : 'Hidden'}
+                          </span>
+
+                          <span
+                            className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${
+                              bank.is_active ? 'bg-green-500' : 'bg-gray-300'
+                            } ${canEdit ? 'hover:ring-4 hover:ring-brand-blue/5' : ''}`}
+                            aria-hidden="true"
+                          >
+                            <span
+                              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                                bank.is_active ? 'translate-x-5' : 'translate-x-0.5'
+                              }`}
+                            />
+                          </span>
+                        </button>
+                      </div>
+
+                      <div className="md:col-span-1 flex md:justify-end">
+                        {checkPerm('edit_banks', 'can_delete') && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleArchiveClick(bank.id, bank.bank_name);
+                            }}
+                            className="p-2 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
+                            title={`Delete ${bank.bank_name}`}
+                            aria-label={`Delete ${bank.bank_name}`}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue/60">
+            Website visibility
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-gray-500">
+            A hidden bank stays available in the admin but is removed from the public website until it is made visible again.
+          </p>
         </div>
       </div>
     </div>
@@ -1787,7 +2657,15 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
       if (error) {
         showError(`Unable to load navigation items: ${error.message}`);
       } else if (data) {
-        setNavProjects(data);
+        const activeProjectNavigationItems = data.filter((item: any) => {
+          const linkedProject = Array.isArray(item.project_table)
+            ? item.project_table[0]
+            : item.project_table;
+
+          return Boolean(linkedProject && !linkedProject.deleted_at);
+        });
+
+        setNavProjects(activeProjectNavigationItems);
       }
 
       setIsLoading(false);
@@ -1947,6 +2825,10 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
 
   const openProjects = () => {
     router.push('/admin/dashboard?section=Projects');
+  };
+
+  const openArchivedProjects = () => {
+    router.push('/admin/dashboard?section=Archived%20Projects');
   };
 
   const isProjectAvailable = (item: any) => {
@@ -2237,6 +3119,14 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
           Navigation Setup
           <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-brand-blue" />
         </button>
+
+        <button
+          type="button"
+          onClick={openArchivedProjects}
+          className="pb-3 text-sm font-medium text-gray-400 transition-colors hover:text-brand-blue"
+        >
+          Archived
+        </button>
       </div>
 
       {/* PAGE INTRO */}
@@ -2306,7 +3196,24 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
               return (
                 <div
                   key={item.id}
+                  role={canEdit ? 'button' : undefined}
+                  tabIndex={canEdit ? 0 : -1}
+                  aria-label={
+                    canEdit
+                      ? `Edit navigation item for ${item.nav_title || linkedProject?.title || 'project'}`
+                      : undefined
+                  }
                   draggable={canEdit && !isReordering}
+                  onClick={() => {
+                    if (canEdit) handleEditClick(item);
+                  }}
+                  onKeyDown={(event) => {
+                    if (!canEdit || event.target !== event.currentTarget) return;
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      handleEditClick(item);
+                    }
+                  }}
                   onDragStart={() => setDraggedId(item.id)}
                   onDragEnd={() => setDraggedId(null)}
                   onDragOver={(event) => {
@@ -2319,12 +3226,15 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                   className={`group grid grid-cols-[auto_1fr] gap-3 rounded-2xl border px-3 py-3 transition-all sm:grid-cols-[auto_80px_1fr_auto] sm:items-center sm:gap-4 sm:px-4 ${
                     isBeingDragged
                       ? 'border-brand-gold bg-brand-gold/5 opacity-60'
-                      : 'border-gray-100 bg-[#fbfbfc] hover:border-brand-blue/15 hover:bg-white hover:shadow-sm'
+                      : canEdit
+                        ? 'cursor-pointer border-gray-100 bg-[#fbfbfc] hover:border-brand-blue/20 hover:bg-white hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-gold/20'
+                        : 'border-gray-100 bg-[#fbfbfc]'
                   }`}
                 >
                   <div className="row-span-2 flex items-center gap-2 sm:row-span-1">
                     <button
                       type="button"
+                      onClick={(event) => event.stopPropagation()}
                       className={`flex h-10 w-8 items-center justify-center rounded-lg text-gray-300 transition-colors ${
                         canEdit ? 'cursor-grab hover:bg-white hover:text-brand-gold active:cursor-grabbing' : 'cursor-default'
                       }`}
@@ -2352,11 +3262,7 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => canEdit && handleEditClick(item)}
-                    className={`min-w-0 text-left ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}
-                  >
+                  <div className="min-w-0 text-left">
                     <div className="flex min-w-0 items-center gap-2">
                       <h3 className="truncate text-sm font-bold text-brand-blue transition-colors group-hover:text-brand-gold sm:text-base">
                         {item.nav_title || item.project_table?.title || 'Untitled Project'}
@@ -2379,7 +3285,7 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                     <p className="mt-1.5 text-[10px] font-medium text-gray-400">
                       Linked to {linkedProject?.title || 'project unavailable'}
                     </p>
-                  </button>
+                  </div>
 
                   <div className="col-start-2 flex items-center justify-between gap-3 sm:col-start-auto sm:justify-end">
                     <div className="flex items-center gap-2">
@@ -2398,7 +3304,8 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                       </span>
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={(event) => {
+                          event.stopPropagation();
                           if (!projectIsVisible) return;
                           handleToggleActive(
                             item.id,
@@ -2440,16 +3347,6 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                       </button>
                     </div>
 
-                    {canEdit && (
-                      <button
-                        type="button"
-                        onClick={() => handleEditClick(item)}
-                        className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-brand-blue transition-all hover:border-brand-gold hover:text-brand-gold"
-                      >
-                        <Edit2 size={13} />
-                        Edit
-                      </button>
-                    )}
                   </div>
                 </div>
               );
@@ -3598,7 +4495,8 @@ const contentMenuItems = allowedMenuItems.filter(
               if (item.name === 'Projects') {
                 const isProjectSection =
                   activeTab === 'Projects' ||
-                  activeTab === 'Navbar Setup';
+                  activeTab === 'Navbar Setup' ||
+                  activeTab === 'Archived Projects';
 
                 const showProjectMenu =
                   sidebarExpanded &&
@@ -3748,6 +4646,33 @@ const contentMenuItems = allowedMenuItems.filter(
                           `}
                         >
                           Navigation Setup
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTab('Archived Projects');
+                            setFilterCategory('');
+                            setSearchQuery('');
+                            setIsSidebarOpen(false);
+                          }}
+                          className={`
+                            w-full
+                            text-left
+                            px-3 py-2.5
+                            rounded-lg
+                            text-xs
+                            font-medium
+                            transition-colors
+
+                            ${
+                              activeTab === 'Archived Projects'
+                                ? 'text-brand-gold bg-white/5'
+                                : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            }
+                          `}
+                        >
+                          Archived Projects
                         </button>
                       </div>
                     )}
@@ -3924,10 +4849,11 @@ const contentMenuItems = allowedMenuItems.filter(
                 ? 'Our Story'
                 : activeTab === 'Navbar Setup'
                 ? 'Navigation Setup'
+                : activeTab === 'Archived Projects'
+                ? 'Projects'
                 : activeTab}
             </h1>
             {activeTab === 'Projects' && checkPerm('edit_project', 'can_create') && <button onClick={() => router.push('/admin/projects')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Project</button>}
-            {activeTab === 'Virtual Tours' && checkPerm('virtual_tours', 'can_create') && <button onClick={() => router.push('/admin/virtualtours')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Tour</button>}
             {activeTab === 'Promotions' && checkPerm('promotion_code', 'can_create') && <button onClick={() => router.push('/admin/promotions')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Promo</button>}
             {activeTab === 'Partner Banks' && checkPerm('edit_banks', 'can_create') && <button onClick={() => router.push('/admin/partnerbanks')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Bank</button>}
             {activeTab === 'our story' && checkPerm('our_story', 'can_create') && <button onClick={() => router.push('/admin/story')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Milestone</button>}
@@ -3939,7 +4865,7 @@ const contentMenuItems = allowedMenuItems.filter(
           </div>
         </header>
 
-                <div className="flex-1 p-8 overflow-y-auto">
+                <div className="flex-1 p-8 overflow-y-auto [scrollbar-gutter:stable]">
           {activeTab === 'Home' ? (
             <HomeDashboard
               checkPerm={checkPerm}
@@ -3955,6 +4881,7 @@ const contentMenuItems = allowedMenuItems.filter(
           : activeTab === 'Projects' ? <ProjectsManager checkPerm={checkPerm} />
           : activeTab === 'Virtual Tours' ? <VirtualToursManager checkPerm={checkPerm} />
           : activeTab === 'Navbar Setup' ? <NavbarProjectsManager checkPerm={checkPerm} />
+          : activeTab === 'Archived Projects' ? <ArchivedProjectsManager checkPerm={checkPerm} />
           : activeTab === 'Promotions' ? <PromotionsManager checkPerm={checkPerm} />
           : activeTab === 'Partner Banks' ? <PartnerBanksManager checkPerm={checkPerm} />
           : activeTab === 'our story' ? <OurStoryManager checkPerm={checkPerm} />

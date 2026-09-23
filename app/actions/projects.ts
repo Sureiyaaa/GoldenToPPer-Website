@@ -29,6 +29,311 @@ export async function fetchAdminProjectsList() {
   return data;
 }
 
+export async function fetchArchivedProjectsList() {
+  const session = await getCustomSession();
+
+  if (!session) {
+    throw new Error('Unauthorized');
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('project_table')
+    .select('id, title, slug, city, status, is_active, image, deleted_at')
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return data || [];
+}
+
+export async function archiveProjectAction(projectId: number | string) {
+  const session = await getCustomSession();
+
+  if (!session) {
+    throw new Error('Unauthorized');
+  }
+
+  const normalizedProjectId = Number(projectId);
+  if (!Number.isFinite(normalizedProjectId)) {
+    throw new Error('Invalid project ID.');
+  }
+
+  const { data: project, error: projectReadError } = await supabaseAdmin
+    .from('project_table')
+    .select('id, title, deleted_at')
+    .eq('id', normalizedProjectId)
+    .maybeSingle();
+
+  if (projectReadError) {
+    throw projectReadError;
+  }
+
+  if (!project) {
+    throw new Error('Project not found.');
+  }
+
+  if (project.deleted_at) {
+    return { success: true, alreadyArchived: true };
+  }
+
+  const { data: navRows, error: navReadError } = await supabaseAdmin
+    .from('navbar_projects')
+    .select('id, is_active')
+    .eq('project_id', normalizedProjectId);
+
+  if (navReadError) {
+    throw navReadError;
+  }
+
+  const previousNavigationState = (navRows || []).map((row: any) => ({
+    id: row.id,
+    is_active: Boolean(row.is_active),
+  }));
+
+  if (previousNavigationState.length > 0) {
+    const { error: navHideError } = await supabaseAdmin
+      .from('navbar_projects')
+      .update({ is_active: false })
+      .eq('project_id', normalizedProjectId);
+
+    if (navHideError) {
+      throw navHideError;
+    }
+  }
+
+  const { error: archiveError } = await supabaseAdmin
+    .from('project_table')
+    .update({
+      deleted_at: new Date().toISOString(),
+      is_active: false,
+    })
+    .eq('id', normalizedProjectId);
+
+  if (archiveError) {
+    for (const navRow of previousNavigationState) {
+      await supabaseAdmin
+        .from('navbar_projects')
+        .update({ is_active: navRow.is_active })
+        .eq('id', navRow.id);
+    }
+
+    throw archiveError;
+  }
+
+  return { success: true };
+}
+
+export async function restoreArchivedProjectAction(projectId: number | string) {
+  const session = await getCustomSession();
+
+  if (!session) {
+    throw new Error('Unauthorized');
+  }
+
+  const normalizedProjectId = Number(projectId);
+  if (!Number.isFinite(normalizedProjectId)) {
+    throw new Error('Invalid project ID.');
+  }
+
+  const { data: project, error: projectReadError } = await supabaseAdmin
+    .from('project_table')
+    .select('id, title, slug, deleted_at')
+    .eq('id', normalizedProjectId)
+    .maybeSingle();
+
+  if (projectReadError) {
+    throw projectReadError;
+  }
+
+  if (!project) {
+    throw new Error('Project not found.');
+  }
+
+  if (!project.deleted_at) {
+    return { success: true, alreadyRestored: true };
+  }
+
+  if (project.slug) {
+    const { data: conflictingProject, error: slugCheckError } =
+      await supabaseAdmin
+        .from('project_table')
+        .select('id, title')
+        .eq('slug', project.slug)
+        .is('deleted_at', null)
+        .neq('id', normalizedProjectId)
+        .maybeSingle();
+
+    if (slugCheckError) {
+      throw slugCheckError;
+    }
+
+    if (conflictingProject) {
+      throw new Error(
+        `This project cannot be restored because the URL slug "${project.slug}" is already used by ${conflictingProject.title || 'another active project'}.`
+      );
+    }
+  }
+
+  const { error: restoreError } = await supabaseAdmin
+    .from('project_table')
+    .update({
+      deleted_at: null,
+      // Restored content returns safely as Hidden until an admin republishes it.
+      is_active: false,
+    })
+    .eq('id', normalizedProjectId);
+
+  if (restoreError) {
+    throw restoreError;
+  }
+
+  // Keep or recreate the linked navigation item, but never republish it
+  // automatically as part of a restore.
+  await ensureProjectNavigationEntriesAction();
+  await hideProjectNavigationEntryAction(normalizedProjectId);
+
+  return { success: true };
+}
+
+export async function permanentlyDeleteArchivedProjectAction(
+  projectId: number | string,
+  confirmationTitle: string
+) {
+  const session = await getCustomSession();
+
+  if (!session) {
+    throw new Error('Unauthorized');
+  }
+
+  const normalizedProjectId = Number(projectId);
+
+  if (!Number.isFinite(normalizedProjectId)) {
+    throw new Error('Invalid project ID.');
+  }
+
+  const { data: project, error: projectReadError } = await supabaseAdmin
+    .from('project_table')
+    .select('id, title, deleted_at')
+    .eq('id', normalizedProjectId)
+    .maybeSingle();
+
+  if (projectReadError) {
+    throw projectReadError;
+  }
+
+  if (!project) {
+    throw new Error('Project not found.');
+  }
+
+  if (!project.deleted_at) {
+    return {
+      success: false,
+      blocked: true,
+      error: 'Only archived projects can be permanently deleted.',
+    };
+  }
+
+  const normalizedConfirmation = String(confirmationTitle || '')
+    .trim()
+    .toLocaleLowerCase();
+
+  const normalizedProjectTitle = String(project.title || '')
+    .trim()
+    .toLocaleLowerCase();
+
+  if (normalizedConfirmation !== normalizedProjectTitle) {
+    return {
+      success: false,
+      blocked: true,
+      error: `Type "${project.title}" to confirm permanent deletion.`,
+    };
+  }
+
+  // Historical customer records intentionally block hard deletion.
+  // The database migration also enforces these relationships as RESTRICT,
+  // but these checks let us show a human-readable message before PostgreSQL
+  // has to reject the delete.
+  const [inquiryResult, loanResult] = await Promise.all([
+    supabaseAdmin
+      .from('inquire')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', normalizedProjectId),
+
+    supabaseAdmin
+      .from('loan_preapp')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', normalizedProjectId),
+  ]);
+
+  if (inquiryResult.error) {
+    throw inquiryResult.error;
+  }
+
+  if (loanResult.error) {
+    throw loanResult.error;
+  }
+
+  const inquiryCount = inquiryResult.count || 0;
+  const loanCount = loanResult.count || 0;
+
+  if (inquiryCount > 0 || loanCount > 0) {
+    const parts: string[] = [];
+
+    if (inquiryCount > 0) {
+      parts.push(
+        `${inquiryCount} inquiry record${inquiryCount === 1 ? '' : 's'}`
+      );
+    }
+
+    if (loanCount > 0) {
+      parts.push(
+        `${loanCount} loan pre-application${loanCount === 1 ? '' : 's'}`
+      );
+    }
+
+    return {
+      success: false,
+      blocked: true,
+      error:
+        `Permanent deletion is blocked because this project has ${parts.join(
+          ' and '
+        )}. Keep the project archived so historical customer records remain intact.`,
+      inquiryCount,
+      loanCount,
+    };
+  }
+
+  // With the project relationship migration applied:
+  // - CMS-owned rows cascade automatically.
+  // - promotions.project_id is set to NULL so promotions are preserved.
+  // - inquiry / loan_preapp block deletion.
+  //
+  // This keeps the database as the source of truth for referential integrity
+  // instead of manually deleting child tables in application code.
+  const { error: deleteError } = await supabaseAdmin
+    .from('project_table')
+    .delete()
+    .eq('id', normalizedProjectId);
+
+  if (deleteError) {
+    return {
+      success: false,
+      blocked: true,
+      error:
+        `The database still blocked permanent deletion. The project remains archived. ${deleteError.message}`,
+    };
+  }
+
+  return {
+    success: true,
+    deletedProjectId: normalizedProjectId,
+    deletedProjectTitle: project.title,
+  };
+}
+
 async function getNextNavigationDisplayOrder() {
   const { data, error } = await supabaseAdmin
     .from('navbar_projects')
@@ -199,12 +504,151 @@ export async function createBasicProjectAction(input: {
   }
 }
 
+function getNavigationRowRichness(row: any) {
+  let score = 0;
+
+  if (String(row?.nav_title || '').trim()) score += 1;
+  if (String(row?.tagline || '').trim()) score += 3;
+  if (String(row?.nav_image_url || '').trim()) score += 4;
+
+  return score;
+}
+
+async function repairDuplicateProjectNavigationRows() {
+  const { data: navigationRows, error } = await supabaseAdmin
+    .from('navbar_projects')
+    .select(
+      'id, project_id, nav_title, tagline, nav_image_url, display_order, is_active'
+    )
+    .order('display_order', { ascending: true })
+    .order('id', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  const rowsByProject = new Map<number, any[]>();
+
+  for (const row of navigationRows || []) {
+    const projectId = Number(row.project_id);
+    if (!Number.isFinite(projectId)) continue;
+
+    const currentRows = rowsByProject.get(projectId) || [];
+    currentRows.push(row);
+    rowsByProject.set(projectId, currentRows);
+  }
+
+  let removedCount = 0;
+
+  for (const rows of rowsByProject.values()) {
+    if (rows.length <= 1) continue;
+
+    const sortedRows = [...rows].sort((a, b) => {
+      const richnessDifference =
+        getNavigationRowRichness(b) - getNavigationRowRichness(a);
+
+      if (richnessDifference !== 0) {
+        return richnessDifference;
+      }
+
+      const aOrder = Number(a.display_order);
+      const bOrder = Number(b.display_order);
+      const normalizedAOrder = Number.isFinite(aOrder)
+        ? aOrder
+        : Number.MAX_SAFE_INTEGER;
+      const normalizedBOrder = Number.isFinite(bOrder)
+        ? bOrder
+        : Number.MAX_SAFE_INTEGER;
+
+      if (normalizedAOrder !== normalizedBOrder) {
+        return normalizedAOrder - normalizedBOrder;
+      }
+
+      return Number(a.id) - Number(b.id);
+    });
+
+    const primary = sortedRows[0];
+    const duplicates = sortedRows.slice(1);
+
+    // Preserve the richest/customized navigation content before removing
+    // duplicates. This favors an existing logo/tagline over a newly generated
+    // blank fallback row.
+    const firstTitleRow = sortedRows.find((row) =>
+      String(row.nav_title || '').trim()
+    );
+    const firstTaglineRow = sortedRows.find((row) =>
+      String(row.tagline || '').trim()
+    );
+    const firstImageRow = sortedRows.find((row) =>
+      String(row.nav_image_url || '').trim()
+    );
+
+    const validOrders = sortedRows
+      .map((row) => Number(row.display_order))
+      .filter((value) => Number.isFinite(value));
+
+    const mergedDisplayOrder =
+      validOrders.length > 0
+        ? Math.min(...validOrders)
+        : primary.display_order;
+
+    const { error: updateError } = await supabaseAdmin
+      .from('navbar_projects')
+      .update({
+        nav_title:
+          firstTitleRow?.nav_title ||
+          primary.nav_title ||
+          'Untitled Project',
+        tagline:
+          firstTaglineRow?.tagline ||
+          primary.tagline ||
+          '',
+        nav_image_url:
+          firstImageRow?.nav_image_url ||
+          primary.nav_image_url ||
+          null,
+        display_order: mergedDisplayOrder,
+        // Preserve the selected canonical row's saved visibility preference.
+        is_active: Boolean(primary.is_active),
+      })
+      .eq('id', primary.id);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    const duplicateIds = duplicates
+      .map((row) => Number(row.id))
+      .filter((id) => Number.isFinite(id));
+
+    if (duplicateIds.length > 0) {
+      const { error: deleteError } = await supabaseAdmin
+        .from('navbar_projects')
+        .delete()
+        .in('id', duplicateIds);
+
+      if (deleteError) {
+        throw deleteError;
+      }
+
+      removedCount += duplicateIds.length;
+    }
+  }
+
+  return removedCount;
+}
+
 export async function ensureProjectNavigationEntriesAction() {
   const session = await getCustomSession();
 
   if (!session) {
     throw new Error('Unauthorized');
   }
+
+  // Repair any legacy or race-created duplicates before checking which
+  // projects are missing a navigation row.
+  const duplicatesRemovedBeforeInsert =
+    await repairDuplicateProjectNavigationRows();
 
   const [projectResult, navigationResult] = await Promise.all([
     supabaseAdmin
@@ -252,8 +696,8 @@ export async function ensureProjectNavigationEntriesAction() {
         tagline: '',
         nav_image_url: null,
         display_order: nextOrder,
-        // Default preference is ON. Effective visibility still depends on
-        // project_table.is_active on the public site/admin display.
+        // New/repaired entries keep their saved navigation preference on,
+        // while effective visibility still depends on project.is_active.
         is_active: true,
       };
     });
@@ -261,16 +705,26 @@ export async function ensureProjectNavigationEntriesAction() {
   if (missingRows.length > 0) {
     const { error: insertError } = await supabaseAdmin
       .from('navbar_projects')
-      .insert(missingRows);
+      .upsert(missingRows, {
+        onConflict: 'project_id',
+        ignoreDuplicates: true,
+      });
 
     if (insertError) {
       throw insertError;
     }
   }
 
+  // A second repair closes the small race window where two concurrent sync
+  // calls could both decide the same project was missing and insert a row.
+  const duplicatesRemovedAfterInsert =
+    await repairDuplicateProjectNavigationRows();
+
   return {
     success: true,
     createdCount: missingRows.length,
+    duplicateRowsRemoved:
+      duplicatesRemovedBeforeInsert + duplicatesRemovedAfterInsert,
   };
 }
 
@@ -1221,6 +1675,29 @@ if (savedLayoutFetchError) {
   );
 }
 
+const {
+  data: savedMarkerData,
+  error: savedMarkerFetchError,
+} = await supabaseAdmin
+  .from('child_marker_table')
+  .select('*, marker_type_table(*)')
+  .eq(
+    'project_id',
+    targetProjectId
+  )
+  .order(
+    'id',
+    {
+      ascending: true,
+    }
+  );
+
+if (savedMarkerFetchError) {
+  throw new Error(
+    `Marker refresh error: ${savedMarkerFetchError.message}`
+  );
+}
+
     return {
   success: true,
   towerData:
@@ -1229,6 +1706,8 @@ if (savedLayoutFetchError) {
     savedAmenityData || [],
   layoutData:
     savedLayoutData || [],
+  markerData:
+    savedMarkerData || [],
 };
   } catch (error: any) {
     console.error('Server Action Failed:', error);
