@@ -2,7 +2,7 @@
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
-import { getCustomSession, getCurrentUser } from './auth';
+import { getCustomSession, getCurrentUser, getRBACProfile } from './auth';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -247,12 +247,10 @@ export async function saveProjectVirtualToursAction(
   return { success: true, tours: savedTours || [] };
 }
 
-export async function deleteRecordAction(table: string, id: number | string) {
+export async function deleteRecordAction(_table: string, _id: number | string) {
   const session = await getCustomSession();
   if (!session) throw new Error("Unauthorized");
-  const { error } = await supabaseAdmin.from(table).delete().eq('id', id);
-  if (error) throw error;
-  return { success: true };
+  throw new Error('Permanent deletion is disabled. Archive the record instead.');
 }
 
 // ==========================================
@@ -277,6 +275,64 @@ export async function fetchAdminStoryList() {
   if (!session) throw new Error("Unauthorized");
   const { data, error } = await supabaseAdmin.from('our story').select('*').is('is_archived', null).order('year', { ascending: true });
   if (error) throw error; return data;
+}
+
+const archivedCmsModules = {
+  promotions: 'promotion_code',
+  banks: 'edit_banks',
+  news_updates: 'edit_news',
+  'our story': 'our_story',
+} as const;
+
+type ArchivedCmsTable = keyof typeof archivedCmsModules;
+
+async function requireArchivePermission(table: ArchivedCmsTable, permission: 'can_view' | 'can_edit') {
+  const session = await getCustomSession();
+  if (!session) throw new Error('Unauthorized');
+
+  const profile = await getRBACProfile();
+  if (profile?.permissions === 'SUPER_ADMIN') return;
+
+  const permissions = profile?.permissions as Record<string, Record<string, boolean>> | undefined;
+  if (!permissions?.[archivedCmsModules[table]]?.[permission]) {
+    throw new Error('You do not have permission to access this archive.');
+  }
+}
+
+export async function fetchArchivedCmsRecordsAction(table: ArchivedCmsTable) {
+  if (!Object.prototype.hasOwnProperty.call(archivedCmsModules, table)) {
+    throw new Error('Invalid archive section.');
+  }
+  await requireArchivePermission(table, 'can_view');
+
+  const { data, error } = await supabaseAdmin
+    .from(table)
+    .select('*')
+    .not('is_archived', 'is', null)
+    .order('id', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function restoreArchivedCmsRecordAction(table: ArchivedCmsTable, id: number | string) {
+  if (!Object.prototype.hasOwnProperty.call(archivedCmsModules, table)) {
+    throw new Error('Invalid archive section.');
+  }
+  await requireArchivePermission(table, 'can_edit');
+
+  // Restore into the CMS without publishing to the public website.
+  const { data, error } = await supabaseAdmin
+    .from(table)
+    .update({ is_archived: null, is_active: false })
+    .eq('id', id)
+    .not('is_archived', 'is', null)
+    .select('id')
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error('This record is no longer archived. Refresh the archive and try again.');
+  return { success: true };
 }
 
 export async function toggleVirtualTourStatus(id: number | string, newStatus: string) {

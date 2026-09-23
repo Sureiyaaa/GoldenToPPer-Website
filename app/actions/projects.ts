@@ -198,140 +198,15 @@ export async function restoreArchivedProjectAction(projectId: number | string) {
   return { success: true };
 }
 
+// Kept as a disabled server action for older callers. Projects can only be archived
+// and restored; no request may permanently delete an archived project.
 export async function permanentlyDeleteArchivedProjectAction(
-  projectId: number | string,
-  confirmationTitle: string
+  _projectId: number | string,
+  _confirmationTitle: string
 ) {
   const session = await getCustomSession();
-
-  if (!session) {
-    throw new Error('Unauthorized');
-  }
-
-  const normalizedProjectId = Number(projectId);
-
-  if (!Number.isFinite(normalizedProjectId)) {
-    throw new Error('Invalid project ID.');
-  }
-
-  const { data: project, error: projectReadError } = await supabaseAdmin
-    .from('project_table')
-    .select('id, title, deleted_at')
-    .eq('id', normalizedProjectId)
-    .maybeSingle();
-
-  if (projectReadError) {
-    throw projectReadError;
-  }
-
-  if (!project) {
-    throw new Error('Project not found.');
-  }
-
-  if (!project.deleted_at) {
-    return {
-      success: false,
-      blocked: true,
-      error: 'Only archived projects can be permanently deleted.',
-    };
-  }
-
-  const normalizedConfirmation = String(confirmationTitle || '')
-    .trim()
-    .toLocaleLowerCase();
-
-  const normalizedProjectTitle = String(project.title || '')
-    .trim()
-    .toLocaleLowerCase();
-
-  if (normalizedConfirmation !== normalizedProjectTitle) {
-    return {
-      success: false,
-      blocked: true,
-      error: `Type "${project.title}" to confirm permanent deletion.`,
-    };
-  }
-
-  // Historical customer records intentionally block hard deletion.
-  // The database migration also enforces these relationships as RESTRICT,
-  // but these checks let us show a human-readable message before PostgreSQL
-  // has to reject the delete.
-  const [inquiryResult, loanResult] = await Promise.all([
-    supabaseAdmin
-      .from('inquire')
-      .select('id', { count: 'exact', head: true })
-      .eq('project_id', normalizedProjectId),
-
-    supabaseAdmin
-      .from('loan_preapp')
-      .select('id', { count: 'exact', head: true })
-      .eq('project_id', normalizedProjectId),
-  ]);
-
-  if (inquiryResult.error) {
-    throw inquiryResult.error;
-  }
-
-  if (loanResult.error) {
-    throw loanResult.error;
-  }
-
-  const inquiryCount = inquiryResult.count || 0;
-  const loanCount = loanResult.count || 0;
-
-  if (inquiryCount > 0 || loanCount > 0) {
-    const parts: string[] = [];
-
-    if (inquiryCount > 0) {
-      parts.push(
-        `${inquiryCount} inquiry record${inquiryCount === 1 ? '' : 's'}`
-      );
-    }
-
-    if (loanCount > 0) {
-      parts.push(
-        `${loanCount} loan pre-application${loanCount === 1 ? '' : 's'}`
-      );
-    }
-
-    return {
-      success: false,
-      blocked: true,
-      error:
-        `Permanent deletion is blocked because this project has ${parts.join(
-          ' and '
-        )}. Keep the project archived so historical customer records remain intact.`,
-      inquiryCount,
-      loanCount,
-    };
-  }
-
-  // With the project relationship migration applied:
-  // - CMS-owned rows cascade automatically.
-  // - promotions.project_id is set to NULL so promotions are preserved.
-  // - inquiry / loan_preapp block deletion.
-  //
-  // This keeps the database as the source of truth for referential integrity
-  // instead of manually deleting child tables in application code.
-  const { error: deleteError } = await supabaseAdmin
-    .from('project_table')
-    .delete()
-    .eq('id', normalizedProjectId);
-
-  if (deleteError) {
-    return {
-      success: false,
-      blocked: true,
-      error:
-        `The database still blocked permanent deletion. The project remains archived. ${deleteError.message}`,
-    };
-  }
-
-  return {
-    success: true,
-    deletedProjectId: normalizedProjectId,
-    deletedProjectTitle: project.title,
-  };
+  if (!session) throw new Error('Unauthorized');
+  throw new Error('Permanent project deletion is disabled. Use archive and restore instead.');
 }
 
 async function getNextNavigationDisplayOrder() {
