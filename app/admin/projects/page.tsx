@@ -261,6 +261,7 @@ function ProjectManager() {
   const searchParams = useSearchParams();
   const editId = searchParams.get('edit'); 
   const supabase = createClient();
+  const [projectTours, setProjectTours] = useState<any[]>([]);
   
   const [isFetching, setIsFetching] = useState(!!editId); 
   const [isSaving, setIsSaving] = useState(false);
@@ -1067,11 +1068,13 @@ const normalizeTowerAssignments = (
         throw new Error(result.error);
       }
 
+      const actionResult = result as any;
+
       const savedFormData = {
         ...finalData,
 
         towers:
-          result.towerData?.map(
+          actionResult.towerData?.map(
             (tower: any) => ({
               id: tower.id,
               name: tower.name,
@@ -1083,7 +1086,7 @@ const normalizeTowerAssignments = (
           [],
 
         amenities:
-          result.amenityData?.map(
+          actionResult.amenityData?.map(
             (amenity: any) => ({
               id: amenity.id,
               title: amenity.title || '',
@@ -1099,7 +1102,7 @@ const normalizeTowerAssignments = (
           [],
 
         unit_layouts:
-          result.layoutData?.map(
+          actionResult.layoutData?.map(
             (layout: any) => ({
               id: layout.id,
               title:
@@ -1157,7 +1160,7 @@ const normalizeTowerAssignments = (
           [],
 
         child_markers:
-          result.markerData?.map(
+          actionResult.markerData?.map(
             (marker: any) => ({
               id: marker.id,
               interest_name:
@@ -1296,6 +1299,7 @@ const normalizeTowerAssignments = (
     title: formData.title || 'Project Title',
     city: formData.city || 'City',
     country: formData.country || 'Country',
+    virtual_tours: projectTours,
     sqm: formData.sqm || '0-0 SQM', 
     unit_total: formData.unit_total || '0 Units', 
     image: previews['image'] || formData.image || BLANK_IMAGE,

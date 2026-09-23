@@ -93,20 +93,9 @@ export default async function DynamicProjectPage({ params }: Props) {
 
   const { data: project, error } = await supabase
     .from('project_table')
-    .select(
-      `
-        *,
-        amenities (*),
-        unit_layout (*),
-        project_tag (
-          tags (tag_name)
-        )
-      `
-    )
-    .ilike('slug', formattedSlug)
-    .eq('is_active', true)
-    .is('deleted_at', null)
-    .maybeSingle();
+    .select('*, amenities (*), unit_layout (*), project_tag(tags(tag_name)), virtual_tours (*)')
+    .ilike('slug', formattedSlug) 
+    .maybeSingle(); 
 
   if (error) {
     console.error('[DynamicProjectPage] Project query failed:', error.message);
@@ -116,18 +105,31 @@ export default async function DynamicProjectPage({ params }: Props) {
     notFound();
   }
 
-  const [extendedDescriptionResult, towerResult] = await Promise.all([
+  // Fetch extended description, towers, virtual tours, and all other projects for the dropdown
+  const [extendedDescriptionResult, towerResult, virtualTourResult, allProjectsResult] = await Promise.all([
     supabase
       .from('extended_description')
       .select('*')
       .eq('project_id', project.id),
 
     towerSupabase
-      .from('project_towers')
-      .select('id, project_id, name, sort_order')
-      .eq('project_id', project.id)
-      .order('sort_order', { ascending: true })
+      .from('project_table')
+      .select('id, title, slug, virtual_tour_url, virtual_tours (*)')
+      .eq('is_active', true)
+      .is('deleted_at', null)
       .order('id', { ascending: true }),
+
+    towerSupabase
+      .from('virtual_tours')
+      .select('*')
+      .eq('project_id', project.id),
+
+    supabase
+      .from('project_table')
+      .select('id, title, slug')
+      .eq('is_active', true)
+      .is('deleted_at', null)
+      .order('id', { ascending: true })
   ]);
 
   if (extendedDescriptionResult.error) {
@@ -144,11 +146,39 @@ export default async function DynamicProjectPage({ params }: Props) {
     );
   }
 
+  if (virtualTourResult.error) {
+    console.warn(
+      '[DynamicProjectPage] Virtual tours query failed:',
+      virtualTourResult.error.message
+    );
+  }
+
   const finalData = {
     ...project,
     extended_description: extendedDescriptionResult.data || [],
     project_towers: towerResult.data || [],
+    virtual_tours: virtualTourResult.data || [], 
   };
 
-  return <ProjectClient initialProjectData={finalData} currentSlug={slug} />;
+  // Filter projects to only those with functional 360 tours (identical to /projects)
+  const projectsWithTours = (allProjectsResult.data || [])
+    .filter((p: any) => {
+      const activeTours = (p.virtual_tours || []).filter(
+        (t: any) => !t.status || t.status.toLowerCase() === 'active'
+      );
+      return activeTours.length > 0 || Boolean(p.virtual_tour_url);
+    })
+    .map((p: any) => ({
+      id: p.id,
+      title: p.title,
+      slug: p.slug,
+    }));
+
+  return (
+    <ProjectClient 
+      initialProjectData={finalData} 
+      currentSlug={slug} 
+      allProjects={projectsWithTours} 
+    />
+  );
 }
