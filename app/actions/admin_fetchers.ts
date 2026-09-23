@@ -456,26 +456,88 @@ export async function saveStoryAction(payload: any, editId: string | null) {
   return { success: true };
 }
 
-export async function createAuditLogAction(action_type: string, entity_type: string, entity_name: string, details: string) {
-  const session = await getCustomSession();
-  if (!session) return { success: false, error: "Unauthorized" };
+type AuditContext = {
+  entityId?: number | string;
+  fieldKey?: string;
+  oldValue?: unknown;
+  newValue?: unknown;
+  parentEntityId?: number | string;
+};
 
+const auditRoutes: Record<string, { editor: string; archive: string }> = {
+  Projects: { editor: '/admin/projects', archive: 'Archived Projects' },
+  Promotions: { editor: '/admin/promotions', archive: 'Archived Promotions' },
+  'Partner Banks': { editor: '/admin/partnerbanks', archive: 'Archived Partner Banks' },
+  'News & Updates': { editor: '/admin/news', archive: 'Archived News & Updates' },
+  'Our Story': { editor: '/admin/story', archive: 'Archived Our Story' },
+};
+
+export async function createAuditLogAction(action_type: string, entity_type: string, entity_name: string, details: string, context?: AuditContext) {
+  const session = await getCustomSession();
+  if (!session) throw new Error('Unauthorized');
   const user = await getCurrentUser();
-  const user_email = user?.username || 'Unknown Admin';
+  if (!user) throw new Error('Unauthorized');
+
+  // Older dashboard callers still pass DELETE for Archive. Preserve their API,
+  // but never show an irreversible label for a reversible operation.
+  const action = action_type === 'DELETE' && /^archiv/i.test(details.trim()) ? 'ARCHIVED'
+    : /^restor/i.test(details.trim()) ? 'RESTORED'
+    : /^reorder/i.test(details.trim()) ? 'REORDERED'
+    : /^changed .*visibility/i.test(details.trim()) ? 'VISIBILITY'
+    : action_type;
+  const route = auditRoutes[entity_type];
+  const entityId = context?.entityId != null ? String(context.entityId) : null;
+  const focus = context?.fieldKey;
+  const targetUrl = entity_type === 'Navigation Setup'
+    ? '/admin/dashboard?section=Navbar%20Setup'
+    : route && entityId
+      ? action === 'ARCHIVED'
+        ? `/admin/dashboard?section=${encodeURIComponent(route.archive)}`
+        : `${route.editor}?edit=${encodeURIComponent(entityId)}${focus ? `&focus=${encodeURIComponent(focus)}` : ''}`
+      : null;
 
   const { error } = await supabaseAdmin.from('audit_logs').insert({
-    user_email,
-    action_type,
-    entity_type,
-    entity_name,
-    details
+    user_email: user.username, actor_id: String(user.id),
+    action_type: action, entity_type, entity_name, details,
+    entity_id: entityId, parent_entity_id: context?.parentEntityId != null ? String(context.parentEntityId) : null,
+    field_key: focus || null, old_value: context?.oldValue ?? null,
+    new_value: context?.newValue ?? null, target_url: targetUrl,
   });
-
   if (error) {
-    console.error("Audit Log Error:", error.message);
+    console.error('Audit Log Error:', error.message);
     return { success: false, error: error.message };
   }
-  
+  return { success: true };
+}
+
+export async function fetchDetailedAuditLogsAction(sortOrder: 'asc' | 'desc' = 'desc', offset: number = 0) {
+  const session = await getCustomSession();
+  if (!session) throw new Error('Unauthorized');
+  const profile = await getRBACProfile();
+  const allowed = profile?.permissions === 'SUPER_ADMIN' ||
+    (typeof profile?.permissions === 'object' && profile.permissions?.audit_log?.can_view === true);
+  if (!allowed) throw new Error('You do not have permission to view audit history.');
+  const safeOffset = Number.isInteger(offset) && offset >= 0 ? Math.min(offset, 100000) : 0;
+  // Fetch one extra row to tell the client whether a next page exists.
+  const { data, error } = await supabaseAdmin.from('audit_logs').select('*')
+    .order('created_at', { ascending: sortOrder === 'asc' })
+    .order('id', { ascending: sortOrder === 'asc' })
+    .range(safeOffset, safeOffset + 50);
+  if (error) throw error;
+  return data || [];
+}
+
+export async function deleteAuditLogAction(id: number) {
+  const session = await getCustomSession();
+  const user = await getCurrentUser();
+  if (!session || !user?.is_super_admin) throw new Error('Only a super admin can remove audit entries.');
+  if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Invalid audit entry ID.');
+  const { error } = await supabaseAdmin.rpc('remove_audit_log_entry', {
+    p_id: id,
+    p_actor_id: String(user.id),
+    p_actor_name: user.username,
+  });
+  if (error) throw new Error(error.message);
   return { success: true };
 }
 
@@ -484,6 +546,11 @@ export async function fetchRecentAuditLogsAction(limit: number = 5) {
 
   if (!session) {
     throw new Error("Unauthorized");
+  }
+  const profile = await getRBACProfile();
+  if (!(profile?.permissions === 'SUPER_ADMIN' ||
+    (typeof profile?.permissions === 'object' && profile.permissions?.audit_log?.can_view === true))) {
+    throw new Error('You do not have permission to view audit history.');
   }
 
   // Keep the dashboard compact even if a bigger number is accidentally passed.

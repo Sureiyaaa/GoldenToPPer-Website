@@ -2,7 +2,7 @@
 'use client';
 
 import { getCurrentUser } from '@/app/actions/auth';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import {
   saveProjectAction,
   fetchProjectForEdit,
@@ -660,6 +660,77 @@ const [
   }, [editId, reset]);
 
   const formData = watch();
+  const auditFocus = searchParams.get('focus');
+  const appliedAuditFocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (!editId || isFetching || !auditFocus || appliedAuditFocus.current === `${editId}:${auditFocus}`) return;
+    let region: EditorSelection = 'page-settings';
+    let fieldName = auditFocus;
+    let towerId: string | null = null;
+    const item = auditFocus.match(/^(tower|amenity|unit-layout):(\d+)(?:\.([a-z_]+))?$/);
+    if (item?.[1] === 'tower') {
+      towerId = item[2];
+      region = 'page-settings';
+      const index = (formData.towers || []).findIndex(tower => String(tower.id) === towerId);
+      if (index >= 0 && item[3] === 'name') {
+        setEditingTowerIndex(index);
+        setEditingTowerName(formData.towers[index].name);
+      }
+    } else if (item?.[1] === 'amenity') {
+      const index = (formData.amenities || []).findIndex(amenity => String(amenity.id) === item[2]);
+      region = index >= 0 ? `amenity:${index}` : 'amenities';
+      fieldName = index >= 0 ? `amenities.${index}.${item[3] || 'title'}` : '';
+    } else if (item?.[1] === 'unit-layout') {
+      const index = (formData.unit_layouts || []).findIndex(layout => String(layout.id) === item[2]);
+      region = index >= 0 ? `unit-layout:${index}` : 'unit-layouts';
+      fieldName = index >= 0 ? `unit_layouts.${index}.${item[3] || 'title'}` : '';
+    } else if (auditFocus === 'tower-order' || auditFocus === 'slug' || auditFocus === 'status' || auditFocus === 'sqm' || auditFocus === 'unit_total') {
+      region = 'page-settings';
+    } else if (auditFocus === 'unit-layouts') {
+      region = 'unit-layouts';
+    } else if (auditFocus === 'amenities') {
+      region = 'amenities';
+    } else if (auditFocus === 'title') {
+      region = 'project-title';
+    } else if (['city', 'address', 'country'].includes(auditFocus)) {
+      region = 'location';
+    } else if (['image'].includes(auditFocus)) {
+      region = 'hero-image';
+    } else if (auditFocus === 'img_awards') {
+      region = 'awards';
+    } else if (auditFocus === 'tags') {
+      region = 'tags';
+    } else if (auditFocus === 'editorial_title') {
+      region = 'editorial-title';
+    } else if (auditFocus === 'editorial_long') {
+      region = 'editorial-description';
+    } else if (auditFocus.startsWith('editorial_')) {
+      region = 'editorial-visuals';
+    } else if (auditFocus.startsWith('amenities_')) {
+      region = 'amenities';
+    } else if (auditFocus.startsWith('map_') || auditFocus === 'points-of-interest') {
+      region = 'points-of-interest';
+    }
+    appliedAuditFocus.current = `${editId}:${auditFocus}`;
+    setSelectedEditorRegion(region);
+    const timer = window.setTimeout(() => {
+      const scope = document.querySelector('[data-audit-inspector]');
+      const target = auditFocus === 'tower-order'
+        ? scope?.querySelector('[data-audit-tower-order]')
+        : towerId
+          ? Array.from(scope?.querySelectorAll('[data-audit-tower-id]') || []).find(el => el.getAttribute('data-audit-tower-id') === towerId)
+          : Array.from(scope?.querySelectorAll('[name]') || []).find(el => el.getAttribute('name') === fieldName);
+      const element = (target || scope) as HTMLElement | null;
+      element?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      element?.classList.add('ring-2', 'ring-brand-gold', 'ring-offset-2');
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
+        target.focus({ preventScroll: true });
+      }
+      window.setTimeout(() => element?.classList.remove('ring-2', 'ring-brand-gold', 'ring-offset-2'), 5000);
+    }, 160);
+    return () => window.clearTimeout(timer);
+  }, [auditFocus, editId, isFetching, formData.towers, formData.amenities, formData.unit_layouts]);
+
 
   const hasUnsavedChanges = editId
     ? isDirty ||
@@ -753,7 +824,8 @@ const onCreateBasicProject = async (
         'CREATE',
         'Projects',
         data.title,
-        'Created new project. Hidden from website until enabled.'
+        'Created new project. Hidden from website until enabled.',
+        { entityId: result.projectId }
       );
     } catch (auditError) {
       console.warn(
@@ -1186,11 +1258,9 @@ const normalizeTowerAssignments = (
       setPendingMarkerRemovalIds([]);
       setMarkerToRemove(null);
 
-      setSuccessMsg(
-        editId
-          ? 'Changes saved successfully.'
-          : 'Project created successfully.'
-      );
+      setSuccessMsg(result.auditWarning || (editId
+        ? 'Changes saved successfully.'
+        : 'Project created successfully.'));
 
       setIsSaving(false);
 
@@ -1760,6 +1830,8 @@ const handleApplyRenameTower =
 
       setDeleteAmenityTarget('');
       setDeleteLayoutTarget('');
+      setSuccessMsg(result.auditWarning || `Tower "${deletedName}" removed.`);
+      window.setTimeout(() => setSuccessMsg(''), 3000);
 
     } catch (error: any) {
 
@@ -3958,8 +4030,7 @@ if (editId) {
           className="
             fixed
             top-24
-            left-1/2
-            -translate-x-1/2
+            right-6
             z-[100]
             flex
             items-center
@@ -4244,7 +4315,7 @@ if (editId) {
 
 
           {/* INSPECTOR CONTENT */}
-          <div
+          <div data-audit-inspector
             className="
               flex-1
               overflow-y-auto
@@ -6979,6 +7050,7 @@ if (editId) {
 
                 {/* PROJECT TOWERS */}
                 <div
+                  data-audit-tower-order
                   className="
                     rounded-xl
                     border
@@ -7071,6 +7143,7 @@ if (editId) {
                     (tower, index) => (
                       <div
                         key={tower.fieldKey}
+                        data-audit-tower-id={tower.id ?? undefined}
                         className="
                           flex
                           items-center

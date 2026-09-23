@@ -1,7 +1,7 @@
 // app/admin/dashboard/page.tsx
 'use client';
 
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { z } from 'zod';
@@ -29,6 +29,8 @@ import {
   restoreArchivedCmsRecordAction,
   createAuditLogAction,
   fetchRecentAuditLogsAction,
+  fetchDetailedAuditLogsAction,
+  deleteAuditLogAction,
   fetchNotificationsAction,
   fetchWebsiteSectionStatesAction,
   saveWebsiteSectionStatesAction,
@@ -61,7 +63,12 @@ interface Project {
   deleted_at?: string | null;
 }
 interface Bank { id: number; bank_name: string; max_loan: string; terms: string; image: string; is_active: boolean; }
-interface AuditLog { id: number; created_at: string; user_email: string; action_type: string; entity_type: string; entity_name: string; details: string; }
+interface AuditLog {
+  id: number; created_at: string; user_email: string; action_type: string;
+  entity_type: string; entity_name: string; details: string;
+  actor_id?: string | null; entity_id?: string | null; parent_entity_id?: string | null;
+  field_key?: string | null; old_value?: unknown; new_value?: unknown; target_url?: string | null;
+}
 
 const formatDateTime = (dateString: string) => {
   const date = new Date(dateString);
@@ -340,7 +347,8 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
         'DELETE',
         'Projects',
         projectToArchive.title,
-        'Archived project. Removed it from active CMS views and hid its linked navigation item while retaining project data for recovery.'
+        'Archived project. Removed it from active CMS views and hid its linked navigation item while retaining project data for recovery.',
+        { entityId: projectToArchive.id, fieldKey: 'is_active' }
       );
 
       const archivedTitle = projectToArchive.title;
@@ -368,7 +376,8 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
         title,
         nextStatus
           ? 'Changed project website visibility to Visible. Linked navigation now follows its saved visibility preference.'
-          : 'Changed project website visibility to Hidden. Linked navigation is automatically hidden while preserving its saved visibility preference.'
+          : 'Changed project website visibility to Hidden. Linked navigation is automatically hidden while preserving its saved visibility preference.',
+        { entityId: id, fieldKey: 'is_active', oldValue: currentStatus, newValue: nextStatus }
       );
 
       setProjects(prev =>
@@ -885,7 +894,8 @@ function ArchivedProjectsManager({ checkPerm }: ManagerProps) {
           'EDIT',
           'Projects',
           restoredTitle,
-          'Restored archived project as Hidden. Linked navigation remains hidden until intentionally republished.'
+          'Restored archived project as Hidden. Linked navigation remains hidden until intentionally republished.',
+          { entityId: restoreTarget.id, fieldKey: 'is_active' }
         );
       } catch (auditError) {
         console.error('Project restored, but its audit log failed:', auditError);
@@ -1353,7 +1363,8 @@ function PromotionsManager({ checkPerm }: ManagerProps) {
         'DELETE',
         'Promotions',
         target.title,
-        'Archived promotion. Content retained for restoration.'
+        'Archived promotion. Content retained for restoration.',
+        { entityId: target.id }
       );
 
       setPromotions((prev) => prev.filter((promo) => promo.id !== target.id));
@@ -1379,7 +1390,8 @@ function PromotionsManager({ checkPerm }: ManagerProps) {
         'EDIT',
         'Promotions',
         title,
-        `Changed website visibility to ${!currentStatus ? 'Visible' : 'Hidden'}.`
+        `Changed website visibility to ${!currentStatus ? 'Visible' : 'Hidden'}.`,
+        { entityId: id, fieldKey: 'is_active', oldValue: currentStatus, newValue: !currentStatus }
       );
 
       setPromotions((prev) =>
@@ -1777,7 +1789,8 @@ function PartnerBanksManager({ checkPerm }: ManagerProps) {
         'DELETE',
         'Partner Banks',
         bankToArchive.name,
-        'Archived bank. Content retained for restoration.'
+        'Archived bank. Content retained for restoration.',
+        { entityId: bankToArchive.id }
       );
 
       const archivedName = bankToArchive.name;
@@ -1804,7 +1817,8 @@ function PartnerBanksManager({ checkPerm }: ManagerProps) {
         'EDIT',
         'Partner Banks',
         bankName,
-        `Changed website visibility to ${!currentStatus ? 'Visible' : 'Hidden'}.`
+        `Changed website visibility to ${!currentStatus ? 'Visible' : 'Hidden'}.`,
+        { entityId: id, fieldKey: 'is_active', oldValue: currentStatus, newValue: !currentStatus }
       );
 
       setBanks((prev) =>
@@ -2160,7 +2174,7 @@ function OurStoryManager({ checkPerm }: ManagerProps) {
       setMilestoneToArchive(null);
       showSuccess(`Milestone "${target.title}" archived.`);
       try {
-        await createAuditLogAction('DELETE', 'Our Story', target.title, 'Archived milestone.');
+        await createAuditLogAction('DELETE', 'Our Story', target.title, 'Archived milestone.', { entityId: target.id });
       } catch (auditError) {
         console.error('Milestone archived, but its audit log failed:', auditError);
       }
@@ -2180,7 +2194,7 @@ function OurStoryManager({ checkPerm }: ManagerProps) {
       setMilestones(prev => prev.map(item => item.id === id ? { ...item, is_active: visible } : item));
       showSuccess(`"${title}" is now ${visible ? 'visible' : 'hidden'} on the website.`);
       try {
-        await createAuditLogAction('EDIT', 'Our Story', title, `Changed website visibility to ${visible ? 'Visible' : 'Hidden'}.`);
+        await createAuditLogAction('EDIT', 'Our Story', title, `Changed website visibility to ${visible ? 'Visible' : 'Hidden'}.`, { entityId: id, fieldKey: 'is_active', oldValue: currentStatus, newValue: visible });
       } catch (auditError) {
         console.error('Milestone visibility changed, but its audit log failed:', auditError);
       }
@@ -2361,7 +2375,7 @@ function ArchivedContentManager({ section, checkPerm }: ManagerProps & { section
       setSuccessMessage(`"${nameOf(target)}" restored as Hidden.`);
       window.setTimeout(() => setSuccessMessage(''), 2600);
       try {
-        await createAuditLogAction('EDIT', config.label, nameOf(target), 'Restored archived record as Hidden. Website visibility remains off.');
+        await createAuditLogAction('EDIT', config.label, nameOf(target), 'Restored archived record as Hidden. Website visibility remains off.', { entityId: target.id });
       } catch (auditError) {
         console.error('Record restored, but its audit log failed:', auditError);
       }
@@ -2428,32 +2442,67 @@ function ArchivedContentManager({ section, checkPerm }: ManagerProps & { section
 }
 
 // --- AUDIT LOGS MANAGER ---
-function AuditLogsManager() {
-  const supabase = createClient();
+function AuditLogsManager({ checkPerm, canDelete }: ManagerProps & { canDelete: boolean }) {
+  const router = useRouter();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [deleteTarget, setDeleteTarget] = useState<AuditLog | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    const fetchLogs = async () => {
-      setIsLoading(true);
-      const { data, error } = await supabase
-        .from('audit_logs')
-        .select('*')
-        .order('created_at', { ascending: sortOrder === 'asc' })
-        .limit(100);
+    let cancelled = false;
+    setIsLoading(true);
+    fetchDetailedAuditLogsAction(sortOrder, page * 50)
+      .then(data => { if (!cancelled) { setHasMore(data.length > 50); setLogs(data.slice(0, 50) as AuditLog[]); setErrorMessage(''); } })
+      .catch(error => { if (!cancelled) setErrorMessage(error?.message || 'Could not load audit history.'); })
+      .finally(() => { if (!cancelled) setIsLoading(false); });
+    return () => { cancelled = true; };
+  }, [sortOrder, page, refreshKey]);
 
-      if (!error && data) setLogs(data);
-      setIsLoading(false);
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await deleteAuditLogAction(deleteTarget.id);
+      setDeleteTarget(null);
+      setSelectedLog(null);
+      setPage(0);
+      setRefreshKey(value => value + 1);
+      setSuccessMessage('Audit entry removed. A receipt was recorded.');
+      window.setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error: any) {
+      setErrorMessage(error?.message || 'Could not remove the audit entry.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const readableAction = (log: AuditLog) => log.action_type === 'DELETE' && /^archiv/i.test(log.details)
+    ? 'ARCHIVED' : log.action_type;
+  const valueLabel = (value: unknown) => value == null || value === '' ? '(empty)'
+    : typeof value === 'string' ? value : JSON.stringify(value);
+  const canOpenLog = (log: AuditLog) => {
+    if (!log.target_url?.startsWith('/admin/') || log.target_url.startsWith('//')) return false;
+    const codes: Record<string, string> = {
+      Projects: 'edit_project', Promotions: 'promotion_code', 'Partner Banks': 'edit_banks',
+      'News & Updates': 'edit_news', 'Our Story': 'our_story', 'Navigation Setup': 'edit_project',
     };
-    fetchLogs();
-  }, [supabase, sortOrder]);
+    const code = codes[log.entity_type];
+    return Boolean(code && checkPerm(code, log.action_type === 'ARCHIVED' ? 'can_view' : 'can_edit'));
+  };
 
   const filteredLogs = logs.filter(log =>
-    log.entity_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    log.user_email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    String(log.entity_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    String(log.user_email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    String(log.details || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     log.action_type.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -2461,6 +2510,19 @@ function AuditLogsManager() {
 
   return (
     <div className="animate-in fade-in duration-300">
+      {successMessage && <div role="status" className="fixed right-6 top-24 z-[120] rounded-xl border border-green-100 bg-white px-4 py-3 text-sm font-semibold text-brand-blue shadow-xl">{successMessage}</div>}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-brand-blue/60 p-4 backdrop-blur-sm">
+          <div role="alertdialog" aria-modal="true" aria-label="Delete audit entry" className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl">
+            <h2 className="font-serif text-2xl text-brand-blue">Delete audit entry?</h2>
+            <p className="mt-3 text-sm leading-relaxed text-gray-500">Entry #{deleteTarget.id} will be removed permanently. A separate receipt will retain who removed it and which entry was removed.</p>
+            <div className="mt-6 flex gap-3">
+              <button type="button" onClick={() => setDeleteTarget(null)} disabled={isDeleting} className="flex-1 rounded-xl bg-gray-100 py-3 text-xs font-bold uppercase tracking-widest text-gray-600 disabled:opacity-60">Cancel</button>
+              <button type="button" onClick={confirmDelete} disabled={isDeleting} className="flex-1 rounded-xl bg-red-600 py-3 text-xs font-bold uppercase tracking-widest text-white hover:bg-red-700 disabled:opacity-60">{isDeleting ? 'Removing...' : 'Delete entry'}</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <div className="flex items-center gap-4 text-brand-blue/60 font-bold text-xs">
           <History size={16} /> <span className="hidden sm:inline">RECENT ACTIVITY</span>
@@ -2481,6 +2543,7 @@ function AuditLogsManager() {
         </div>
       </div>
 
+      {errorMessage && <div role="alert" className="mb-4 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">{errorMessage}</div>}
       <div className="w-full overflow-x-auto pb-4">
         <div className="min-w-[600px]">
           <div className="grid grid-cols-12 gap-4 py-4 border-y border-gray-200 text-[10px] font-bold tracking-widest uppercase text-brand-blue/60">
@@ -2491,49 +2554,39 @@ function AuditLogsManager() {
           </div>
 
           {selectedLog && (
-            <div className="fixed inset-0 bg-brand-blue/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-              <div className="bg-white rounded-2xl md:rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-[#f8f9fa]">
-                  <h3 className="text-brand-blue font-bold text-sm tracking-widest uppercase">Audit Log Details</h3>
-                  <button onClick={() => setSelectedLog(null)} className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors outline-none">
-                    <X size={20} />
-                  </button>
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 p-4 backdrop-blur-sm">
+              <div role="dialog" aria-modal="true" aria-label="Audit log details" className="w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
+                  <h3 className="text-sm font-bold uppercase tracking-widest text-brand-blue">Audit Log Details</h3>
+                  <button type="button" onClick={() => setSelectedLog(null)} aria-label="Close audit log" className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-900"><X size={20} /></button>
                 </div>
-
-                <div className="p-6 sm:p-8">
-                  <div className="grid grid-cols-2 gap-6 mb-6">
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Date & Time</div>
-                      <div className="text-sm font-semibold text-gray-900">{formatDateTime(selectedLog.created_at)}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">User</div>
-                      <div className="text-sm font-semibold text-brand-blue break-all">{selectedLog.user_email}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Action Type</div>
-                      <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-md inline-block mt-1 ${selectedLog.action_type === 'CREATE' ? 'bg-green-100 text-green-700' :
-                        selectedLog.action_type === 'DELETE' ? 'bg-red-100 text-red-700' :
-                          'bg-blue-100 text-blue-700'
-                        }`}>
-                        {selectedLog.action_type}
-                      </span>
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Entity</div>
-                      <div className="text-sm font-semibold text-gray-900">{selectedLog.entity_type}: {selectedLog.entity_name}</div>
-                    </div>
+                <div className="max-h-[75vh] overflow-y-auto p-6 sm:p-8">
+                  <div className="mb-6 grid grid-cols-2 gap-6">
+                    <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Date & Time</p><p className="text-sm font-semibold text-gray-900">{formatDateTime(selectedLog.created_at)}</p></div>
+                    <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">User</p><p className="break-all text-sm font-semibold text-brand-blue">{selectedLog.user_email}</p></div>
+                    <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Action</p><span className="inline-block rounded-md bg-blue-100 px-2 py-1 text-[10px] font-bold uppercase text-brand-blue">{readableAction(selectedLog)}</span></div>
+                    <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Content</p><p className="text-sm font-semibold text-brand-blue">{selectedLog.entity_type} › {selectedLog.entity_name}</p></div>
                   </div>
-
                   <div className="border-t border-gray-100 pt-6">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Full Details</div>
-                    <div className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap bg-gray-50 p-4 sm:p-5 rounded-xl border border-gray-100 shadow-inner">
-                      {selectedLog.details}
-                    </div>
+                    <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">Change</p>
+                    <p className="whitespace-pre-wrap rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm leading-relaxed text-gray-800">{selectedLog.details}</p>
+                    {selectedLog.field_key && (
+                      <div className="mt-4 rounded-xl border border-gray-100 p-4 text-sm">
+                        <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-brand-blue/60">Field · {selectedLog.field_key}</p>
+                        <p className="break-words text-gray-500"><strong>Before:</strong> {valueLabel(selectedLog.old_value)}</p>
+                        <p className="mt-2 break-words text-brand-blue"><strong>After:</strong> {valueLabel(selectedLog.new_value)}</p>
+                      </div>
+                    )}
+                    {canOpenLog(selectedLog) && (
+                      <button type="button" onClick={() => router.push(selectedLog.target_url!)} className="mt-5 rounded-lg bg-brand-blue px-4 py-2.5 text-xs font-bold text-white hover:bg-brand-gold">
+                        Open {readableAction(selectedLog) === 'ARCHIVED' ? 'archive' : 'edited content'}
+                      </button>
+                    )}
+                    {canDelete && selectedLog.action_type !== 'AUDIT_REMOVED' && (
+                      <button type="button" onClick={() => setDeleteTarget(selectedLog)} className="ml-3 mt-5 rounded-lg border border-red-200 px-4 py-2.5 text-xs font-bold text-red-600 hover:bg-red-50">Delete entry</button>
+                    )}
                   </div>
                 </div>
-
               </div>
             </div>
           )}
@@ -2545,7 +2598,7 @@ function AuditLogsManager() {
                 <div className="col-span-3 font-medium text-brand-blue truncate pr-2" title={log.user_email}>{log.user_email}</div>
                 <div className="col-span-2">
                   <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-md ${log.action_type === 'CREATE' ? 'bg-green-100 text-green-700' :
-                    log.action_type === 'DELETE' ? 'bg-red-100 text-red-700' :
+                    readableAction(log) === 'REMOVED' ? 'bg-red-100 text-red-700' :
                       'bg-blue-100 text-blue-700'
                     }`}>
                     {log.action_type}
@@ -2560,6 +2613,13 @@ function AuditLogsManager() {
                 </div>
               </div>
             ))}
+          </div>
+          <div className="flex items-center justify-between pt-5 text-xs text-gray-500">
+            <span>Showing up to 50 entries per page · Page {page + 1}</span>
+            <div className="flex items-center gap-3">
+              <button type="button" disabled={page === 0} onClick={() => setPage(current => current - 1)} className="rounded-lg border border-gray-200 px-3 py-2 text-brand-blue disabled:opacity-40">Previous</button>
+              <button type="button" disabled={!hasMore} onClick={() => setPage(current => current + 1)} className="rounded-lg border border-gray-200 px-3 py-2 text-brand-blue disabled:opacity-40">Next</button>
+            </div>
           </div>
         </div>
       </div>
@@ -2903,11 +2963,14 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
 
     try {
       await persistNavigationOrder(normalized);
+      const oldOrder = previous.map(item => String(item.nav_title || item.project_table?.title || item.id));
+      const newOrder = normalized.map(item => String(item.nav_title || item.project_table?.title || item.id));
       await createAuditLogAction(
-        'EDIT',
+        'REORDERED',
         'Navigation Setup',
         'Project Navigation',
-        'Reordered projects in the website navigation.'
+        `Reordered navigation: ${oldOrder.join(' → ')} to ${newOrder.join(' → ')}.`,
+        { fieldKey: 'navigation-order', oldValue: oldOrder, newValue: newOrder }
       );
       showSuccess('Navigation order saved.');
     } catch (error: any) {
@@ -3485,6 +3548,7 @@ function HomeDashboard({
     let isMounted = true;
 
     const loadRecentActivity = async () => {
+      if (!checkPerm('audit_log', 'can_view')) { if (isMounted) setIsLoadingLogs(false); return; }
       try {
         const data = await fetchRecentAuditLogsAction(5);
 
@@ -3675,8 +3739,10 @@ const handleSaveSectionChanges = async () => {
       setShowSaveConfirmation(false);
       setSectionSaveSuccess(true);
 
-      const refreshedLogs = await fetchRecentAuditLogsAction(5);
-      setRecentLogs(refreshedLogs as AuditLog[]);
+      if (checkPerm('audit_log', 'can_view')) {
+        const refreshedLogs = await fetchRecentAuditLogsAction(5);
+        setRecentLogs(refreshedLogs as AuditLog[]);
+      }
 
       setTimeout(() => {
         setSectionSaveSuccess(false);
@@ -4221,8 +4287,20 @@ const handleSaveSectionChanges = async () => {
 function AdminMainDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
   const [isLoading, setIsLoading] = useState(true);
+  const [startupError, setStartupError] = useState('');
+  const signOutAndRedirect = useCallback(async () => {
+    try {
+      await logoutAction();
+      // Reload the login route after the server has cleared the HttpOnly cookie.
+      window.location.replace('/admin');
+    } catch (error) {
+      console.error('Could not clear the admin session:', error);
+      setStartupError('Could not sign out. Please try again.');
+      setIsLoading(false);
+    }
+  }, []);
   const [newsList, setNewsList] = useState<NewsArticle[]>([]);
   const [activeTab, setActiveTab] = useState(
     () => searchParams.get('section') || 'Home'
@@ -4337,12 +4415,32 @@ const ALL_MENU_ITEMS = [
   const allowedMenuItems = ALL_MENU_ITEMS.filter(item => checkPerm(item.moduleCode, 'can_view'));
 
   useEffect(() => {
-    const initData = async () => {
-      const userId = await getCustomSession();
-      if (!userId) { router.replace('/admin'); return; }
-
+    let cancelled = false;
+    const withTimeout = async <T,>(request: PromiseLike<T>, label: string): Promise<T> => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        const rbac = await getRBACProfile();
+        return await Promise.race([
+          Promise.resolve(request),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error(`${label} took too long. Check your connection and try again.`)), 12000);
+          }),
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    };
+    const initData = async () => {
+      try {
+        const userId = await withTimeout(getCustomSession(), 'Checking your session');
+        if (cancelled) return;
+        if (!userId) {
+          setStartupError('Your session has expired. Signing out...');
+          await signOutAndRedirect();
+          return;
+        }
+
+        const rbac = await withTimeout(getRBACProfile(), 'Loading your permissions');
+        if (cancelled) return;
         if (!rbac) { setUserPermissions({}); setCurrentUserRole('viewer'); } 
         else {
            if (rbac.permissions === 'SUPER_ADMIN') setUserPermissions('SUPER_ADMIN');
@@ -4361,27 +4459,32 @@ const ALL_MENU_ITEMS = [
              });
            }
         }
-      } catch (error) { setUserPermissions({}); setCurrentUserRole('viewer'); }
-
-      const { data, error: newsLoadError } = await supabase.from('news_updates').select('*').is('is_archived', null).order('date', { ascending: false });
-      if (newsLoadError) {
-        console.error('Failed to load News & Updates:', newsLoadError);
-        setNewsErrorMessage('Could not load the article list.');
-      } else if (data) {
         try {
+          const { data, error: newsLoadError } = await withTimeout(
+            supabase.from('news_updates').select('*').is('is_archived', null).order('date', { ascending: false }),
+            'Loading News & Updates'
+          );
+          if (cancelled) return;
+          if (newsLoadError) throw newsLoadError;
+          if (data) {
           setNewsList(z.array(NewsArticleSchema).parse(data));
+          }
         } catch (error) {
           console.error('Failed to read News & Updates:', error);
           setNewsErrorMessage('Could not load the article list.');
         }
+      } catch (error: any) {
+        console.error('Dashboard initialization failed:', error);
+        if (!cancelled) setStartupError(error?.message || 'Could not load the dashboard.');
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
-
-      setIsLoading(false);
     };
     initData();
-  }, [router, supabase]);
+    return () => { cancelled = true; };
+  }, [router, supabase, signOutAndRedirect]);
 
-  const handleSignOut = async () => { localStorage.clear(); await logoutAction(); router.replace('/admin'); router.refresh(); };
+  const handleSignOut = async () => { localStorage.clear(); await signOutAndRedirect(); };
 
   const confirmArchive = async () => {
     if (!articleToArchive) return;
@@ -4396,7 +4499,7 @@ const ALL_MENU_ITEMS = [
         'DELETE',
         'News & Updates',
         target.title,
-        'Archived news article.'
+        'Archived news article.', { entityId: target.id }
       );
 
       setNewsList(prev => prev.filter(article => article.id !== target.id));
@@ -4439,7 +4542,8 @@ const ALL_MENU_ITEMS = [
           'EDIT',
           'News & Updates',
           title,
-          `Changed website visibility to ${nextStatus ? 'Visible' : 'Hidden'}.`
+          `Changed website visibility to ${nextStatus ? 'Visible' : 'Hidden'}.`,
+          { entityId: id, fieldKey: 'is_active', oldValue: currentStatus, newValue: nextStatus }
         );
       } catch (auditError) {
         console.error('Article visibility changed, but the audit log failed:', auditError);
@@ -4488,7 +4592,14 @@ const ALL_MENU_ITEMS = [
     });
   };
 
-  if (isLoading) return <div className="min-h-screen bg-[#F8F9FA]" />;
+  if (isLoading) return <div role="status" className="flex min-h-screen items-center justify-center bg-[#F8F9FA] text-sm text-brand-blue">Loading dashboard...</div>;
+  if (startupError) return (
+    <div role="alert" className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#F8F9FA] p-6 text-center">
+      <p className="text-lg font-semibold text-brand-blue">{startupError}</p>
+      <button type="button" onClick={() => window.location.reload()} className="rounded-lg bg-brand-blue px-5 py-3 text-sm font-semibold text-white">Try again</button>
+      <button type="button" onClick={signOutAndRedirect} className="text-sm text-brand-blue underline">Sign out and go to login</button>
+    </div>
+  );
 
 const contentMenuItems = allowedMenuItems.filter(
   item =>
@@ -5164,7 +5275,7 @@ const contentMenuItems = allowedMenuItems.filter(
           : activeTab === 'Promotions' ? <PromotionsManager checkPerm={checkPerm} />
           : activeTab === 'Partner Banks' ? <PartnerBanksManager checkPerm={checkPerm} />
           : activeTab === 'our story' ? <OurStoryManager checkPerm={checkPerm} />
-          : activeTab === 'Audit Logs' ? <AuditLogsManager />
+          : activeTab === 'Audit Logs' ? <AuditLogsManager checkPerm={checkPerm} canDelete={userPermissions === 'SUPER_ADMIN'} />
           : Object.prototype.hasOwnProperty.call(archiveSections, activeTab) ? <ArchivedContentManager section={activeTab as ArchivedContentSection} checkPerm={checkPerm} />
           : (
             <div className="mx-auto w-full max-w-6xl animate-in fade-in duration-300">
