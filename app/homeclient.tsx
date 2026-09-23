@@ -464,60 +464,85 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                   </div>
                 </Link>
 
-                {/* 2. Secondary: 360° Virtual Tour */}
-      
-                <button
-                  type="button"
-                  onClick={() => {
-                    const heroTitle = (currentProject?.title || '').toLowerCase().trim();
-                    const heroSlug = (currentProject?.slug || '').toLowerCase().replace(/^\//, '').trim();
+                {/* 2. Secondary: 360° Virtual Tour or Coming Soon */}
+                {(() => {
+                  const heroTitle = (currentProject?.title || '').toLowerCase().trim();
+                  const heroSlug = (currentProject?.slug || '').toLowerCase().replace(/^\//, '').trim();
 
-                    const projectMatch = initialProjects.find((p: any) => {
-                      const pName = (p.name || p.title || '').toLowerCase().trim();
-                      const pSlug = (p.slug || '').toLowerCase().replace(/^\//, '').trim();
-                      return (
-                        (heroSlug && pSlug === heroSlug) ||
-                        (heroTitle && pName.includes(heroTitle)) ||
-                        (heroTitle && heroTitle.includes(pName))
-                      );
-                    });
+                  const projectMatch = initialProjects.find((p: any) => {
+                    const pName = (p.name || p.title || '').toLowerCase().trim();
+                    const pSlug = (p.slug || '').toLowerCase().replace(/^\//, '').trim();
+                    return (
+                      (heroSlug && pSlug === heroSlug) ||
+                      (heroTitle && pName.includes(heroTitle)) ||
+                      (heroTitle && heroTitle.includes(pName))
+                    );
+                  });
 
-                    if (projectMatch) {
-                      setActiveTourProject(projectMatch);
-                      const tours = projectMatch.virtual_tours || [];
+                  // Check for active tours with photos or fallback URL
+                  const validTours = (projectMatch?.virtual_tours || []).filter((tour: any) => {
+                    const areas = parseViewAreas(tour);
+                    const isActive = !tour.status || tour.status.toLowerCase() === 'active';
+                    return isActive && (areas.length > 0 || Boolean(tour.image || tour.tour_url || tour.url));
+                  });
 
-                      if (tours.length > 0) {
-                        const towers = Array.from(
-                          new Set(tours.map((t: any) => t.tower_name?.trim()).filter(Boolean))
-                        ).sort((a: any, b: any) => a.localeCompare(b, undefined, { numeric: true }));
+                  const hasTour = validTours.length > 0;
 
-                        const initialTower = (towers[0] as string) || null;
-                        setActiveTourTower(initialTower);
+                  return hasTour ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!projectMatch) return;
+                        setActiveTourProject(projectMatch);
 
-                        const towerUnits = initialTower
-                          ? tours.filter((t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === initialTower.toLowerCase())
-                          : tours;
+                        if (validTours.length > 0) {
+                          const towers = Array.from(
+                            new Set(validTours.map((t: any) => t.tower_name?.trim()).filter(Boolean))
+                          ).sort((a: any, b: any) => a.localeCompare(b, undefined, { numeric: true }));
 
-                        setActiveTourUnit(towerUnits[0] || tours[0]);
-                      } else if (projectMatch.virtual_tour_url) {
-                        setActiveTourTower('Tower A');
-                        setActiveTourUnit({
-                          id: 'legacy',
-                          unit_name: 'Main Unit',
-                          view_areas: [{ title: 'Main View', image: projectMatch.virtual_tour_url }]
-                        });
-                      }
-                      setActiveRoomIndex(0);
-                    }
-                  }}
-                  className="group flex items-center justify-center gap-3 w-full sm:w-auto bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/25 hover:border-brand-gold px-8 py-4 rounded-sm shadow-lg transition-all duration-300 outline-none cursor-pointer"
-                >
-                  <Move3d size={16} className="text-brand-gold transition-transform duration-300 group-hover:scale-110" />
-                  <span className="text-[11px] tracking-[0.25em] font-normal text-white uppercase group-hover:text-brand-gold transition-colors duration-300">
-                    Virtual Tour
-                  </span>
-                </button>
-              </div>
+                          const initialTower = (towers[0] as string) || null;
+                          setActiveTourTower(initialTower);
+
+                          const towerUnits = initialTower
+                            ? validTours.filter((t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === initialTower.toLowerCase())
+                            : validTours;
+
+                          const targetUnit = towerUnits[0] || validTours[0];
+                          const areas = parseViewAreas(targetUnit);
+                          if (areas.length === 0 && (targetUnit.image || targetUnit.url)) {
+                            targetUnit.view_areas = [{ title: 'Main Area', image: targetUnit.image || targetUnit.url }];
+                          }
+
+                          setActiveTourUnit(targetUnit);
+                        } else if (projectMatch.virtual_tour_url) {
+                          setActiveTourTower('Tower A');
+                          setActiveTourUnit({
+                            id: 'legacy',
+                            unit_name: 'Main Unit',
+                            title: 'Virtual Tour',
+                            view_areas: [{ title: 'Main View', image: projectMatch.virtual_tour_url }],
+                          });
+                        }
+                        setActiveRoomIndex(0);
+                      }}
+                      className="group flex items-center justify-center gap-3 w-full sm:w-auto bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/25 hover:border-brand-gold px-8 py-4 rounded-sm shadow-lg transition-all duration-300 outline-none cursor-pointer"
+                    >
+                      <Move3d size={16} className="text-brand-gold transition-transform duration-300 group-hover:scale-110" />
+                      <span className="text-[11px] tracking-[0.25em] font-normal text-white uppercase group-hover:text-brand-gold transition-colors duration-300">
+                        Virtual Tour
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center justify-center gap-2.5 px-6 py-4 rounded-sm border border-white/15 bg-black/30 backdrop-blur-md cursor-default text-white/50 w-full sm:w-auto">
+                      <Move3d size={16} className="text-white/40" />
+                      <span className="text-[11px] tracking-[0.25em] font-normal uppercase text-white/50">
+                        Coming Soon
+                      </span>
+                    </div>
+                  );
+                  })()}
+            </div>
+
             </div>
 
             <div className="absolute bottom-4 sm:bottom-6 md:bottom-8 lg:bottom-12 w-full z-40 px-4 md:px-12 hidden sm:flex items-center justify-center gap-2 sm:gap-4 md:gap-8">
@@ -984,7 +1009,14 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                     {isProjectDropdownOpen && (
                       <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[170px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl border border-white/15 py-1 z-[70]">
                         {initialProjects
-                          .filter((p: any) => (p.virtual_tours && p.virtual_tours.length > 0) || p.virtual_tour_url)
+                          .filter((p: any) => {
+                            const validTours = (p.virtual_tours || []).filter((t: any) => {
+                              const areas = parseViewAreas(t);
+                              const isActive = !t.status || t.status.toLowerCase() === 'active';
+                              return isActive && (areas.length > 0 || Boolean(t.image || t.tour_url || t.url));
+                            });
+                            return validTours.length > 0;
+                          })
                           .map((p: any) => {
                             const isSelected = p.id === activeTourProject.id;
                             return (
@@ -993,16 +1025,25 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                                 type="button"
                                 onClick={() => {
                                   setActiveTourProject(p);
-                                  const tours = p.virtual_tours || [];
-                                  const towers = Array.from(new Set(tours.map((t: any) => t.tower_name?.trim()).filter(Boolean))).sort();
-                                  const firstTower: string | null = (towers[0] as string) || null;
-                                  setActiveTourTower(firstTower);
+                                  const rawTours = (p.virtual_tours || []).filter((t: any) => {
+                                    const areas = parseViewAreas(t);
+                                    return (!t.status || t.status.toLowerCase() === 'active') && 
+                                           (areas.length > 0 || Boolean(t.image || t.tour_url || t.url));
+                                  });
 
-                                  const units = firstTower 
-                                    ? tours.filter((t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === firstTower.toLowerCase())
-                                    : tours;
+                                  if (rawTours.length > 0) {
+                                    const towers = Array.from(new Set(rawTours.map((t: any) => t.tower_name?.trim()).filter(Boolean))).sort();
+                                    const firstTower: string | null = (towers[0] as string) || null;
+                                    setActiveTourTower(firstTower);
 
-                                  setActiveTourUnit(units[0] || tours[0] || null);
+                                    const units = firstTower 
+                                      ? rawTours.filter((t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === firstTower.toLowerCase())
+                                      : rawTours;
+
+                                    const targetUnit = units[0] || rawTours[0];
+                                    setActiveTourUnit(targetUnit);
+                                  }
+
                                   setActiveRoomIndex(0);
                                   setIsProjectDropdownOpen(false);
                                 }}

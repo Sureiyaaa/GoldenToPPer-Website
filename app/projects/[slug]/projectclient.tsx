@@ -2,10 +2,10 @@
 
 import Navbar from "@/app/components/navbar";
 import Image from "next/image";
-import { Layers, Target, Key, MapPin, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Layers, Target, Key, MapPin, ArrowRight, ChevronLeft, ChevronRight, Move3d, X, ChevronDown } from 'lucide-react';
 import Footer from '@/app/components/footer';
 import { useEffect, useRef, useState, useMemo, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation'; 
+import { useRouter,useSearchParams } from 'next/navigation'; 
 import Lenis from 'lenis';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -14,6 +14,7 @@ import { motion } from 'framer-motion';
 import dynamic from "next/dynamic";
 import Link from 'next/link';
 import PageTransition from '@/app/components/page-transitions';
+
 
 interface Amenity {
   id: number;
@@ -80,6 +81,27 @@ interface Project {
   extended_description: ExtendedDescription[];
   project_tag: ProjectTag[];
   project_towers?: ProjectTower[];
+  virtual_tours?: any[];
+}
+
+const DynamicVirtualTour = dynamic(() => import('@/app/components/VirtualTour'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full flex flex-col items-center justify-center bg-[#0d1b3e]">
+      <Move3d size={40} className="text-brand-gold animate-bounce mb-4" />
+      <p className="text-brand-gold animate-pulse tracking-widest text-sm font-bold uppercase">Loading 360° Engine...</p>
+    </div>
+  ),
+});
+
+function parseViewAreas(tour: any): any[] {
+  if (!tour) return [];
+  let raw = tour.view_areas || tour.rooms;
+  if (!raw) return [];
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw); } catch { raw = []; }
+  }
+  return Array.isArray(raw) ? raw : [];
 }
 
 const UnifiedProjectMap = dynamic(() => import('@/app/components/unifiedprojectmap'), { 
@@ -125,7 +147,16 @@ function formatTowerName(raw?: string | null): string {
   return trimmed;
 }
 
-function DynamicProjectContent({ initialProjectData, currentSlug }: { initialProjectData: Project, currentSlug: string }) {
+function DynamicProjectContent({ 
+  initialProjectData, 
+  currentSlug,
+  allProjects = []
+}: { 
+  initialProjectData: Project; 
+  currentSlug: string;
+  allProjects?: Array<{ id: number; title: string; slug: string }>;
+}) {
+  const router = useRouter();
   const searchParams = useSearchParams(); 
   const blueprintIdParam = searchParams.get('blueprint');
 
@@ -485,6 +516,84 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
     return `± ${min} - ${max} SQM`;
   };
 
+  const [isTourOpen, setIsTourOpen] = useState(false);
+  const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
+  const [activeTourTower, setActiveTourTower] = useState<string | null>(null);
+  const [activeTourUnit, setActiveTourUnit] = useState<any | null>(null);
+  const [activeRoomIndex, setActiveRoomIndex] = useState(0);
+  const [isTowerDropdownOpen, setIsTowerDropdownOpen] = useState(false);
+  const [isUnitDropdownOpen, setIsUnitDropdownOpen] = useState(false);
+  const [maxVisible, setMaxVisible] = useState(6);
+
+  useEffect(() => {
+    const handleResize = () => setMaxVisible(window.innerWidth < 768 ? 3 : 6);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (isTourOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [isTourOpen]);
+
+ // 1. Filter active 4-tier virtual tours
+  const validTours = useMemo(() => {
+    const rawTours = initialProjectData.virtual_tours || [];
+    return rawTours.filter((tour: any) => {
+      const areas = parseViewAreas(tour);
+      const isActive = !tour.status || tour.status.toLowerCase() === 'active';
+      return isActive && (areas.length > 0 || Boolean(tour.image || tour.tour_url || tour.url));
+    });
+  }, [initialProjectData.virtual_tours]);
+
+  // 2. Check for either modern 4-tier tours OR legacy tour link (matches /projects behavior)
+  const legacyTourUrl = (initialProjectData as any).virtual_tour_url || (initialProjectData.virtual_tours?.[0] as any)?.tour_url;
+  const hasVirtualTour = validTours.length > 0 || Boolean(legacyTourUrl);
+
+  const handleOpenTour = () => {
+    if (!hasVirtualTour) return;
+
+    if (validTours.length > 0) {
+      const uniqueTowers = Array.from(
+        new Set(validTours.map((t: any) => t.tower_name?.trim()).filter(Boolean))
+      ).sort((a: any, b: any) => a.localeCompare(b, undefined, { numeric: true }));
+
+      const initialTower = (uniqueTowers[0] as string) || (initialProjectData.project_towers?.[0]?.name) || 'Tower A';
+      setActiveTourTower(initialTower);
+
+      const initialUnits = initialTower
+        ? validTours.filter((t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === initialTower.toLowerCase())
+        : validTours;
+
+      const targetUnit = initialUnits[0] || validTours[0];
+      
+      // Auto-populate view area if it was flat
+      const areas = parseViewAreas(targetUnit);
+      if (areas.length === 0 && (targetUnit.image || targetUnit.url)) {
+        targetUnit.view_areas = [{ title: 'Main Area', image: targetUnit.image || targetUnit.url }];
+      }
+
+      setActiveTourUnit(targetUnit);
+    } else if (legacyTourUrl) {
+      // Direct fallback matching Projects page
+      setActiveTourTower('Tower A');
+      setActiveTourUnit({
+        id: 'legacy-unit',
+        unit_name: 'Main View',
+        title: 'Virtual Tour',
+        view_areas: [{ title: 'Main Perspective', image: legacyTourUrl }]
+      });
+    }
+
+    setActiveRoomIndex(0);
+    setIsTourOpen(true);
+  };
+
   return (
     <PageTransition> 
       <Navbar />
@@ -559,7 +668,28 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
                     <ArrowRight size={16} className="absolute text-white transform -translate-x-[150%] transition-transform duration-[0.6s] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-0" />
                   </div>
                 </Link>
+
+              {hasVirtualTour ? (
+                  <button
+                    type="button"
+                    onClick={handleOpenTour}
+                    className="group relative flex items-center justify-center gap-3 w-full sm:w-auto bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/30 hover:border-brand-gold px-8 py-4 overflow-hidden rounded-sm shadow-lg cursor-pointer outline-none transition-all duration-300"
+                  >
+                    <Move3d size={16} className="text-brand-gold transition-transform duration-300 group-hover:scale-110" />
+                    <span className="text-[11px] tracking-[0.25em] font-bold text-white uppercase group-hover:text-brand-gold transition-colors duration-300">
+                      Virtual Tour
+                    </span>
+                  </button>
+                ) : (
+                  <div className="flex items-center justify-center gap-2.5 px-6 py-4 rounded-sm border border-white/15 bg-black/30 backdrop-blur-md cursor-default text-white/50">
+                    <Move3d size={16} className="text-white/40" />
+                    <span className="text-[11px] tracking-[0.25em] font-bold uppercase text-white/50">
+                      Coming Soon
+                    </span>
+                  </div>
+                )}
               </div>
+
             </motion.div>
           </motion.div>
         </section>
@@ -903,6 +1033,282 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
           projectSlug={currentSlug} 
           subtitle={initialProjectData.extended_description?.[0]?.map_subtitle} 
         />
+
+          {/* === 4-TIER FULLSCREEN VIRTUAL TOUR MODAL === */}
+        {isTourOpen && activeTourUnit && (() => {
+          const availableTowers = Array.from(
+            new Set(
+              validTours
+                .map((t: any) => t.tower_name?.trim())
+                .filter((name: any): name is string => Boolean(name))
+            )
+          ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+          const towerUnits = activeTourTower
+            ? validTours.filter(
+                (t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === activeTourTower.toLowerCase()
+              )
+            : validTours;
+
+          const currentAreas = parseViewAreas(activeTourUnit);
+          const activeScene = currentAreas[activeRoomIndex] || currentAreas[0];
+
+          return (
+            <div className="fixed inset-0 z-[9999] bg-black animate-in fade-in duration-500 flex flex-col overflow-hidden select-none">
+              
+              {/* Top Bar */}
+              <div className="absolute top-0 left-0 w-full bg-gradient-to-b from-black/90 via-black/50 to-transparent z-50 p-3.5 sm:p-4 md:p-6 pointer-events-none flex flex-col gap-2.5">
+                <div className="w-full flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 px-3 py-1 md:px-4 md:py-1.5 bg-black/80 backdrop-blur-md rounded-full border border-[#D4AF37]/30 shadow-lg pointer-events-auto">
+                    <span className="text-[#D4AF37] font-serif text-[9px] sm:text-[10px] md:text-[11px] font-bold tracking-widest uppercase">
+                      360° Virtual Tour
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTourOpen(false);
+                      setActiveTourUnit(null);
+                      setActiveTourTower(null);
+                      setActiveRoomIndex(0);
+                    }}
+                    className="pointer-events-auto group flex items-center gap-1.5 sm:gap-2 bg-black/70 backdrop-blur-md px-3 py-1.5 sm:px-4 sm:py-2 rounded-full border border-white/15 shadow-lg hover:bg-[#d0b370] transition-all duration-300 cursor-pointer outline-none shrink-0"
+                  >
+                    <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-white group-hover:text-black">
+                      Close
+                    </span>
+                    <X size={13} className="text-white group-hover:text-black" />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto w-full max-w-sm sm:max-w-xl">
+                  
+                  {/* 1. PROJECT DROPDOWN */}
+                  <div className="relative flex-1 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsProjectDropdownOpen(!isProjectDropdownOpen);
+                        setIsTowerDropdownOpen(false);
+                        setIsUnitDropdownOpen(false);
+                      }}
+                      className="w-full bg-black/60 hover:bg-black/75 backdrop-blur-xl rounded-xl md:rounded-2xl px-3 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 border border-white/15 flex flex-col justify-center text-left cursor-pointer transition-all outline-none"
+                    >
+                      <span className="text-[8px] sm:text-[9px] md:text-[10px] font-semibold tracking-[0.14em] text-[#d4b26f] uppercase font-sans">
+                        Project
+                      </span>
+                      <div className="flex items-center justify-between gap-1 mt-0.5">
+                        <span className="text-xs sm:text-[13px] md:text-[14px] font-medium text-white font-sans truncate">
+                          {initialProjectData.title}
+                        </span>
+                        <ChevronDown size={14} className={`text-white/80 transition-transform duration-300 ${isProjectDropdownOpen ? 'rotate-180' : ''}`} />
+                      </div>
+                    </button>
+
+                    {isProjectDropdownOpen && (
+                      <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[170px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl border border-white/15 py-1 z-[70]">
+                        {(allProjects.length > 0 ? allProjects : [{ id: initialProjectData.id, title: initialProjectData.title, slug: initialProjectData.slug }]).map((p) => {
+                          const isSelected = p.id === initialProjectData.id;
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => {
+                                setIsProjectDropdownOpen(false);
+                                if (!isSelected) {
+                                  const cleanSlug = p.slug.startsWith('/') ? p.slug.slice(1) : p.slug;
+                                  router.push(`/projects/${cleanSlug}`);
+                                }
+                              }}
+                              className={`w-full px-3 py-2 text-left text-xs font-medium font-sans flex items-center justify-between cursor-pointer ${
+                                isSelected ? 'bg-white/15 text-[#d4b26f]' : 'text-white/85 hover:bg-white/10 hover:text-white'
+                              }`}
+                            >
+                              <span className="truncate">{p.title}</span>
+                              {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#d4b26f] shrink-0" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. TOWER DROPDOWN */}
+                  {availableTowers.length > 0 && (
+                    <div className="relative flex-1 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsTowerDropdownOpen(!isTowerDropdownOpen);
+                          setIsProjectDropdownOpen(false);
+                          setIsUnitDropdownOpen(false);
+                        }}
+                        className="w-full bg-black/60 hover:bg-black/75 backdrop-blur-xl rounded-xl md:rounded-2xl px-3 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 border border-white/15 flex flex-col justify-center text-left cursor-pointer transition-all outline-none"
+                      >
+                        <span className="text-[8px] sm:text-[9px] md:text-[10px] font-semibold tracking-[0.14em] text-[#d4b26f] uppercase font-sans">
+                          Tower
+                        </span>
+                        <div className="flex items-center justify-between gap-1 mt-0.5">
+                          <span className="text-xs sm:text-[13px] md:text-[14px] font-medium text-white font-sans truncate">
+                            {activeTourTower || availableTowers[0]}
+                          </span>
+                          <ChevronDown size={14} className={`text-white/80 transition-transform duration-300 ${isTowerDropdownOpen ? 'rotate-180' : ''}`} />
+                        </div>
+                      </button>
+
+                      {isTowerDropdownOpen && (
+                        <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[140px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl border border-white/15 py-1 z-[70]">
+                          {availableTowers.map((tower) => {
+                            const isSelected = activeTourTower?.toLowerCase() === tower.toLowerCase();
+                            return (
+                              <button
+                                key={tower}
+                                type="button"
+                                onClick={() => {
+                                  setActiveTourTower(tower);
+                                  const units = validTours.filter(
+                                    (t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === tower.toLowerCase()
+                                  );
+                                  setActiveTourUnit(units[0] || null);
+                                  setActiveRoomIndex(0);
+                                  setIsTowerDropdownOpen(false);
+                                }}
+                                className={`w-full px-3 py-2 text-left text-xs font-medium font-sans flex items-center justify-between cursor-pointer ${
+                                  isSelected ? 'bg-white/15 text-[#d4b26f]' : 'text-white/85 hover:bg-white/10 hover:text-white'
+                                }`}
+                              >
+                                <span className="truncate">{tower}</span>
+                                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#d4b26f] shrink-0" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Unit Dropdown */}
+                  {towerUnits.length > 0 && (
+                    <div className="relative flex-1 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsUnitDropdownOpen(!isUnitDropdownOpen);
+                          setIsTowerDropdownOpen(false);
+                        }}
+                        className="w-full bg-black/60 hover:bg-black/75 backdrop-blur-xl rounded-xl md:rounded-2xl px-3 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 border border-white/15 flex flex-col justify-center text-left cursor-pointer transition-all outline-none"
+                      >
+                        <span className="text-[8px] sm:text-[9px] md:text-[10px] font-semibold tracking-[0.14em] text-[#d4b26f] uppercase font-sans">
+                          Unit
+                        </span>
+                        <div className="flex items-center justify-between gap-1 mt-0.5">
+                          <span className="text-xs sm:text-[13px] md:text-[14px] font-medium text-white font-sans truncate">
+                            {activeTourUnit?.unit_name || activeTourUnit?.title || 'Standard Unit'}
+                          </span>
+                          <ChevronDown size={14} className={`text-white/80 transition-transform duration-300 ${isUnitDropdownOpen ? 'rotate-180' : ''}`} />
+                        </div>
+                      </button>
+
+                      {isUnitDropdownOpen && (
+                        <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[170px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl border border-white/15 py-1 z-[70]">
+                          {towerUnits.map((u: any) => {
+                            const isSelected = String(u.id) === String(activeTourUnit?.id);
+                            return (
+                              <button
+                                key={u.id}
+                                type="button"
+                                onClick={() => {
+                                  setActiveTourUnit(u);
+                                  setActiveRoomIndex(0);
+                                  setIsUnitDropdownOpen(false);
+                                }}
+                                className={`w-full px-3 py-2 text-left text-xs font-medium font-sans flex items-center justify-between cursor-pointer ${
+                                  isSelected ? 'bg-white/15 text-[#d4b26f]' : 'text-white/85 hover:bg-white/10 hover:text-white'
+                                }`}
+                              >
+                                <span className="truncate">{u.unit_name || u.title || 'Standard Unit'}</span>
+                                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#d4b26f] shrink-0" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 360 Viewer */}
+              <div className="flex-1 w-full h-full cursor-grab active:cursor-grabbing">
+                {activeScene?.image ? (
+                  <DynamicVirtualTour key={activeScene.image} image={activeScene.image} />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-white/50 text-sm font-sans uppercase tracking-widest">
+                    No panorama available for this area
+                  </div>
+                )}
+              </div>
+
+              {/* Carousel Strip */}
+              {currentAreas.length > 1 && (() => {
+                const startIndex = currentAreas.length <= maxVisible 
+                  ? 0 
+                  : Math.max(0, Math.min(activeRoomIndex - (maxVisible - 1), currentAreas.length - maxVisible));
+                const visibleAreas = currentAreas.slice(startIndex, startIndex + maxVisible);
+
+                return (
+                  <div className="absolute bottom-16 md:bottom-8 left-1/2 -translate-x-1/2 z-40 pointer-events-auto flex items-center gap-1 sm:gap-2 bg-black/65 hover:bg-black/75 backdrop-blur-2xl px-2.5 py-2 sm:px-4 sm:py-3 rounded-[22px] md:rounded-[28px] border border-white/15 shadow-[0_12px_40px_rgba(0,0,0,0.6)] max-w-[96vw]">
+                    <button
+                      type="button"
+                      onClick={() => setActiveRoomIndex((prev) => (prev - 1 + currentAreas.length) % currentAreas.length)}
+                      className="p-1 sm:p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer shrink-0"
+                    >
+                      <ChevronLeft size={18} className="md:w-[22px] md:h-[22px]" strokeWidth={2.5} />
+                    </button>
+
+                    <div className="flex items-end gap-2 sm:gap-3 md:gap-4 py-0.5 px-0.5 sm:px-1">
+                      {visibleAreas.map((area: any, offsetIdx: number) => {
+                        const originalIndex = startIndex + offsetIdx;
+                        const isSelected = activeRoomIndex === originalIndex;
+
+                        return (
+                          <button
+                            key={originalIndex}
+                            type="button"
+                            onClick={() => setActiveRoomIndex(originalIndex)}
+                            className="flex flex-col items-center gap-1 shrink-0 cursor-pointer group outline-none transition-transform duration-200"
+                          >
+                            <span className={`text-center font-sans tracking-tight transition-all duration-200 max-w-[62px] sm:max-w-[72px] md:max-w-[85px] truncate ${
+                              isSelected ? 'text-white text-[11px] sm:text-[13px] md:text-[15px] font-semibold scale-105' : 'text-white/65 text-[9px] sm:text-[11px] md:text-[12px] font-normal group-hover:text-white'
+                            }`}>
+                              {area.title || `Area ${originalIndex + 1}`}
+                            </span>
+                            <div className={`relative w-14 h-10 sm:w-16 sm:h-12 md:w-20 md:h-14 rounded-lg md:rounded-xl overflow-hidden transition-all duration-200 ${
+                              isSelected ? 'border-2 border-[#d4b26f] shadow-[0_0_12px_rgba(212,178,111,0.5)] scale-105' : 'border border-white/20 opacity-70 group-hover:opacity-100 group-hover:border-white/50'
+                            }`}>
+                              <img src={area.image} alt={area.title || `Area ${originalIndex + 1}`} className="w-full h-full object-cover" />
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveRoomIndex((prev) => (prev + 1) % currentAreas.length)}
+                      className="p-1 sm:p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer shrink-0"
+                    >
+                      <ChevronRight size={18} className="md:w-[22px] md:h-[22px]" strokeWidth={2.5} />
+                    </button>
+                  </div>
+                );
+              })()}
+
+            </div>
+          );
+        })()}
+
       </main>
       <Footer />
       <BackToTop />
@@ -910,11 +1316,23 @@ function DynamicProjectContent({ initialProjectData, currentSlug }: { initialPro
   );
 }
 
-export default function ProjectClient({ initialProjectData, currentSlug }: { initialProjectData: Project, currentSlug: string }) {
+export default function ProjectClient({ 
+  initialProjectData, 
+  currentSlug,
+  allProjects = []
+}: { 
+  initialProjectData: Project; 
+  currentSlug: string;
+  allProjects?: Array<{ id: number; title: string; slug: string }>;
+}) {
   return (
     <div className="min-h-screen bg-[#E7E7E7] font-sans">
       <Suspense fallback={<div className="min-h-screen bg-[#E7E7E7] flex items-center justify-center">Loading...</div>}>
-        <DynamicProjectContent initialProjectData={initialProjectData} currentSlug={currentSlug} />
+        <DynamicProjectContent 
+          initialProjectData={initialProjectData} 
+          currentSlug={currentSlug} 
+          allProjects={allProjects} 
+        />
       </Suspense>
     </div>
   );

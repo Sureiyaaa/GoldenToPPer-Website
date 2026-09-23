@@ -45,6 +45,7 @@ export default async function HomePage() {
       id,
       title,
       slug,
+      image,
       virtual_tours (*)
     `)
     .is('deleted_at', null)
