@@ -16,6 +16,16 @@ import BackToTop from './components/backtotop';
 import PageTransition from './components/page-transitions';
 import Homepage from './data/homepage.json';
 
+function resolveImageUrl(src: string | undefined | null): string {
+  if (!src || typeof src !== 'string' || src.trim() === '') {
+    return '/images/placeholder.jpg'; // or any fallback image in your /public folder
+  }
+  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('blob:')) {
+    return src;
+  }
+  return src.startsWith('/') ? src : `/${src}`;
+}
+
 if (typeof window !== 'undefined') {
   gsap.registerPlugin(ScrollTrigger, useGSAP);
 }
@@ -454,7 +464,7 @@ export default function HomeClient({
                 <div className="absolute inset-0 bg-brand-blue/20 z-10 transition-colors duration-500"></div>
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/40 z-10"></div>
                 <Image
-                  src={proj.img || proj.image}
+                  src={resolveImageUrl(proj.img || proj.image)}
                   alt={proj.title || 'Hero Slide'}
                   fill
                   sizes="100vw"
@@ -583,7 +593,13 @@ export default function HomeClient({
                 {heroProjects.map((proj: any, idx: number) => (
                   <button key={proj.id || idx} onClick={() => setActiveHero(idx)} className={`relative w-20 sm:w-28 md:w-36 lg:w-44 xl:w-52 aspect-[16/9] rounded-sm overflow-hidden cursor-pointer shrink-0 snap-center transition-all duration-500 outline-none ${activeHero === idx ? 'ring-2 md:ring-4 ring-brand-gold shadow-xl z-10 scale-100' : 'ring-1 ring-white/20 scale-95 opacity-60 hover:opacity-100'}`}>
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent z-10"></div>
-                    <Image src={proj.img || proj.image} alt={`Thumbnail for ${proj.title}`} fill sizes="(max-width: 768px) 30vw, 15vw" className="object-cover" />
+                    <Image 
+                        src={resolveImageUrl(proj.img || proj.image)} 
+                        alt={`Thumbnail for ${proj.title}`} 
+                        fill 
+                        sizes="(max-width: 768px) 30vw, 15vw" 
+                        className="object-cover" 
+                      />
                     <div className="absolute bottom-2 md:bottom-3 left-3 md:left-4 z-20">
                       <div className="text-white text-[0.65rem] md:text-sm font-serif font-bold text-left">{proj.title}</div>
                     </div>
@@ -697,14 +713,14 @@ export default function HomeClient({
 
                 <div className="w-full lg:w-[35%] h-52 md:h-64 lg:h-auto relative overflow-hidden shrink-0 bg-black">
                   {devAreas.map((area: any, index: number) => (
-                    <Image
-                      key={`img-${area.id || index}`}
-                      src={area.img || area.image}
-                      alt={area.tabTitle || area.tab_title || 'Development Area'}
-                      fill
-                      sizes="(max-width: 1024px) 100vw, 35vw"
-                      className={`object-cover transition-all duration-[1200ms] ease-in-out ${activeArea === index ? 'opacity-100 scale-100 z-10' : 'opacity-0 scale-125 z-0'}`}
-                    />
+                   <Image
+                    key={`img-${area.id || index}`}
+                    src={resolveImageUrl(area.img || area.image)}
+                    alt={area.tabTitle || area.tab_title || 'Development Area'}
+                    fill
+                    sizes="(max-width: 1024px) 100vw, 35vw"
+                    className={`object-cover transition-all duration-[1200ms] ease-in-out ${activeArea === index ? 'opacity-100 scale-100 z-10' : 'opacity-0 scale-125 z-0'}`}
+                  />
                   ))}
                 </div>
 
@@ -787,7 +803,13 @@ export default function HomeClient({
               {processList.map((step: any, idx: number) => (
                 <div key={idx} className="reveal-up group">
                   <div className="aspect-[4/3] bg-gray-200 overflow-hidden rounded-sm mb-8 relative cursor-pointer img-parallax-container">
-                    <Image src={step.img || step.image} alt={step.title} fill sizes="(max-width: 768px) 100vw, 50vw" className="object-cover parallax-img" />
+                    <Image 
+                      src={resolveImageUrl(step.img || step.image)} 
+                      alt={step.title} 
+                      fill 
+                      sizes="(max-width: 768px) 100vw, 50vw" 
+                      className="object-cover parallax-img" 
+                    />
                     <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors duration-500"></div>
                   </div>
                   <div className="flex gap-8 items-start border-b border-gray-200 pb-8">
@@ -805,7 +827,13 @@ export default function HomeClient({
           {/* Impact Video Section */}
           <section ref={massiveTextContainerRef} className="h-screen w-full bg-[#0a0a0a] text-white relative overflow-hidden flex flex-col items-center justify-center m-0">
             <div className="absolute inset-0 opacity-30">
-              <Image src={settings.video_bg_image || "/images/landingpage/el-sol-night.png"} alt="Architecture Structure Background" fill sizes="100vw" className="object-cover" />
+             <Image 
+                src={resolveImageUrl(settings.video_bg_image || "/images/landingpage/el-sol-night.png")} 
+                alt="Architecture Structure Background" 
+                fill 
+                sizes="100vw" 
+                className="object-cover" 
+              />
             </div>
 
             <div className="relative z-10 w-full h-full flex items-center justify-center px-4 md:px-12 perspective-[1000px]">
@@ -876,7 +904,7 @@ export default function HomeClient({
                 >
                   <div className="w-full aspect-[16/10] overflow-hidden rounded-sm mb-6 lg:mb-8 relative bg-gray-100 shadow-md">
                     <Image
-                      src={initialNews[0].image || '/images/placeholder.jpg'}
+                      src={resolveImageUrl(initialNews[0].image)}
                       alt={initialNews[0].title}
                       fill
                       sizes="(max-width: 1024px) 100vw, 60vw"
@@ -911,13 +939,13 @@ export default function HomeClient({
                       className={`group flex items-start gap-5 md:gap-6 py-6 cursor-pointer transition-colors duration-300 outline-none border-b border-gray-200 hover:border-brand-gold ${idx === 0 ? 'pt-0' : ''}`}
                     >
                       <div className="w-28 md:w-36 aspect-[4/3] rounded-sm overflow-hidden shrink-0 relative bg-gray-100 shadow-sm mt-1">
-                        <Image
-                          src={news.image || '/images/placeholder.jpg'}
-                          alt={news.title}
-                          fill
-                          sizes="(max-width: 768px) 30vw, 15vw"
-                          className="object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
-                        />
+                       <Image
+                        src={resolveImageUrl(news.image)}
+                        alt={news.title}
+                        fill
+                        sizes="(max-width: 768px) 30vw, 15vw"
+                        className="object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+                      />
                       </div>
 
                       <div className="flex flex-col flex-1">
