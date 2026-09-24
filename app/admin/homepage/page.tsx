@@ -122,43 +122,85 @@ export default function AdminHomepageVisualEditor() {
   const formData = watch();
 
   const handleSaveAll = async () => {
-    setIsSaving(true);
-    setFeedback(null);
-    try {
-      const settingsRes = await saveHomepageSettingsAction(formData.settings);
-      if (!settingsRes.success) throw new Error(settingsRes.error);
+  setIsSaving(true);
+  setFeedback(null);
+  try {
+    // 1. Upload any pending dropped files and track their public URLs
+    const uploadedUrls: Record<string, string> = {};
 
-      for (const [index, slide] of (formData.heroSlides || []).entries()) {
-        const { project_table, ...cleanSlide } = slide;
-        await upsertHomepageRowAction('homepage_hero_slides', { ...cleanSlide, sort_order: index + 1 });
-      }
+    for (const [fieldPath, file] of Object.entries(pendingFiles)) {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `homepage/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('images')
+        .upload(fileName, file, { cacheControl: '3600', upsert: false });
 
-      for (const [index, dev] of (formData.developmentAreas || []).entries()) {
-        await upsertHomepageRowAction('homepage_development_areas', { ...dev, sort_order: index + 1 });
-      }
+      if (uploadError) throw uploadError;
 
-      for (const [index, proc] of (formData.processSteps || []).entries()) {
-        await upsertHomepageRowAction('homepage_process_steps', { ...proc, sort_order: index + 1 });
-      }
+      const { data: { publicUrl } } = supabase.storage
+        .from('images')
+        .getPublicUrl(fileName);
 
-      for (const [index, aw] of (formData.awards || []).entries()) {
-        await upsertHomepageRowAction('homepage_awards', { ...aw, sort_order: index + 1 });
-      }
-
-      for (const article of (formData.newsArticles || [])) {
-        if (article.id) {
-            await upsertHomepageRowAction('news_updates', article);
-        }
-        }
-
-      setFeedback({ type: 'success', message: 'Homepage changes saved successfully!' });
-      await loadData();
-    } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message });
-    } finally {
-      setIsSaving(false);
+      uploadedUrls[fieldPath] = publicUrl;
+      setValue(fieldPath, publicUrl, { shouldDirty: true });
     }
-  };
+
+    setPendingFiles({});
+
+    // 2. Clone current form values and merge freshly uploaded URLs
+    const currentData = JSON.parse(JSON.stringify(watch()));
+
+    // Apply any uploaded URLs to the save payload
+    Object.entries(uploadedUrls).forEach(([path, url]) => {
+      const parts = path.split('.');
+      if (parts.length === 2) {
+        currentData[parts[0]][parts[1]] = url;
+      } else if (parts.length === 3) {
+        currentData[parts[0]][Number(parts[1])][parts[2]] = url;
+      }
+    });
+
+    // 3. Persist settings
+    const settingsRes = await saveHomepageSettingsAction(currentData.settings);
+    if (!settingsRes.success) throw new Error(settingsRes.error);
+
+    // 4. Persist Hero Slides
+    for (const [index, slide] of (currentData.heroSlides || []).entries()) {
+      const { project_table, ...cleanSlide } = slide;
+      await upsertHomepageRowAction('homepage_hero_slides', { ...cleanSlide, sort_order: index + 1 });
+    }
+
+    // 5. Persist Development Areas
+    for (const [index, dev] of (currentData.developmentAreas || []).entries()) {
+      await upsertHomepageRowAction('homepage_development_areas', { ...dev, sort_order: index + 1 });
+    }
+
+    // 6. Persist Process Steps
+    for (const [index, proc] of (currentData.processSteps || []).entries()) {
+      await upsertHomepageRowAction('homepage_process_steps', { ...proc, sort_order: index + 1 });
+    }
+
+    // 7. Persist Awards
+    for (const [index, aw] of (currentData.awards || []).entries()) {
+      await upsertHomepageRowAction('homepage_awards', { ...aw, sort_order: index + 1 });
+    }
+
+    // 8. Persist News
+    for (const article of (currentData.newsArticles || [])) {
+      if (article.id) {
+        await upsertHomepageRowAction('news_updates', article);
+      }
+    }
+
+    setFeedback({ type: 'success', message: 'Homepage changes saved successfully!' });
+    await loadData();
+  } catch (err: any) {
+    setFeedback({ type: 'error', message: err.message });
+  } finally {
+    setIsSaving(false);
+  }
+};
 
   const selectedIndex = typeof selectedRegion === 'string' && selectedRegion.includes(':') 
     ? Number(selectedRegion.split(':')[1]) 
@@ -352,16 +394,16 @@ export default function AdminHomepageVisualEditor() {
 
                     <div>
                       <ImageDropzone
-                        fieldPath={`heroSlides.${selectedIndex}.image`}
-                        label="Hero Slide Background Image"
-                        height="h-44"
-                        watch={watch}
-                        setValue={setValue}
-                        errors={{}}
-                        setPendingFiles={setPendingFiles}
-                        setPreviews={setPreviews}
-                        previews={previews}
-                      />
+                          fieldPath={`heroSlides.${selectedIndex}.image`}
+                          label="Hero Slide Background Image"
+                          height="h-44"
+                          watch={watch}
+                          setValue={setValue}
+                          errors={{}}
+                          setPendingFiles={setPendingFiles}
+                          setPreviews={setPreviews}
+                          previews={previews}
+                        />
                       <input
                         type="file"
                         accept="image/*"

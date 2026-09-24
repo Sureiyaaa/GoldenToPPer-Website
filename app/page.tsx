@@ -102,7 +102,7 @@ export default async function HomePage() {
     <HomeClient 
       initialNews={newsRes.data || []} 
       initialProjects={formattedProjects}
-      initialHomeContent={liveContent} 
+      initialHomeContent={liveContent || {}} 
     />
   );
 }

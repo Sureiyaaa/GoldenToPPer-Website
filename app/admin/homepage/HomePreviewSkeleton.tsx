@@ -25,6 +25,15 @@ interface HomePreviewSkeletonProps {
   onSelectRegion: (region: HomepageEditorRegion) => void;
 }
 
+function resolveImageUrl(src: string | undefined | null): string {
+  if (!src || src.trim() === '') {
+    return '/images/placeholder.jpg'; // or a real public placeholder image in your /public folder
+  }
+  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('blob:')) {
+    return src;
+  }
+  return src.startsWith('/') ? src : `/${src}`;
+}
 export default function HomePreviewSkeleton({
   data,
   selectedRegion,
@@ -67,9 +76,15 @@ export default function HomePreviewSkeleton({
           selectedRegion.startsWith('slide:') || selectedRegion === 'hero-section' ? 'ring-4 ring-brand-gold' : 'hover:ring-2 hover:ring-white/40'
         }`}
       >
-        {currentSlide.image && (
-          <Image src={currentSlide.image} alt="" fill className="object-cover opacity-60" priority />
-        )}
+        {resolveImageUrl(currentSlide?.image) ? (
+          <Image 
+            src={resolveImageUrl(currentSlide.image)} 
+            alt="" 
+            fill 
+            className="object-cover opacity-60" 
+            priority 
+          />
+        ) : null}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-black/40" />
 
         <div className="absolute inset-0 z-20 flex flex-col justify-center items-center text-center px-6">
@@ -91,25 +106,30 @@ export default function HomePreviewSkeleton({
           </div>
 
           <div className="absolute bottom-8 flex gap-3 z-30">
-            {heroSlides.map((slide: any, idx: number) => (
-              <button
-                key={slide.id || idx}
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveSlide(idx);
-                  onSelectRegion(`slide:${idx}`);
-                }}
-                className={`w-28 h-14 relative rounded overflow-hidden border-2 transition-all ${
-                  activeSlide === idx ? 'border-brand-gold scale-105' : 'border-white/20 opacity-50'
-                }`}
-              >
-                {slide.image && <Image src={slide.image} alt="" fill className="object-cover" />}
-                <div className="absolute inset-0 bg-black/40 flex items-end p-1 text-[9px] font-bold text-white truncate">
-                  {slide.heading_line_1}
-                </div>
-              </button>
-            ))}
+            {heroSlides.map((slide: any, idx: number) => {
+              const imgUrl = resolveImageUrl(slide.image);
+              return (
+                <button
+                  key={slide.id || idx}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveSlide(idx);
+                    onSelectRegion(`slide:${idx}`);
+                  }}
+                  className={`w-28 h-14 relative rounded overflow-hidden border-2 transition-all ${
+                    activeSlide === idx ? 'border-brand-gold scale-105' : 'border-white/20 opacity-50'
+                  }`}
+                >
+                  {imgUrl && (
+                    <Image src={imgUrl} alt="" fill className="object-cover" />
+                  )}
+                  <div className="absolute inset-0 bg-black/40 flex items-end p-1 text-[9px] font-bold text-white truncate">
+                    {slide.heading_line_1}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -184,7 +204,14 @@ export default function HomePreviewSkeleton({
           </div>
 
           <div className="w-full lg:w-[35%] relative min-h-[250px] bg-gray-200">
-            {currentDev.image && <Image src={currentDev.image} alt="" fill className="object-cover" />}
+            {currentDev.image && (
+              <Image 
+                src={resolveImageUrl(currentDev.image)} 
+                alt="" 
+                fill 
+                className="object-cover" 
+              />
+            )}
           </div>
 
           <div className="w-full lg:w-[35%] p-8 lg:p-12 flex flex-col justify-center bg-white">
@@ -245,7 +272,14 @@ export default function HomePreviewSkeleton({
               className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm"
             >
               <div className="h-44 relative mb-4 rounded overflow-hidden bg-gray-100">
-                {step.image && <Image src={step.image} alt="" fill className="object-cover" />}
+                {step.image && (
+                  <Image 
+                    src={resolveImageUrl(step.image)} 
+                    alt="" 
+                    fill 
+                    className="object-cover" 
+                  />
+                )}
               </div>
               <span className="text-2xl font-serif text-brand-gold font-bold block mb-2">{step.step_number}</span>
               <h4 className="text-xl font-serif text-brand-blue mb-2">{step.title}</h4>
@@ -268,9 +302,16 @@ export default function HomePreviewSkeleton({
         </div>
 
         <div className="w-[70%] max-w-4xl aspect-video rounded bg-gray-900 border border-white/20 relative overflow-hidden flex items-center justify-center">
-          {settings.video_thumbnail && (
-            <Image src={settings.video_thumbnail} alt="" fill className="object-cover opacity-50" />
-          )}
+          
+            {settings.video_thumbnail && (
+              <Image 
+                src={resolveImageUrl(settings.video_thumbnail)} 
+                alt="" 
+                fill 
+                className="object-cover opacity-50" 
+              />
+            )}
+      
           <div className="w-20 h-20 bg-white/20 backdrop-blur rounded-full flex items-center justify-center z-10 border border-white/30">
             <Play className="text-white ml-1 fill-white" size={32} />
           </div>
@@ -306,7 +347,14 @@ export default function HomePreviewSkeleton({
               }`}
             >
               <div className="h-40 w-full relative rounded-lg overflow-hidden bg-gray-100 mb-4">
-                {article.image && <Image src={article.image} alt="" fill className="object-cover" />}
+                {article.image && (
+                    <Image 
+                      src={resolveImageUrl(article.image)} 
+                      alt="" 
+                      fill 
+                      className="object-cover" 
+                    />
+                  )}
                 <span className="absolute top-2 left-2 bg-white/90 text-brand-blue font-bold text-[9px] uppercase tracking-wider px-2 py-1 rounded">
                   {article.category}
                 </span>
