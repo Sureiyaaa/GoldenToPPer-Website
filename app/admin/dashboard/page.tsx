@@ -1,6 +1,14 @@
 // app/admin/dashboard/page.tsx
 'use client';
 
+import {
+  fetchLiveHomepageAdminDataAction,
+  saveHomepageSettingsAction,
+  upsertHomepageRowAction,
+  toggleHomepageRowStatusAction,
+  deleteHomepageRowAction
+} from '@/app/actions/homepage';
+
 import { useState, useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -2480,6 +2488,7 @@ function HomeDashboard({
   checkPerm,
   onOpenSection,
 }: HomeDashboardProps) {
+  const router = useRouter();
   const [recentLogs, setRecentLogs] = useState<AuditLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(true);
   const [sectionStates, setSectionStates] = useState<any[]>([]);
@@ -2584,6 +2593,14 @@ function HomeDashboard({
         moduleCode: 'promotion_code',
         moduleName: 'PROMOTION',
         icon: Megaphone,
+      },
+
+      {
+        label: 'Homepage Content',
+        tab: 'Homepage Content',
+        moduleCode: 'homepage_manage',
+        moduleName: 'HOMEPAGE',
+        icon: LayoutDashboard,
       },
     ];
 
@@ -2918,7 +2935,13 @@ const handleSaveSectionChanges = async () => {
               key={card.tab}
               role="button"
               tabIndex={0}
-              onClick={() => onOpenSection(card.tab)}
+             onClick={() => {
+                if (card.tab === 'Homepage Content') {
+                  router.push('/admin/homepage');
+                } else {
+                  onOpenSection(card.tab);
+                }
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   onOpenSection(card.tab);
@@ -3223,6 +3246,41 @@ const handleSaveSectionChanges = async () => {
     </div>
   );
 }
+
+
+// Inside app/admin/dashboard/page.tsx
+
+function HomepageManager({ checkPerm }: ManagerProps) {
+  const router = useRouter();
+
+  return (
+    <div className="animate-in fade-in duration-300 max-w-4xl mx-auto py-12">
+      <div className="bg-white border border-gray-200 rounded-3xl p-10 shadow-sm text-center flex flex-col items-center">
+        <div className="w-16 h-16 rounded-2xl bg-brand-blue/5 text-brand-blue flex items-center justify-center mb-5">
+          <LayoutDashboard size={32} />
+        </div>
+        
+        <h2 className="text-2xl font-serif font-bold text-brand-blue mb-2">
+          Homepage Visual Canvas Editor
+        </h2>
+        
+        <p className="text-sm text-gray-500 max-w-md mx-auto mb-8 leading-relaxed">
+          Manage your hero carousel, About Us statistics, development areas, the process timeline, and video banner directly on a live interactive preview.
+        </p>
+
+        {checkPerm('homepage_manage', 'can_edit') && (
+          <button
+            type="button"
+            onClick={() => router.push('/admin/homepage')}
+            className="inline-flex items-center justify-center gap-3 px-8 py-4 bg-brand-blue text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-brand-gold hover:text-brand-blue transition-all shadow-md active:scale-95"
+          >
+            <LayoutDashboard size={16} /> Open Interactive Homepage Editor
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 // ==========================================
 // MAIN DASHBOARD WRAPPER
 // ==========================================
@@ -3324,7 +3382,13 @@ const ALL_MENU_ITEMS = [
     name: 'Modules',
     icon: Settings,
     moduleCode: 'admin_manage'
-  }
+  },
+
+  {
+    name: 'Homepage Content',
+    icon: LayoutDashboard,
+    moduleCode: 'homepage_manage'
+  },
 ];
 
   const allowedMenuItems = ALL_MENU_ITEMS.filter(item => checkPerm(item.moduleCode, 'can_view'));
@@ -3951,7 +4015,8 @@ const contentMenuItems = allowedMenuItems.filter(
             />
           ) : allowedMenuItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-32 text-center"><div className="w-20 h-20 bg-brand-blue/5 rounded-full flex justify-center items-center mb-6"><ShieldAlert size={32} className="text-brand-blue/40" /></div><h2 className="text-2xl font-serif text-brand-blue mb-3">No Access</h2><p className="text-gray-500 text-sm">Please contact your Super Admin to request access.</p></div>
-          ) : activeTab === 'Modules' ? <SystemModulesManager />
+        ): activeTab === 'Modules' ? <SystemModulesManager />
+          : activeTab === 'Homepage Content' ? <HomepageManager checkPerm={checkPerm} />
           : activeTab === 'Projects' ? <ProjectsManager checkPerm={checkPerm} />
           : activeTab === 'Virtual Tours' ? <VirtualToursManager checkPerm={checkPerm} />
           : activeTab === 'Navbar Setup' ? <NavbarProjectsManager checkPerm={checkPerm} />
