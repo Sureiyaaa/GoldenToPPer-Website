@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowRight, ChevronLeft, ChevronRight, Play, Move3d, X, ChevronDown} from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, Play, Move3d, X, ChevronDown } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -16,6 +16,15 @@ import BackToTop from './components/backtotop';
 import PageTransition from './components/page-transitions';
 import Homepage from './data/homepage.json';
 
+function resolveImageUrl(src: string | undefined | null): string {
+  if (!src || typeof src !== 'string' || src.trim() === '') {
+    return '/images/placeholder.jpg'; // or any fallback image in your /public folder
+  }
+  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('blob:')) {
+    return src;
+  }
+  return src.startsWith('/') ? src : `/${src}`;
+}
 
 if (typeof window !== 'undefined') {
   gsap.registerPlugin(ScrollTrigger, useGSAP);
@@ -41,7 +50,46 @@ function parseViewAreas(tour: any): any[] {
   return Array.isArray(raw) ? raw : [];
 }
 
-export default function HomeClient({ initialNews, initialProjects =[] }: { initialNews: any[]; initialProjects?: any[]; }) {
+interface HomeClientProps {
+  initialNews: any[];
+  initialProjects?: any[];
+  initialHomeContent?: {
+    settings?: any;
+    heroSlides?: any[];
+    developmentAreas?: any[];
+    processSteps?: any[];
+    awardsData?: any[];
+  };
+}
+
+export default function HomeClient({ 
+  initialNews, 
+  initialProjects = [], 
+  initialHomeContent 
+}: HomeClientProps) {
+
+  const heroProjects: any[] = (initialHomeContent?.heroSlides && initialHomeContent.heroSlides.length > 0)
+    ? initialHomeContent.heroSlides 
+    : Homepage.heroProjects;
+
+  const devAreas: any[] = (initialHomeContent?.developmentAreas && initialHomeContent.developmentAreas.length > 0)
+    ? initialHomeContent.developmentAreas 
+    : Homepage.developmentAreas;
+
+  const awardsList: any[] = (initialHomeContent?.awardsData && initialHomeContent.awardsData.length > 0)
+    ? initialHomeContent.awardsData 
+    : Homepage.awardsData;
+
+  const processList: any[] = (initialHomeContent?.processSteps && initialHomeContent.processSteps.length > 0)
+    ? initialHomeContent.processSteps 
+    : [
+        { num: "01", title: "Creating Better Communities", desc: "Golden Topper is a fast-emerging group of real estate companies working in collaboration to develop prime real estate projects across the Philippines.", img: "/images/landingpage/communities.webp" },
+        { num: "02", title: "Elevating lifestyles", desc: "Creating living spaces that are more than the ordinary, Golden Topper aims to deliver diverse living spaces catering to the needs of every homeowner.", img: "/images/landingpage/lifestyle.webp" },
+        { num: "03", title: "Providing high-value investments", desc: "Creating living spaces that are more than the ordinary, Golden Topper aims to deliver diverse living spaces catering to the needs of every homeowner.", img: "/images/landingpage/investment.webp" }
+      ];
+
+  const settings = initialHomeContent?.settings || {};
+
   const [activeHero, setActiveHero] = useState(0);
   const [activeArea, setActiveArea] = useState(0);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
@@ -56,18 +104,16 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
   const massiveTextContainerRef = useRef<HTMLElement>(null);
   const massiveTextRef = useRef<HTMLHeadingElement>(null);
 
-  // New refs for draggable marquee
   const marqueeTween = useRef<gsap.core.Tween | null>(null);
   const dragState = useRef({ isDragging: false, startX: 0, currentProgress: 0 });
 
-  // === 4-TIER HIERARCHY STATE ===
   const [activeTourProject, setActiveTourProject] = useState<any | null>(null);
-  const [activeTourTower, setActiveTourTower] = useState<string | null>(null); // NEW: Tower tier
+  const [activeTourTower, setActiveTourTower] = useState<string | null>(null);
   const [activeTourUnit, setActiveTourUnit] = useState<any | null>(null);
   const [activeRoomIndex, setActiveRoomIndex] = useState(0);
 
   const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
-  const [isTowerDropdownOpen, setIsTowerDropdownOpen] = useState(false); // NEW
+  const [isTowerDropdownOpen, setIsTowerDropdownOpen] = useState(false);
   const [isUnitDropdownOpen, setIsUnitDropdownOpen] = useState(false);
   const [maxVisible, setMaxVisible] = useState(6);
   
@@ -150,14 +196,22 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
   }, []);
 
   useEffect(() => {
+    if (heroProjects.length === 0) return;
     const autoPlayTimer = setTimeout(() => {
-      setActiveHero((prev) => (prev + 1) % Homepage.heroProjects.length);
+      setActiveHero((prev) => (prev + 1) % heroProjects.length);
     }, 5500);
     return () => clearTimeout(autoPlayTimer);
-  }, [activeHero]);
+  }, [activeHero, heroProjects.length]);
 
-  const nextHero = useCallback(() => setActiveHero((prev) => (prev + 1) % Homepage.heroProjects.length), []);
-  const prevHero = useCallback(() => setActiveHero((prev) => (prev - 1 + Homepage.heroProjects.length) % Homepage.heroProjects.length), []);
+  const nextHero = useCallback(() => {
+    if (heroProjects.length === 0) return;
+    setActiveHero((prev) => (prev + 1) % heroProjects.length);
+  }, [heroProjects.length]);
+
+  const prevHero = useCallback(() => {
+    if (heroProjects.length === 0) return;
+    setActiveHero((prev) => (prev - 1 + heroProjects.length) % heroProjects.length);
+  }, [heroProjects.length]);
 
   useGSAP(() => {
     let mm = gsap.matchMedia();
@@ -362,9 +416,8 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
       "-=1.5"
     );
 
-  }, [activeHero])
+  }, [activeHero]);
 
-  // Marquee Drag Event Handlers
   const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
     if (!marqueeTween.current) return;
     dragState.current.isDragging = true;
@@ -379,11 +432,9 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
     const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
     const deltaX = clientX - dragState.current.startX;
 
-    // Calculate drag distance relative to the marquee total translation length
     const totalDistance = marqueeRef.current.offsetWidth * 0.5;
     let newProgress = dragState.current.currentProgress - (deltaX / totalDistance);
 
-    // Make infinite wrapping smooth in both directions
     while (newProgress < 0) newProgress += 1;
     while (newProgress > 1) newProgress -= 1;
 
@@ -396,7 +447,7 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
     marqueeTween.current.play();
   };
 
-  const currentProject = Homepage.heroProjects[activeHero];
+  const currentProject = heroProjects[activeHero] || heroProjects[0];
 
   return (
     <PageTransition>
@@ -408,13 +459,13 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
         <main ref={mainRef} className="flex-1">
 
           <section ref={heroRef} className="relative w-full h-screen min-h-[650px] flex flex-col justify-center items-center overflow-hidden bg-black perspective-[1000px]">
-            {Homepage.heroProjects.map((proj, idx) => (
-              <div key={proj.id} className={`absolute inset-0 w-full h-full hero-slide hero-slide-${idx}`}>
+            {heroProjects.map((proj: any, idx: number) => (
+              <div key={proj.id || idx} className={`absolute inset-0 w-full h-full hero-slide hero-slide-${idx}`}>
                 <div className="absolute inset-0 bg-brand-blue/20 z-10 transition-colors duration-500"></div>
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/40 z-10"></div>
                 <Image
-                  src={proj.img}
-                  alt={proj.title}
+                  src={resolveImageUrl(proj.img || proj.image)}
+                  alt={proj.title || 'Hero Slide'}
                   fill
                   sizes="100vw"
                   priority={idx === 0}
@@ -423,127 +474,115 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
               </div>
             ))}
 
-            <div key={`text-${activeHero}`} className="relative z-30 max-w-[90rem] mx-auto w-full px-6 md:px-12 flex flex-col items-center text-center pb-28 md:pb-36 lg:pb-20">
-              <div className="flex flex-wrap justify-center text-[0.65rem] text-[12px] sm:text-xs md:text-[18px] tracking-[0.2em] md:tracking-[0.3em] uppercase text-white/80 font-medium mb-6 md:mb-8 gap-4 items-center">
+            {currentProject && (
+              <div key={`text-${activeHero}`} className="relative z-30 max-w-[90rem] mx-auto w-full px-6 md:px-12 flex flex-col items-center text-center pb-28 md:pb-36 lg:pb-20">
+                <div className="flex flex-wrap justify-center text-[0.65rem] text-[12px] sm:text-xs md:text-[18px] tracking-[0.2em] md:tracking-[0.3em] uppercase text-white/80 font-medium mb-6 md:mb-8 gap-4 items-center">
+                  <p className="flex flex-wrap justify-center text-white font-bold">
+                    {(`${currentProject.location || 'Philippines'}, Philippines`).split('').map((char: string, index: number) => (
+                      <span key={index} className="location-char inline-block">
+                        {char === ' ' ? '\u00A0' : char}
+                      </span>
+                    ))}
+                  </p>
+                </div>
 
-                <p className="flex flex-wrap justify-center text-white font-bold">
-                  {(`${Homepage.heroProjects[activeHero].location}, Philippines`).split('').map((char, index) => (
-                    <span key={index} className="location-char inline-block">
-                      {char === ' ' ? '\u00A0' : char}
+                <h1 className="hero-text-update text-[36px] sm:text-6xl md:text-7xl lg:text-[5.5rem] font-serif font-normmal text-white leading-[1.1] md:leading-[1.15] tracking-tight mb-8 md:mb-10 max-w-auto drop-shadow-2xl shadow-black py-2">
+                  {currentProject.headingLine1 || currentProject.heading_line_1} <br />
+                  <motion.span
+                    initial={{ backgroundPosition: "200% center" }}
+                    animate={{ backgroundPosition: "-200% center" }}
+                    transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
+                    className="inline-block text-transparent bg-clip-text bg-gradient-to-r from-brand-gold via-[#fff2cd] to-brand-gold bg-[length:200%_auto] drop-shadow-[0_0_20px_rgba(197,160,113,0.4)] pr-4 pb-2 pt-1"
+                  >
+                    {currentProject.headingLine2 || currentProject.heading_line_2}
+                  </motion.span>
+                </h1>
+
+                <div className="hero-text-update flex flex-col sm:flex-row gap-4 sm:gap-6 w-full sm:w-auto items-center justify-center">
+                  <Link
+                    href={`/projects/${currentProject.slug || ''}`}
+                    className="group relative flex items-center justify-center gap-6 w-full sm:w-auto bg-brand-blue px-8 py-4 overflow-hidden rounded-sm shadow-lg cursor-pointer outline-none"
+                  >
+                    <span className="absolute inset-0 w-full h-full bg-brand-gold transform -translate-x-full transition-transform duration-[0.6s] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-0"></span>
+                    <span className="relative z-10 text-[11px] tracking-[0.25em] font-normal text-white uppercase transition-colors duration-500">
+                      View Project
                     </span>
-                  ))}
-                </p>
-
-              </div>
-
-              <h1 className="hero-text-update text-[36px] sm:text-6xl md:text-7xl lg:text-[5.5rem] font-serif font-normmal text-white leading-[1.1] md:leading-[1.15] tracking-tight mb-8 md:mb-10 max-w-auto drop-shadow-2xl shadow-black py-2">
-                {Homepage.heroProjects[activeHero].headingLine1} <br />
-                <motion.span
-                  initial={{ backgroundPosition: "200% center" }}
-                  animate={{ backgroundPosition: "-200% center" }}
-                  transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
-                  className="inline-block text-transparent bg-clip-text bg-gradient-to-r from-brand-gold via-[#fff2cd] to-brand-gold bg-[length:200%_auto] drop-shadow-[0_0_20px_rgba(197,160,113,0.4)] pr-4 pb-2 pt-1"
-                >
-                  {Homepage.heroProjects[activeHero].headingLine2}
-                </motion.span>
-              </h1>
-
-              <div className="hero-text-update flex flex-col sm:flex-row gap-4 sm:gap-6 w-full sm:w-auto items-center justify-center">
-                {/* 1. Primary: View Project */}
-                <Link
-                  href={`/projects/${currentProject.slug}`}
-                  className="group relative flex items-center justify-center gap-6 w-full sm:w-auto bg-brand-blue px-8 py-4 overflow-hidden rounded-sm shadow-lg cursor-pointer outline-none"
-                >
-                  <span className="absolute inset-0 w-full h-full bg-brand-gold transform -translate-x-full transition-transform duration-[0.6s] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-0"></span>
-                  <span className="relative z-10 text-[11px] tracking-[0.25em] font-normal text-white uppercase transition-colors duration-500">
-                    View Project
-                  </span>
-                  <div className="relative z-10 overflow-hidden w-5 h-5 flex items-center justify-center shrink-0">
-                    <ArrowRight size={16} className="absolute text-white transform translate-x-0 transition-transform duration-[0.6s] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-[150%]" />
-                    <ArrowRight size={16} className="absolute text-white transform -translate-x-[150%] transition-transform duration-[0.6s] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-0" />
-                  </div>
-                </Link>
-
-                {/* 2. Secondary: 360° Virtual Tour or Coming Soon */}
-                {(() => {
-                  const heroTitle = (currentProject?.title || '').toLowerCase().trim();
-                  const heroSlug = (currentProject?.slug || '').toLowerCase().replace(/^\//, '').trim();
-
-                  const projectMatch = initialProjects.find((p: any) => {
-                    const pName = (p.name || p.title || '').toLowerCase().trim();
-                    const pSlug = (p.slug || '').toLowerCase().replace(/^\//, '').trim();
-                    return (
-                      (heroSlug && pSlug === heroSlug) ||
-                      (heroTitle && pName.includes(heroTitle)) ||
-                      (heroTitle && heroTitle.includes(pName))
-                    );
-                  });
-
-                  // Check for active tours with photos or fallback URL
-                  const validTours = (projectMatch?.virtual_tours || []).filter((tour: any) => {
-                    const areas = parseViewAreas(tour);
-                    const isActive = !tour.status || tour.status.toLowerCase() === 'active';
-                    return isActive && (areas.length > 0 || Boolean(tour.image || tour.tour_url || tour.url));
-                  });
-
-                  const hasTour = validTours.length > 0;
-
-                  return hasTour ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!projectMatch) return;
-                        setActiveTourProject(projectMatch);
-
-                        if (validTours.length > 0) {
-                          const towers = Array.from(
-                            new Set(validTours.map((t: any) => t.tower_name?.trim()).filter(Boolean))
-                          ).sort((a: any, b: any) => a.localeCompare(b, undefined, { numeric: true }));
-
-                          const initialTower = (towers[0] as string) || null;
-                          setActiveTourTower(initialTower);
-
-                          const towerUnits = initialTower
-                            ? validTours.filter((t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === initialTower.toLowerCase())
-                            : validTours;
-
-                          const targetUnit = towerUnits[0] || validTours[0];
-                          const areas = parseViewAreas(targetUnit);
-                          if (areas.length === 0 && (targetUnit.image || targetUnit.url)) {
-                            targetUnit.view_areas = [{ title: 'Main Area', image: targetUnit.image || targetUnit.url }];
-                          }
-
-                          setActiveTourUnit(targetUnit);
-                        } else if (projectMatch.virtual_tour_url) {
-                          setActiveTourTower('Tower A');
-                          setActiveTourUnit({
-                            id: 'legacy',
-                            unit_name: 'Main Unit',
-                            title: 'Virtual Tour',
-                            view_areas: [{ title: 'Main View', image: projectMatch.virtual_tour_url }],
-                          });
-                        }
-                        setActiveRoomIndex(0);
-                      }}
-                      className="group flex items-center justify-center gap-3 w-full sm:w-auto bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/25 hover:border-brand-gold px-8 py-4 rounded-sm shadow-lg transition-all duration-300 outline-none cursor-pointer"
-                    >
-                      <Move3d size={16} className="text-brand-gold transition-transform duration-300 group-hover:scale-110" />
-                      <span className="text-[11px] tracking-[0.25em] font-normal text-white uppercase group-hover:text-brand-gold transition-colors duration-300">
-                        Virtual Tour
-                      </span>
-                    </button>
-                  ) : (
-                    <div className="flex items-center justify-center gap-2.5 px-6 py-4 rounded-sm border border-white/15 bg-black/30 backdrop-blur-md cursor-default text-white/50 w-full sm:w-auto">
-                      <Move3d size={16} className="text-white/40" />
-                      <span className="text-[11px] tracking-[0.25em] font-normal uppercase text-white/50">
-                        Coming Soon
-                      </span>
+                    <div className="relative z-10 overflow-hidden w-5 h-5 flex items-center justify-center shrink-0">
+                      <ArrowRight size={16} className="absolute text-white transform translate-x-0 transition-transform duration-[0.6s] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-[150%]" />
+                      <ArrowRight size={16} className="absolute text-white transform -translate-x-[150%] transition-transform duration-[0.6s] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-0" />
                     </div>
-                  );
-                  })()}
-            </div>
+                  </Link>
 
-            </div>
+                  {(() => {
+                    const heroTitle = (currentProject?.title || '').toLowerCase().trim();
+                    const heroSlug = (currentProject?.slug || '').toLowerCase().replace(/^\//, '').trim();
+
+                    const projectMatch = initialProjects.find((p: any) => {
+                      const pName = (p.name || p.title || '').toLowerCase().trim();
+                      const pSlug = (p.slug || '').toLowerCase().replace(/^\//, '').trim();
+                      return (
+                        (heroSlug && pSlug === heroSlug) ||
+                        (heroTitle && pName.includes(heroTitle)) ||
+                        (heroTitle && heroTitle.includes(pName))
+                      );
+                    });
+
+                    const validTours = (projectMatch?.virtual_tours || []).filter((tour: any) => {
+                      const areas = parseViewAreas(tour);
+                      const isActive = !tour.status || tour.status.toLowerCase() === 'active';
+                      return isActive && (areas.length > 0 || Boolean(tour.image || tour.tour_url || tour.url));
+                    });
+
+                    const hasTour = validTours.length > 0;
+
+                    return hasTour ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!projectMatch) return;
+                          setActiveTourProject(projectMatch);
+
+                          if (validTours.length > 0) {
+                            const towers = Array.from(
+                              new Set(validTours.map((t: any) => t.tower_name?.trim()).filter(Boolean))
+                            ).sort((a: any, b: any) => a.localeCompare(b, undefined, { numeric: true }));
+
+                            const initialTower = (towers[0] as string) || null;
+                            setActiveTourTower(initialTower);
+
+                            const towerUnits = initialTower
+                              ? validTours.filter((t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === initialTower.toLowerCase())
+                              : validTours;
+
+                            const targetUnit = towerUnits[0] || validTours[0];
+                            const areas = parseViewAreas(targetUnit);
+                            if (areas.length === 0 && (targetUnit.image || targetUnit.url)) {
+                              targetUnit.view_areas = [{ title: 'Main Area', image: targetUnit.image || targetUnit.url }];
+                            }
+
+                            setActiveTourUnit(targetUnit);
+                          }
+                          setActiveRoomIndex(0);
+                        }}
+                        className="group flex items-center justify-center gap-3 w-full sm:w-auto bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/25 hover:border-brand-gold px-8 py-4 rounded-sm shadow-lg transition-all duration-300 outline-none cursor-pointer"
+                      >
+                        <Move3d size={16} className="text-brand-gold transition-transform duration-300 group-hover:scale-110" />
+                        <span className="text-[11px] tracking-[0.25em] font-normal text-white uppercase group-hover:text-brand-gold transition-colors duration-300">
+                          Virtual Tour
+                        </span>
+                      </button>
+                    ) : (
+                      <div className="flex items-center justify-center gap-2.5 px-6 py-4 rounded-sm border border-white/15 bg-black/30 backdrop-blur-md cursor-default text-white/50 w-full sm:w-auto">
+                        <Move3d size={16} className="text-white/40" />
+                        <span className="text-[11px] tracking-[0.25em] font-normal uppercase text-white/50">
+                          Coming Soon
+                        </span>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
 
             <div className="absolute bottom-4 sm:bottom-6 md:bottom-8 lg:bottom-12 w-full z-40 px-4 md:px-12 hidden sm:flex items-center justify-center gap-2 sm:gap-4 md:gap-8">
               <button onClick={prevHero} className="hidden md:flex w-12 h-12 md:w-14 md:h-14 rounded-full border border-white/30 bg-white/10 items-center justify-center text-white hover:bg-brand-gold hover:border-brand-gold backdrop-blur-md cursor-pointer shrink-0 transition-all duration-300 outline-none">
@@ -551,10 +590,16 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
               </button>
 
               <div className="flex gap-3 md:gap-4 overflow-x-auto overflow-y-hidden [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] py-4 px-2 max-w-[90vw] md:max-w-[80vw] lg:max-w-[70vw] snap-x snap-mandatory">
-                {Homepage.heroProjects.map((proj, idx) => (
-                  <button key={proj.id} onClick={() => setActiveHero(idx)} className={`relative w-20 sm:w-28 md:w-36 lg:w-44 xl:w-52 aspect-[16/9] rounded-sm overflow-hidden cursor-pointer shrink-0 snap-center transition-all duration-500 outline-none ${activeHero === idx ? 'ring-2 md:ring-4 ring-brand-gold shadow-xl z-10 scale-100' : 'ring-1 ring-white/20 scale-95 opacity-60 hover:opacity-100'}`}>
+                {heroProjects.map((proj: any, idx: number) => (
+                  <button key={proj.id || idx} onClick={() => setActiveHero(idx)} className={`relative w-20 sm:w-28 md:w-36 lg:w-44 xl:w-52 aspect-[16/9] rounded-sm overflow-hidden cursor-pointer shrink-0 snap-center transition-all duration-500 outline-none ${activeHero === idx ? 'ring-2 md:ring-4 ring-brand-gold shadow-xl z-10 scale-100' : 'ring-1 ring-white/20 scale-95 opacity-60 hover:opacity-100'}`}>
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent z-10"></div>
-                    <Image src={proj.img} alt={`Thumbnail for ${proj.title}`} fill sizes="(max-width: 768px) 30vw, 15vw" className="object-cover" />
+                    <Image 
+                        src={resolveImageUrl(proj.img || proj.image)} 
+                        alt={`Thumbnail for ${proj.title}`} 
+                        fill 
+                        sizes="(max-width: 768px) 30vw, 15vw" 
+                        className="object-cover" 
+                      />
                     <div className="absolute bottom-2 md:bottom-3 left-3 md:left-4 z-20">
                       <div className="text-white text-[0.65rem] md:text-sm font-serif font-bold text-left">{proj.title}</div>
                     </div>
@@ -568,22 +613,35 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
             </div>
           </section>
 
+          {/* About Section */}
           <section className="py-20 md:py-24 lg:py-40 bg-white w-full flex items-center justify-center overflow-hidden">
             <div className="max-w-[90rem] mx-auto w-full px-6 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
               <div className="about-pop lg:col-span-7">
-                <h4 className="text-brand-gold font-bold text-xs md:text-sm tracking-widest uppercase mb-4">About Us</h4>
+                <h4 className="text-brand-gold font-bold text-xs md:text-sm tracking-widest uppercase mb-4">
+                  {settings.about_tagline || 'About Us'}
+                </h4>
                 <h2 className="text-brand-blue text-3xl sm:text-5xl md:text-6xl lg:text-6xl font-serif mb-6 md:mb-8 leading-tight">
-                  Better Cities,{' '}
-                  <span className="inline-block overflow-hidden align-bottom">
-                    <span className="inline-block animate-better text-brand-gold">Better</span>
-                  </span>{' '}
-                  <span className="inline-block overflow-hidden align-bottom">
-                    <span className="inline-block animate-lives text-brand-gold">Lives</span>
-                  </span>
+                  {settings.about_heading ? (
+                    settings.about_heading
+                  ) : (
+                    <>
+                      Better Cities,{' '}
+                      <span className="inline-block overflow-hidden align-bottom">
+                        <span className="inline-block animate-better text-brand-gold">Better</span>
+                      </span>{' '}
+                      <span className="inline-block overflow-hidden align-bottom">
+                        <span className="inline-block animate-lives text-brand-gold">Lives</span>
+                      </span>
+                    </>
+                  )}
                 </h2>
                 <div className="text-justify text-gray space-y-4 md:space-y-6 mb-8 md:mb-10 text-base md:text-xl font-light leading-relaxed">
-                  <p>Golden Topper is a fast-emerging group of real estate companies working in collaboration to develop high quality prime branding real estate projects across the Philippines.</p>
-                  <p>We believe that better cities lead to better lives. This belief drives our commitment to innovate world-class developments to elevate lifestyles and provide high-value investments.</p>
+                  <p>
+                    {settings.about_description_1 || 'Golden Topper is a fast-emerging group of real estate companies working in collaboration to develop high quality prime branding real estate projects across the Philippines.'}
+                  </p>
+                  <p>
+                    {settings.about_description_2 || 'We believe that better cities lead to better lives. This belief drives our commitment to innovate world-class developments to elevate lifestyles and provide high-value investments.'}
+                  </p>
                 </div>
 
                 <Link href="/story" className="group relative flex items-center justify-center gap-6 w-full sm:w-auto bg-brand-blue px-8 py-4 overflow-hidden rounded-sm shadow-md cursor-pointer outline-none mt-4">
@@ -596,15 +654,14 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                     <ArrowRight size={16} className="absolute text-white transform -translate-x-[150%] transition-transform duration-[0.6s] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-0" />
                   </div>
                 </Link>
-
               </div>
 
               <div className="flex flex-col gap-8 sm:gap-12 lg:col-span-4 lg:col-start-9 about-pop stat-container">
                 {[
-                  { target: 10, suffix: "+", label: "Projects under Development" },
-                  { target: 200, suffix: "+", label: "Professionals in Our Team" },
-                  { target: 300, suffix: "K+", label: "Landbank Area Covered (sqm)" }
-                ].map((stat, i) => (
+                  { target: Number(settings.stat_projects_val) || 10, suffix: settings.stat_projects_suffix || "+", label: settings.stat_projects_label || "Projects under Development" },
+                  { target: Number(settings.stat_team_val) || 200, suffix: settings.stat_team_suffix || "+", label: settings.stat_team_label || "Professionals in Our Team" },
+                  { target: Number(settings.stat_landbank_val) || 300, suffix: settings.stat_landbank_suffix || "K+", label: settings.stat_landbank_label || "Landbank Area Covered (sqm)" }
+                ].map((stat: any, i: number) => (
                   <div key={i} className="flex flex-col">
                     <span className="stat-counter text-brand-gold text-4xl sm:text-5xl md:text-6xl font-serif mb-1 sm:mb-2" data-target={stat.target} data-suffix={stat.suffix}>
                       0{stat.suffix}
@@ -616,6 +673,7 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
             </div>
           </section>
 
+          {/* Development Areas Section */}
           <section className="relative w-full bg-[#E7E7E7] pb-10 md:pb-32">
             <div className="relative w-full h-[300px] md:h-[100vh] md:min-h-[450px] bg-black">
               <Image src="/images/landingpage/BDC_Goldentopper.jpg" alt="Golden Topper Best Developer Cebu" fill sizes="100vw" className="object-contain md:object-cover object-top md:object-center opacity-70" />
@@ -624,13 +682,12 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
 
             <div className="relative z-10 max-w-[85rem] mx-auto px-4 md:px-8 -mt-20 md:-mt-40">
               <div className="w-full bg-white rounded-sm shadow-[0_30px_60px_rgba(0,0,0,0.1)] flex flex-col lg:flex-row overflow-hidden md:min-h-[550px]">
-
                 <div className="w-full lg:w-[30%] flex flex-col border-r border-gray-100 shrink-0 bg-white" role="tablist">
-                  {Homepage.developmentAreas.map((area, index) => {
+                  {devAreas.map((area: any, index: number) => {
                     const isActive = activeArea === index;
                     return (
                       <button
-                        key={area.id}
+                        key={area.id || index}
                         role="tab"
                         aria-selected={isActive}
                         onClick={() => setActiveArea(index)}
@@ -638,12 +695,12 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                       >
                         <div className="w-14 md:w-20 flex items-center justify-center shrink-0">
                           <span className={`font-serif text-sm md:text-xl transition-colors duration-300 ${isActive ? 'text-brand-gold font-bold' : 'text-gray-300 group-hover:text-gray-400'}`}>
-                            {area.id}
+                            {area.id || area.tab_number}
                           </span>
                         </div>
                         <div className="flex-1 px-4 py-4 md:px-6 md:py-0 flex justify-between items-center">
                           <span className={`text-sm md:text-base transition-colors duration-300 ${isActive ? 'text-brand-blue font-bold' : 'text-gray-500 font-medium'}`}>
-                            {area.tabTitle}
+                            {area.tabTitle || area.tab_title}
                           </span>
                           <span className={`text-brand-gold transition-all duration-300 ${isActive ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'}`}>
                             <ArrowRight size={18} />
@@ -655,22 +712,22 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                 </div>
 
                 <div className="w-full lg:w-[35%] h-52 md:h-64 lg:h-auto relative overflow-hidden shrink-0 bg-black">
-                  {Homepage.developmentAreas.map((area, index) => (
-                    <Image
-                      key={`img-${area.id}`}
-                      src={area.img}
-                      alt={area.tabTitle}
-                      fill
-                      sizes="(max-width: 1024px) 100vw, 35vw"
-                      className={`object-cover transition-all duration-[1200ms] ease-in-out ${activeArea === index ? 'opacity-100 scale-100 z-10' : 'opacity-0 scale-125 z-0'}`}
-                    />
+                  {devAreas.map((area: any, index: number) => (
+                   <Image
+                    key={`img-${area.id || index}`}
+                    src={resolveImageUrl(area.img || area.image)}
+                    alt={area.tabTitle || area.tab_title || 'Development Area'}
+                    fill
+                    sizes="(max-width: 1024px) 100vw, 35vw"
+                    className={`object-cover transition-all duration-[1200ms] ease-in-out ${activeArea === index ? 'opacity-100 scale-100 z-10' : 'opacity-0 scale-125 z-0'}`}
+                  />
                   ))}
                 </div>
 
                 <div className="w-full lg:w-[35%] relative bg-white shrink-0 min-h-[300px] md:min-h-[350px] lg:min-h-full">
-                  {Homepage.developmentAreas.map((area, index) => (
+                  {devAreas.map((area: any, index: number) => (
                     <div
-                      key={`text-${area.id}`}
+                      key={`text-${area.id || index}`}
                       className={`absolute inset-0 p-8 md:p-14 flex flex-col justify-center transition-all duration-[800ms] ease-out ${activeArea === index ? 'opacity-100 translate-y-0 pointer-events-auto z-10 delay-200' : 'opacity-0 translate-y-12 pointer-events-none z-0'}`}
                     >
                       <h5 className="text-brand-gold text-[10px] md:text-xs font-bold tracking-[0.2em] uppercase mb-4">
@@ -680,17 +737,16 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                         {area.heading}
                       </h3>
                       <p className="text-gray text-sm md:text-base font-light leading-relaxed">
-                        {area.desc}
+                        {area.desc || area.description}
                       </p>
                     </div>
                   ))}
                 </div>
-
               </div>
             </div>
           </section>
 
-          {/* DRAGGABLE MARQUEE SECTION */}
+          {/* Marquee Section */}
           <section
             className="py-6 md:py-10 bg-brand-blue text-white relative overflow-hidden flex items-center cursor-grab active:cursor-grabbing select-none"
             style={{ touchAction: 'pan-y' }}
@@ -708,13 +764,13 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
             <div ref={marqueeRef} className="flex w-max">
               {[...Array(4)].map((_, containerIndex) => (
                 <div key={containerIndex} className="flex gap-8 md:gap-40 px-4 md:px-20 items-start shrink-0">
-                  {Homepage.awardsData.map((award) => (
-                    <div key={award.id} className="flex flex-col items-center w-32 md:w-80 text-center shrink-0">
-                      <img src="/images/landingpage/award.svg" alt="Award Laurel" className="w-12 md:w-40 h-auto mb-3 md:mb-6 pointer-events-none" />
+                  {awardsList.map((award: any, aIdx: number) => (
+                    <div key={award.id || aIdx} className="flex flex-col items-center w-32 md:w-80 text-center shrink-0">
+                      <img src={award.icon_image || "/images/landingpage/award.svg"} alt="Award Laurel" className="w-12 md:w-40 h-auto mb-3 md:mb-6 pointer-events-none" />
                       <h3 className="text-xs md:text-xl font-bold mb-1 md:mb-3 whitespace-pre-line leading-tight text-brand-gold">{award.title}</h3>
                       <div className="mt-auto flex flex-col gap-0 md:gap-1 text-gray-300">
-                        <p className="text-[9px] md:text-sm font-light tracking-wide leading-tight">{award.subtitle1}</p>
-                        {award.subtitle2 && <p className="text-[9px] md:text-sm font-light tracking-wide leading-tight">{award.subtitle2}</p>}
+                        <p className="text-[9px] md:text-sm font-light tracking-wide leading-tight">{award.subtitle1 || award.subtitle_1}</p>
+                        {(award.subtitle2 || award.subtitle_2) && <p className="text-[9px] md:text-sm font-light tracking-wide leading-tight">{award.subtitle2 || award.subtitle_2}</p>}
                       </div>
                     </div>
                   ))}
@@ -723,37 +779,44 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
             </div>
           </section>
 
+          {/* The Golden Standard Process Section */}
           <section ref={pinnedSectionRef} className="max-w-[90rem] mx-auto px-6 md:px-12 py-32 flex flex-col md:flex-row gap-20 relative items-start perspective-[1000px]">
             <div className="md:w-5/12 self-start md:sticky md:top-40 h-auto">
               <div className="w-full">
                 <div className="text-xs md:text-sm tracking-widest uppercase text-brand-gold font-bold mb-8 flex items-center gap-4">
-                  The Process
+                  {settings.process_tagline || 'The Process'}
                 </div>
                 <h2 className="text-5xl md:text-7xl font-serif leading-[1.1] text-brand-blue tracking-tighter mb-8">
-                  The Golden <br /><span className="text-brand-gold">Standard.</span>
+                  {settings.process_heading ? (
+                    settings.process_heading
+                  ) : (
+                    <>The Golden <br /><span className="text-brand-gold">Standard.</span></>
+                  )}
                 </h2>
                 <p className="text-xl text-gray font-light leading-relaxed max-w-md">
-                  We don't just build structures; we forge landmarks. Our meticulous three-step approach ensures your vision is executed with uncompromising precision.
+                  {settings.process_description || "We don't just build structures; we forge landmarks. Our meticulous three-step approach ensures your vision is executed with uncompromising precision."}
                 </p>
               </div>
             </div>
 
             <div className="md:w-7/12 flex flex-col gap-32 md:pb-[10vh]">
-              {[
-                { num: "01", title: "Creating Better Communities", desc: "Golden Topper is a fast-emerging group of real estate companies working in collaboration to develop prime real estate projects across the Philippines.", img: "/images/landingpage/communities.webp" },
-                { num: "02", title: "Elevating lifestyles", desc: "Creating living spaces that are more than the ordinary, Golden Topper aims to deliver diverse living spaces catering to the needs of every homeowner.", img: "/images/landingpage/lifestyle.webp" },
-                { num: "03", title: "Providing high-value investments", desc: "Creating living spaces that are more than the ordinary, Golden Topper aims to deliver diverse living spaces catering to the needs of every homeowner.", img: "/images/landingpage/investment.webp" }
-              ].map((step, idx) => (
+              {processList.map((step: any, idx: number) => (
                 <div key={idx} className="reveal-up group">
                   <div className="aspect-[4/3] bg-gray-200 overflow-hidden rounded-sm mb-8 relative cursor-pointer img-parallax-container">
-                    <Image src={step.img} alt={step.title} fill sizes="(max-width: 768px) 100vw, 50vw" className="object-cover parallax-img" />
+                    <Image 
+                      src={resolveImageUrl(step.img || step.image)} 
+                      alt={step.title} 
+                      fill 
+                      sizes="(max-width: 768px) 100vw, 50vw" 
+                      className="object-cover parallax-img" 
+                    />
                     <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors duration-500"></div>
                   </div>
                   <div className="flex gap-8 items-start border-b border-gray-200 pb-8">
-                    <div className="text-3xl font-serif text-brand-gold">{step.num}</div>
+                    <div className="text-3xl font-serif text-brand-gold">{step.num || step.step_number}</div>
                     <div>
                       <h3 className="text-3xl font-serif mb-4 text-brand-blue">{step.title}</h3>
-                      <p className="text-gray font-light leading-relaxed">{step.desc}</p>
+                      <p className="text-gray font-light leading-relaxed">{step.desc || step.description}</p>
                     </div>
                   </div>
                 </div>
@@ -761,16 +824,25 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
             </div>
           </section>
 
+          {/* Impact Video Section */}
           <section ref={massiveTextContainerRef} className="h-screen w-full bg-[#0a0a0a] text-white relative overflow-hidden flex flex-col items-center justify-center m-0">
             <div className="absolute inset-0 opacity-30">
-              <Image src="/images/landingpage/el-sol-night.png" alt="Architecture Structure Background" fill sizes="100vw" className="object-cover" />
+             <Image 
+                src={resolveImageUrl(settings.video_bg_image || "/images/landingpage/el-sol-night.png")} 
+                alt="Architecture Structure Background" 
+                fill 
+                sizes="100vw" 
+                className="object-cover" 
+              />
             </div>
 
             <div className="relative z-10 w-full h-full flex items-center justify-center px-4 md:px-12 perspective-[1000px]">
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <div className="impact-subtitle text-xs md:text-[26px] tracking-[0.4em] uppercase text-white font-bold opacity-80 mb-4 z-20">BUILD YOUR</div>
+                <div className="impact-subtitle text-xs md:text-[26px] tracking-[0.4em] uppercase text-white font-bold opacity-80 mb-4 z-20">
+                  {settings.video_subtitle || 'BUILD YOUR'}
+                </div>
                 <h2 ref={massiveTextRef} className="text-[18vw] text-[40px] md:text-[10vw] font-serif leading-none tracking-tight text-brand-gold z-10 will-change-transform">
-                  FUTURE HERE
+                  {settings.video_heading || 'FUTURE HERE'}
                 </h2>
               </div>
 
@@ -782,7 +854,7 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                     aria-label="Play Golden Topper Impact Video"
                   >
                     <Image
-                      src="https://img.youtube.com/vi/-MT4zfvcm3Q/maxresdefault.jpg"
+                      src={settings.video_thumbnail || "https://img.youtube.com/vi/-MT4zfvcm3Q/maxresdefault.jpg"}
                       alt="Video Thumbnail"
                       fill
                       sizes="(max-width: 768px) 90vw, 70vw"
@@ -795,7 +867,7 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                 ) : (
                   <iframe
                     className="absolute inset-0 w-full h-full object-cover"
-                    src="https://www.youtube.com/embed/-MT4zfvcm3Q?si=XLxESExPKSvBe9X6&autoplay=1&enablejsapi=1&mute=0&controls=1&rel=0"
+                    src={settings.video_url || "https://www.youtube.com/embed/-MT4zfvcm3Q?si=XLxESExPKSvBe9X6&autoplay=1&enablejsapi=1&mute=0&controls=1&rel=0"}
                     title="Golden Topper Video"
                     frameBorder="0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -806,9 +878,8 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
             </div>
           </section>
 
+          {/* News & Updates Section */}
           <section className="max-w-[90rem] mx-auto px-6 md:px-12 pb-32 pt-32">
-
-            {/* Header Area */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 md:mb-16 gap-6">
               <div>
                 <div className="text-xs md:text-sm tracking-widest uppercase text-brand-gold font-bold mb-4 flex items-center gap-4">
@@ -819,7 +890,6 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                 </h2>
               </div>
 
-              {/* Desktop View All Button */}
               <Link href="/news&updates" className="hidden md:flex items-center justify-center gap-4 border border-brand-blue px-8 py-4 rounded-sm text-[11px] font-bold tracking-[0.25em] text-brand-blue uppercase hover:bg-brand-blue hover:text-white transition-all duration-300 outline-none group shrink-0 shadow-sm hover:shadow-md">
                 View All News
                 <ArrowRight size={16} className="transform group-hover:translate-x-1 transition-transform duration-300" />
@@ -828,16 +898,13 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
 
             {initialNews && initialNews.length > 0 ? (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 items-start">
-
-                {/* 1. FEATURED ARTICLE (Left Column) */}
                 <Link
                   href={`/news&updates/${initialNews[0].slug}`}
                   className="lg:col-span-7 group cursor-pointer text-left outline-none flex flex-col"
                 >
-                  {/* Image Container */}
                   <div className="w-full aspect-[16/10] overflow-hidden rounded-sm mb-6 lg:mb-8 relative bg-gray-100 shadow-md">
                     <Image
-                      src={initialNews[0].image || '/images/placeholder.jpg'}
+                      src={resolveImageUrl(initialNews[0].image)}
                       alt={initialNews[0].title}
                       fill
                       sizes="(max-width: 1024px) 100vw, 60vw"
@@ -848,7 +915,6 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                     </div>
                   </div>
 
-                  {/* Text Content */}
                   <div className="flex flex-col items-start pr-0 lg:pr-8">
                     <span className="text-[10px] tracking-[0.2em] font-bold text-brand-gold uppercase mb-3">
                       {initialNews[0].date}
@@ -865,26 +931,23 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                   </div>
                 </Link>
 
-                {/* 2. LIST ARTICLES (Right Column) */}
                 <div className="lg:col-span-5 flex flex-col">
-                  {initialNews.slice(1).map((news, idx) => (
+                  {initialNews.slice(1).map((news: any, idx: number) => (
                     <Link
                       key={news.id}
                       href={`/news&updates/${news.slug}`}
                       className={`group flex items-start gap-5 md:gap-6 py-6 cursor-pointer transition-colors duration-300 outline-none border-b border-gray-200 hover:border-brand-gold ${idx === 0 ? 'pt-0' : ''}`}
                     >
-                      {/* Thumbnail */}
                       <div className="w-28 md:w-36 aspect-[4/3] rounded-sm overflow-hidden shrink-0 relative bg-gray-100 shadow-sm mt-1">
-                        <Image
-                          src={news.image || '/images/placeholder.jpg'}
-                          alt={news.title}
-                          fill
-                          sizes="(max-width: 768px) 30vw, 15vw"
-                          className="object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
-                        />
+                       <Image
+                        src={resolveImageUrl(news.image)}
+                        alt={news.title}
+                        fill
+                        sizes="(max-width: 768px) 30vw, 15vw"
+                        className="object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+                      />
                       </div>
 
-                      {/* Text Content */}
                       <div className="flex flex-col flex-1">
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2">
                           <span className="text-[8px] md:text-[9px] tracking-[0.2em] font-bold text-brand-gold uppercase">
@@ -907,7 +970,6 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
                     </Link>
                   ))}
                 </div>
-
               </div>
             ) : (
               <div className="text-gray-500 py-16 text-center w-full border border-gray-200 rounded-sm bg-white">
@@ -915,329 +977,312 @@ export default function HomeClient({ initialNews, initialProjects =[] }: { initi
               </div>
             )}
 
-            {/* Mobile View All Button (Only shows on small screens) */}
             <Link href="/news&updates" className="md:hidden mt-10 flex items-center justify-center gap-4 border border-brand-blue px-8 py-4 rounded-sm text-[11px] font-bold tracking-[0.25em] text-brand-blue uppercase hover:bg-brand-blue hover:text-white transition-all duration-300 outline-none group w-full shadow-sm hover:shadow-md">
               View All News
               <ArrowRight size={16} className="transform group-hover:translate-x-1 transition-transform duration-300" />
             </Link>
-
           </section>
 
-          {/* === 4-TIER FULLSCREEN VIRTUAL TOUR MODAL === */}
-        {activeTourProject && activeTourUnit && (() => {
-          const allProjectTours: any[] = activeTourProject.virtual_tours || [];
+          {/* Virtual Tour Modal */}
+          {activeTourProject && activeTourUnit && (() => {
+            const allProjectTours: any[] = activeTourProject.virtual_tours || [];
 
-          // Unique towers for the active project
-          const availableTowers: string[] = Array.from(
-            new Set(
-              allProjectTours
-                .map((t: any) => t.tower_name?.trim())
-                .filter((name: any): name is string => Boolean(name))
-            )
-          ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-
-          // Filter units belonging to selected tower
-          const availableUnits: any[] = activeTourTower
-            ? allProjectTours.filter(
-                (t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === activeTourTower.toLowerCase()
+            const availableTowers: string[] = Array.from(
+              new Set(
+                allProjectTours
+                  .map((t: any) => t.tower_name?.trim())
+                  .filter((name: any): name is string => Boolean(name))
               )
-            : allProjectTours;
+            ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
-          const currentAreas = parseViewAreas(activeTourUnit);
-          const activeScene = currentAreas[activeRoomIndex] || currentAreas[0];
+            const availableUnits: any[] = activeTourTower
+              ? allProjectTours.filter(
+                  (t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === activeTourTower.toLowerCase()
+                )
+              : allProjectTours;
 
-          return (
-            <div className="fixed inset-0 z-[9999] bg-black animate-in fade-in duration-500 flex flex-col overflow-hidden select-none">
-              
-              {/* TOP BAR */}
-              <div className="absolute top-0 left-0 w-full bg-gradient-to-b from-black/90 via-black/50 to-transparent z-50 p-3.5 sm:p-4 md:p-6 pointer-events-none flex flex-col gap-2.5">
-                
-                {/* Row 1: Badge + Close Button */}
-                <div className="w-full flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 px-3 py-1 md:px-4 md:py-1.5 bg-black/80 backdrop-blur-md rounded-full border border-[#D4AF37]/30 shadow-lg pointer-events-auto">
-                    <span className="text-[#D4AF37] font-serif text-[9px] sm:text-[10px] md:text-[11px] font-bold tracking-widest uppercase">
-                      360° Virtual Tour
-                    </span>
-                  </div>
+            const currentAreas = parseViewAreas(activeTourUnit);
+            const activeScene = currentAreas[activeRoomIndex] || currentAreas[0];
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTourProject(null);
-                      setActiveTourTower(null);
-                      setActiveTourUnit(null);
-                      setActiveRoomIndex(0);
-                      setIsProjectDropdownOpen(false);
-                      setIsTowerDropdownOpen(false);
-                      setIsUnitDropdownOpen(false);
-                    }}
-                    className="pointer-events-auto group flex items-center gap-1.5 sm:gap-2 bg-black/70 backdrop-blur-md px-3 py-1.5 sm:px-4 sm:py-2 rounded-full border border-white/15 shadow-lg hover:bg-[#d0b370] transition-all duration-300 cursor-pointer outline-none shrink-0"
-                    aria-label="Close Tour"
-                  >
-                    <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-white group-hover:text-black">
-                      Close
-                    </span>
-                    <X size={13} className="text-white group-hover:text-black" />
-                  </button>
-                </div>
+            return (
+              <div className="fixed inset-0 z-[9999] bg-black animate-in fade-in duration-500 flex flex-col overflow-hidden select-none">
+                <div className="absolute top-0 left-0 w-full bg-gradient-to-b from-black/90 via-black/50 to-transparent z-50 p-3.5 sm:p-4 md:p-6 pointer-events-none flex flex-col gap-2.5">
+                  <div className="w-full flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 px-3 py-1 md:px-4 md:py-1.5 bg-black/80 backdrop-blur-md rounded-full border border-[#D4AF37]/30 shadow-lg pointer-events-auto">
+                      <span className="text-[#D4AF37] font-serif text-[9px] sm:text-[10px] md:text-[11px] font-bold tracking-widest uppercase">
+                        360° Virtual Tour
+                      </span>
+                    </div>
 
-                {/* Row 2: 3-Dropdown Bar (Project -> Tower -> Unit) */}
-                <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto w-full max-w-sm sm:max-w-xl">
-                  
-                  {/* 1. PROJECT DROPDOWN */}
-                  <div className="relative flex-1 min-w-0">
                     <button
                       type="button"
                       onClick={() => {
-                        setIsProjectDropdownOpen(!isProjectDropdownOpen);
+                        setActiveTourProject(null);
+                        setActiveTourTower(null);
+                        setActiveTourUnit(null);
+                        setActiveRoomIndex(0);
+                        setIsProjectDropdownOpen(false);
                         setIsTowerDropdownOpen(false);
                         setIsUnitDropdownOpen(false);
                       }}
-                      className="w-full bg-black/60 hover:bg-black/75 backdrop-blur-xl rounded-xl md:rounded-2xl px-3 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 border border-white/15 flex flex-col justify-center text-left cursor-pointer transition-all outline-none"
+                      className="pointer-events-auto group flex items-center gap-1.5 sm:gap-2 bg-black/70 backdrop-blur-md px-3 py-1.5 sm:px-4 sm:py-2 rounded-full border border-white/15 shadow-lg hover:bg-[#d0b370] transition-all duration-300 cursor-pointer outline-none shrink-0"
+                      aria-label="Close Tour"
                     >
-                      <span className="text-[8px] sm:text-[9px] md:text-[10px] font-semibold tracking-[0.14em] text-[#d4b26f] uppercase font-sans">
-                        Project
+                      <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-white group-hover:text-black">
+                        Close
                       </span>
-                      <div className="flex items-center justify-between gap-1 mt-0.5">
-                        <span className="text-xs sm:text-[13px] md:text-[14px] font-medium text-white font-sans truncate">
-                          {activeTourProject.name || activeTourProject.title}
-                        </span>
-                        <ChevronDown size={14} className={`text-white/80 transition-transform duration-300 ${isProjectDropdownOpen ? 'rotate-180' : ''}`} />
-                      </div>
+                      <X size={13} className="text-white group-hover:text-black" />
                     </button>
-
-                    {isProjectDropdownOpen && (
-                      <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[170px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl border border-white/15 py-1 z-[70]">
-                        {initialProjects
-                          .filter((p: any) => {
-                            const validTours = (p.virtual_tours || []).filter((t: any) => {
-                              const areas = parseViewAreas(t);
-                              const isActive = !t.status || t.status.toLowerCase() === 'active';
-                              return isActive && (areas.length > 0 || Boolean(t.image || t.tour_url || t.url));
-                            });
-                            return validTours.length > 0;
-                          })
-                          .map((p: any) => {
-                            const isSelected = p.id === activeTourProject.id;
-                            return (
-                              <button
-                                key={p.id}
-                                type="button"
-                                onClick={() => {
-                                  setActiveTourProject(p);
-                                  const rawTours = (p.virtual_tours || []).filter((t: any) => {
-                                    const areas = parseViewAreas(t);
-                                    return (!t.status || t.status.toLowerCase() === 'active') && 
-                                           (areas.length > 0 || Boolean(t.image || t.tour_url || t.url));
-                                  });
-
-                                  if (rawTours.length > 0) {
-                                    const towers = Array.from(new Set(rawTours.map((t: any) => t.tower_name?.trim()).filter(Boolean))).sort();
-                                    const firstTower: string | null = (towers[0] as string) || null;
-                                    setActiveTourTower(firstTower);
-
-                                    const units = firstTower 
-                                      ? rawTours.filter((t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === firstTower.toLowerCase())
-                                      : rawTours;
-
-                                    const targetUnit = units[0] || rawTours[0];
-                                    setActiveTourUnit(targetUnit);
-                                  }
-
-                                  setActiveRoomIndex(0);
-                                  setIsProjectDropdownOpen(false);
-                                }}
-                                className={`w-full px-3 py-2 text-left text-xs font-medium font-sans flex items-center justify-between cursor-pointer ${
-                                  isSelected ? 'bg-white/15 text-[#d4b26f]' : 'text-white/85 hover:bg-white/10 hover:text-white'
-                                }`}
-                              >
-                                <span className="truncate">{p.name || p.title}</span>
-                                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#d4b26f] shrink-0" />}
-                              </button>
-                            );
-                          })}
-                      </div>
-                    )}
                   </div>
 
-                  {/* 2. TOWER DROPDOWN */}
-                  {availableTowers.length > 0 && (
+                  <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto w-full max-w-sm sm:max-w-xl">
                     <div className="relative flex-1 min-w-0">
                       <button
                         type="button"
                         onClick={() => {
-                          setIsTowerDropdownOpen(!isTowerDropdownOpen);
-                          setIsProjectDropdownOpen(false);
+                          setIsProjectDropdownOpen(!isProjectDropdownOpen);
+                          setIsTowerDropdownOpen(false);
                           setIsUnitDropdownOpen(false);
                         }}
                         className="w-full bg-black/60 hover:bg-black/75 backdrop-blur-xl rounded-xl md:rounded-2xl px-3 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 border border-white/15 flex flex-col justify-center text-left cursor-pointer transition-all outline-none"
                       >
                         <span className="text-[8px] sm:text-[9px] md:text-[10px] font-semibold tracking-[0.14em] text-[#d4b26f] uppercase font-sans">
-                          Tower
+                          Project
                         </span>
                         <div className="flex items-center justify-between gap-1 mt-0.5">
                           <span className="text-xs sm:text-[13px] md:text-[14px] font-medium text-white font-sans truncate">
-                            {activeTourTower || availableTowers[0]}
+                            {activeTourProject.name || activeTourProject.title}
                           </span>
-                          <ChevronDown size={14} className={`text-white/80 transition-transform duration-300 ${isTowerDropdownOpen ? 'rotate-180' : ''}`} />
+                          <ChevronDown size={14} className={`text-white/80 transition-transform duration-300 ${isProjectDropdownOpen ? 'rotate-180' : ''}`} />
                         </div>
                       </button>
 
-                      {isTowerDropdownOpen && (
-                        <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[140px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl border border-white/15 py-1 z-[70]">
-                          {availableTowers.map((tower) => {
-                            const isSelected = activeTourTower?.toLowerCase() === tower.toLowerCase();
-                            return (
-                              <button
-                                key={tower}
-                                type="button"
-                                onClick={() => {
-                                  setActiveTourTower(tower);
-                                  const towerUnits = allProjectTours.filter(
-                                    (t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === tower.toLowerCase()
-                                  );
-                                  setActiveTourUnit(towerUnits[0] || null);
-                                  setActiveRoomIndex(0);
-                                  setIsTowerDropdownOpen(false);
-                                }}
-                                className={`w-full px-3 py-2 text-left text-xs font-medium font-sans flex items-center justify-between cursor-pointer ${
-                                  isSelected ? 'bg-white/15 text-[#d4b26f]' : 'text-white/85 hover:bg-white/10 hover:text-white'
-                                }`}
-                              >
-                                <span className="truncate">{tower}</span>
-                                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#d4b26f] shrink-0" />}
-                              </button>
-                            );
-                          })}
+                      {isProjectDropdownOpen && (
+                        <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[170px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl border border-white/15 py-1 z-[70]">
+                          {initialProjects
+                            .filter((p: any) => {
+                              const validTours = (p.virtual_tours || []).filter((t: any) => {
+                                const areas = parseViewAreas(t);
+                                const isActive = !t.status || t.status.toLowerCase() === 'active';
+                                return isActive && (areas.length > 0 || Boolean(t.image || t.tour_url || t.url));
+                              });
+                              return validTours.length > 0;
+                            })
+                            .map((p: any) => {
+                              const isSelected = p.id === activeTourProject.id;
+                              return (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveTourProject(p);
+                                    const rawTours = (p.virtual_tours || []).filter((t: any) => {
+                                      const areas = parseViewAreas(t);
+                                      return (!t.status || t.status.toLowerCase() === 'active') && 
+                                             (areas.length > 0 || Boolean(t.image || t.tour_url || t.url));
+                                    });
+
+                                    if (rawTours.length > 0) {
+                                      const towers = Array.from(new Set(rawTours.map((t: any) => t.tower_name?.trim()).filter(Boolean))).sort();
+                                      const firstTower: string | null = (towers[0] as string) || null;
+                                      setActiveTourTower(firstTower);
+
+                                      const units = firstTower 
+                                        ? rawTours.filter((t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === firstTower.toLowerCase())
+                                        : rawTours;
+
+                                      const targetUnit = units[0] || rawTours[0];
+                                      setActiveTourUnit(targetUnit);
+                                    }
+
+                                    setActiveRoomIndex(0);
+                                    setIsProjectDropdownOpen(false);
+                                  }}
+                                  className={`w-full px-3 py-2 text-left text-xs font-medium font-sans flex items-center justify-between cursor-pointer ${
+                                    isSelected ? 'bg-white/15 text-[#d4b26f]' : 'text-white/85 hover:bg-white/10 hover:text-white'
+                                  }`}
+                                >
+                                  <span className="truncate">{p.name || p.title}</span>
+                                  {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#d4b26f] shrink-0" />}
+                                </button>
+                              );
+                            })}
                         </div>
                       )}
                     </div>
-                  )}
 
-                  {/* 3. UNIT DROPDOWN */}
-                  {availableUnits.length > 0 && (
-                    <div className="relative flex-1 min-w-0">
+                    {availableTowers.length > 0 && (
+                      <div className="relative flex-1 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsTowerDropdownOpen(!isTowerDropdownOpen);
+                            setIsProjectDropdownOpen(false);
+                            setIsUnitDropdownOpen(false);
+                          }}
+                          className="w-full bg-black/60 hover:bg-black/75 backdrop-blur-xl rounded-xl md:rounded-2xl px-3 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 border border-white/15 flex flex-col justify-center text-left cursor-pointer transition-all outline-none"
+                        >
+                          <span className="text-[8px] sm:text-[9px] md:text-[10px] font-semibold tracking-[0.14em] text-[#d4b26f] uppercase font-sans">
+                            Tower
+                          </span>
+                          <div className="flex items-center justify-between gap-1 mt-0.5">
+                            <span className="text-xs sm:text-[13px] md:text-[14px] font-medium text-white font-sans truncate">
+                              {activeTourTower || availableTowers[0]}
+                            </span>
+                            <ChevronDown size={14} className={`text-white/80 transition-transform duration-300 ${isTowerDropdownOpen ? 'rotate-180' : ''}`} />
+                          </div>
+                        </button>
+
+                        {isTowerDropdownOpen && (
+                          <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[140px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl border border-white/15 py-1 z-[70]">
+                            {availableTowers.map((tower: string) => {
+                              const isSelected = activeTourTower?.toLowerCase() === tower.toLowerCase();
+                              return (
+                                <button
+                                  key={tower}
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveTourTower(tower);
+                                    const towerUnits = allProjectTours.filter(
+                                      (t: any) => !t.tower_name || t.tower_name.trim().toLowerCase() === tower.toLowerCase()
+                                    );
+                                    setActiveTourUnit(towerUnits[0] || null);
+                                    setActiveRoomIndex(0);
+                                    setIsTowerDropdownOpen(false);
+                                  }}
+                                  className={`w-full px-3 py-2 text-left text-xs font-medium font-sans flex items-center justify-between cursor-pointer ${
+                                    isSelected ? 'bg-white/15 text-[#d4b26f]' : 'text-white/85 hover:bg-white/10 hover:text-white'
+                                  }`}
+                                >
+                                  <span className="truncate">{tower}</span>
+                                  {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#d4b26f] shrink-0" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {availableUnits.length > 0 && (
+                      <div className="relative flex-1 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsUnitDropdownOpen(!isUnitDropdownOpen);
+                            setIsProjectDropdownOpen(false);
+                            setIsTowerDropdownOpen(false);
+                          }}
+                          className="w-full bg-black/60 hover:bg-black/75 backdrop-blur-xl rounded-xl md:rounded-2xl px-3 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 border border-white/15 flex flex-col justify-center text-left cursor-pointer transition-all outline-none"
+                        >
+                          <span className="text-[8px] sm:text-[9px] md:text-[10px] font-semibold tracking-[0.14em] text-[#d4b26f] uppercase font-sans">
+                            Unit
+                          </span>
+                          <div className="flex items-center justify-between gap-1 mt-0.5">
+                            <span className="text-xs sm:text-[13px] md:text-[14px] font-medium text-white font-sans truncate">
+                              {activeTourUnit?.unit_name || activeTourUnit?.title || 'Standard Unit'}
+                            </span>
+                            <ChevronDown size={14} className={`text-white/80 transition-transform duration-300 ${isUnitDropdownOpen ? 'rotate-180' : ''}`} />
+                          </div>
+                        </button>
+
+                        {isUnitDropdownOpen && (
+                          <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[170px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl border border-white/15 py-1 z-[70]">
+                            {availableUnits.map((u: any) => {
+                              const isSelected = String(u.id) === String(activeTourUnit?.id);
+                              return (
+                                <button
+                                  key={u.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveTourUnit(u);
+                                    setActiveRoomIndex(0);
+                                    setIsUnitDropdownOpen(false);
+                                  }}
+                                  className={`w-full px-3 py-2 text-left text-xs font-medium font-sans flex items-center justify-between cursor-pointer ${
+                                    isSelected ? 'bg-white/15 text-[#d4b26f]' : 'text-white/85 hover:bg-white/10 hover:text-white'
+                                  }`}
+                                >
+                                  <span className="truncate">{u.unit_name || u.title || 'Standard Unit'}</span>
+                                  {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#d4b26f] shrink-0" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex-1 w-full h-full cursor-grab active:cursor-grabbing">
+                  {activeScene?.image ? (
+                    <DynamicVirtualTour key={activeScene.image} image={activeScene.image} />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-white/50 text-sm font-sans uppercase tracking-widest">
+                      No panorama available for this area
+                    </div>
+                  )}
+                </div>
+
+                {currentAreas.length > 1 && (() => {
+                  const startIndex = currentAreas.length <= maxVisible 
+                    ? 0 
+                    : Math.max(0, Math.min(activeRoomIndex - (maxVisible - 1), currentAreas.length - maxVisible));
+                  const visibleAreas = currentAreas.slice(startIndex, startIndex + maxVisible);
+
+                  return (
+                    <div className="absolute bottom-16 md:bottom-8 left-1/2 -translate-x-1/2 z-40 pointer-events-auto flex items-center gap-1 sm:gap-2 bg-black/65 hover:bg-black/75 backdrop-blur-2xl px-2.5 py-2 sm:px-4 sm:py-3 rounded-[22px] md:rounded-[28px] border border-white/15 shadow-[0_12px_40px_rgba(0,0,0,0.6)] max-w-[96vw]">
                       <button
                         type="button"
-                        onClick={() => {
-                          setIsUnitDropdownOpen(!isUnitDropdownOpen);
-                          setIsProjectDropdownOpen(false);
-                          setIsTowerDropdownOpen(false);
-                        }}
-                        className="w-full bg-black/60 hover:bg-black/75 backdrop-blur-xl rounded-xl md:rounded-2xl px-3 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 border border-white/15 flex flex-col justify-center text-left cursor-pointer transition-all outline-none"
+                        onClick={() => setActiveRoomIndex((prev) => (prev - 1 + currentAreas.length) % currentAreas.length)}
+                        className="p-1 sm:p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer shrink-0"
+                        aria-label="Previous view area"
                       >
-                        <span className="text-[8px] sm:text-[9px] md:text-[10px] font-semibold tracking-[0.14em] text-[#d4b26f] uppercase font-sans">
-                          Unit
-                        </span>
-                        <div className="flex items-center justify-between gap-1 mt-0.5">
-                          <span className="text-xs sm:text-[13px] md:text-[14px] font-medium text-white font-sans truncate">
-                            {activeTourUnit?.unit_name || activeTourUnit?.title || 'Standard Unit'}
-                          </span>
-                          <ChevronDown size={14} className={`text-white/80 transition-transform duration-300 ${isUnitDropdownOpen ? 'rotate-180' : ''}`} />
-                        </div>
+                        <ChevronLeft size={18} className="md:w-[22px] md:h-[22px]" strokeWidth={2.5} />
                       </button>
 
-                      {isUnitDropdownOpen && (
-                        <div className="absolute top-[calc(100%+6px)] left-0 w-full min-w-[170px] max-h-60 overflow-y-auto bg-black/85 backdrop-blur-2xl rounded-xl border border-white/15 py-1 z-[70]">
-                          {availableUnits.map((u: any) => {
-                            const isSelected = String(u.id) === String(activeTourUnit?.id);
-                            return (
-                              <button
-                                key={u.id}
-                                type="button"
-                                onClick={() => {
-                                  setActiveTourUnit(u);
-                                  setActiveRoomIndex(0);
-                                  setIsUnitDropdownOpen(false);
-                                }}
-                                className={`w-full px-3 py-2 text-left text-xs font-medium font-sans flex items-center justify-between cursor-pointer ${
-                                  isSelected ? 'bg-white/15 text-[#d4b26f]' : 'text-white/85 hover:bg-white/10 hover:text-white'
-                                }`}
-                              >
-                                <span className="truncate">{u.unit_name || u.title || 'Standard Unit'}</span>
-                                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#d4b26f] shrink-0" />}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
+                      <div className="flex items-end gap-2 sm:gap-3 md:gap-4 py-0.5 px-0.5 sm:px-1">
+                        {visibleAreas.map((area: any, offsetIdx: number) => {
+                          const originalIndex = startIndex + offsetIdx;
+                          const isSelected = activeRoomIndex === originalIndex;
+
+                          return (
+                            <button
+                              key={originalIndex}
+                              type="button"
+                              onClick={() => setActiveRoomIndex(originalIndex)}
+                              className="flex flex-col items-center gap-1 shrink-0 cursor-pointer group outline-none transition-transform duration-200"
+                            >
+                              <span className={`text-center font-sans tracking-tight transition-all duration-200 max-w-[62px] sm:max-w-[72px] md:max-w-[85px] truncate ${
+                                isSelected ? 'text-white text-[11px] sm:text-[13px] md:text-[15px] font-semibold scale-105' : 'text-white/65 text-[9px] sm:text-[11px] md:text-[12px] font-normal group-hover:text-white'
+                              }`}>
+                                {area.title || `Area ${originalIndex + 1}`}
+                              </span>
+                              <div className={`relative w-14 h-10 sm:w-16 sm:h-12 md:w-20 md:h-14 rounded-lg md:rounded-xl overflow-hidden transition-all duration-200 ${
+                                isSelected ? 'border-2 border-[#d4b26f] shadow-[0_0_12px_rgba(212,178,111,0.5)] scale-105' : 'border border-white/20 opacity-70 group-hover:opacity-100 group-hover:border-white/50'
+                              }`}>
+                                <img src={area.image} alt={area.title || `Area ${originalIndex + 1}`} className="w-full h-full object-cover" />
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveRoomIndex((prev) => (prev + 1) % currentAreas.length)}
+                        className="p-1 sm:p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer shrink-0"
+                        aria-label="Next view area"
+                      >
+                        <ChevronRight size={18} className="md:w-[22px] md:h-[22px]" strokeWidth={2.5} />
+                      </button>
                     </div>
-                  )}
-
-                </div>
+                  );
+                })()}
               </div>
-
-              {/* 360 VIEWER */}
-              <div className="flex-1 w-full h-full cursor-grab active:cursor-grabbing">
-                {activeScene?.image ? (
-                  <DynamicVirtualTour key={activeScene.image} image={activeScene.image} />
-                ) : (
-                  <div className="flex items-center justify-center h-full text-white/50 text-sm font-sans uppercase tracking-widest">
-                    No panorama available for this area
-                  </div>
-                )}
-              </div>
-
-              {/* BOTTOM THUMBNAIL STRIP */}
-              {currentAreas.length > 1 && (() => {
-                const startIndex = currentAreas.length <= maxVisible 
-                  ? 0 
-                  : Math.max(0, Math.min(activeRoomIndex - (maxVisible - 1), currentAreas.length - maxVisible));
-                const visibleAreas = currentAreas.slice(startIndex, startIndex + maxVisible);
-
-                return (
-                  <div className="absolute bottom-16 md:bottom-8 left-1/2 -translate-x-1/2 z-40 pointer-events-auto flex items-center gap-1 sm:gap-2 bg-black/65 hover:bg-black/75 backdrop-blur-2xl px-2.5 py-2 sm:px-4 sm:py-3 rounded-[22px] md:rounded-[28px] border border-white/15 shadow-[0_12px_40px_rgba(0,0,0,0.6)] max-w-[96vw]">
-                    <button
-                      type="button"
-                      onClick={() => setActiveRoomIndex((prev) => (prev - 1 + currentAreas.length) % currentAreas.length)}
-                      className="p-1 sm:p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer shrink-0"
-                      aria-label="Previous view area"
-                    >
-                      <ChevronLeft size={18} className="md:w-[22px] md:h-[22px]" strokeWidth={2.5} />
-                    </button>
-
-                    <div className="flex items-end gap-2 sm:gap-3 md:gap-4 py-0.5 px-0.5 sm:px-1">
-                      {visibleAreas.map((area: any, offsetIdx: number) => {
-                        const originalIndex = startIndex + offsetIdx;
-                        const isSelected = activeRoomIndex === originalIndex;
-
-                        return (
-                          <button
-                            key={originalIndex}
-                            type="button"
-                            onClick={() => setActiveRoomIndex(originalIndex)}
-                            className="flex flex-col items-center gap-1 shrink-0 cursor-pointer group outline-none transition-transform duration-200"
-                          >
-                            <span className={`text-center font-sans tracking-tight transition-all duration-200 max-w-[62px] sm:max-w-[72px] md:max-w-[85px] truncate ${
-                              isSelected ? 'text-white text-[11px] sm:text-[13px] md:text-[15px] font-semibold scale-105' : 'text-white/65 text-[9px] sm:text-[11px] md:text-[12px] font-normal group-hover:text-white'
-                            }`}>
-                              {area.title || `Area ${originalIndex + 1}`}
-                            </span>
-                            <div className={`relative w-14 h-10 sm:w-16 sm:h-12 md:w-20 md:h-14 rounded-lg md:rounded-xl overflow-hidden transition-all duration-200 ${
-                              isSelected ? 'border-2 border-[#d4b26f] shadow-[0_0_12px_rgba(212,178,111,0.5)] scale-105' : 'border border-white/20 opacity-70 group-hover:opacity-100 group-hover:border-white/50'
-                            }`}>
-                              <img src={area.image} alt={area.title || `Area ${originalIndex + 1}`} className="w-full h-full object-cover" />
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setActiveRoomIndex((prev) => (prev + 1) % currentAreas.length)}
-                      className="p-1 sm:p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer shrink-0"
-                      aria-label="Next view area"
-                    >
-                      <ChevronRight size={18} className="md:w-[22px] md:h-[22px]" strokeWidth={2.5} />
-                    </button>
-                  </div>
-                );
-              })()}
-
-            </div>
-          );
-        })()}
+            );
+          })()}
 
         </main>
         <Footer />
