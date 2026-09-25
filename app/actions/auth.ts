@@ -4,6 +4,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
+import { createHmac, timingSafeEqual } from 'crypto';
 
 export async function loginAction(formData: FormData) {
   console.log("[AUTH] 1. Login Action Triggered!");
@@ -68,8 +69,18 @@ export async function loginAction(formData: FormData) {
 
     // 3. Set the session cookie
     const cookieStore = await cookies();
-    cookieStore.set('custom_admin_session', String(user.id), {
+    const expiresAt = Date.now() + 60 * 60 * 24 * 7 * 1000;
+    const adminId = String(user.id);
+    // Admin IDs can be bigint values or UUIDs, depending on the database schema.
+    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(adminId)) {
+      return { error: 'Account ID has an unsupported format. Contact an admin.' };
+    }
+    const sessionPayload = `v1.${adminId}.${expiresAt}`;
+    const signature = createHmac('sha256', process.env.SUPABASE_SERVICE_ROLE_KEY!)
+      .update(sessionPayload).digest('hex');
+    cookieStore.set('custom_admin_session', `${sessionPayload}.${signature}`, {
       httpOnly: true,
+      sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
       path: '/',
       maxAge: 60 * 60 * 24 * 7 // 1 week
@@ -91,14 +102,24 @@ export async function logoutAction() {
 
 export async function getCustomSession() {
   const cookieStore = await cookies();
-  const userId = cookieStore.get('custom_admin_session')?.value;
-  if (!userId) return null;
-  return userId; 
+  const token = cookieStore.get('custom_admin_session')?.value;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!token || !key) return null;
+  const parts = token.split('.');
+  if (parts.length !== 4) return null;
+  const [version, id, expiry, signature] = parts;
+  const expiration = Number(expiry);
+  if (version !== 'v1' || !/^[a-zA-Z0-9_-]{1,128}$/.test(id) ||
+      !Number.isSafeInteger(expiration) || expiration <= Date.now() ||
+      !/^[0-9a-f]{64}$/.test(signature)) return null;
+  const expected = createHmac('sha256', key).update(`${version}.${id}.${expiry}`).digest();
+  const actual = Buffer.from(signature, 'hex');
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null;
+  return id;
 }
 
 export async function getCurrentUser() {
-  const cookieStore = await cookies();
-  const userId = cookieStore.get('custom_admin_session')?.value;
+  const userId = await getCustomSession();
   if (!userId) return null;
 
   const supabaseAdmin = createClient(
@@ -108,16 +129,15 @@ export async function getCurrentUser() {
 
   const { data: user } = await supabaseAdmin
     .from('admin_users')
-    .select('id, username, is_super_admin')
+    .select('id, username, is_super_admin, is_active')
     .eq('id', userId)
     .single();
 
-  return user;
+  return user?.is_active === false ? null : user;
 }
 
 export async function getRBACProfile() {
-  const cookieStore = await cookies();
-  const userId = cookieStore.get('custom_admin_session')?.value;
+  const userId = await getCustomSession();
   if (!userId) return null;
 
   const supabaseAdmin = createClient(

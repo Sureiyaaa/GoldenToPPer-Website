@@ -2,7 +2,7 @@
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
-import { getCustomSession, getCurrentUser } from './auth';
+import { getCustomSession, getCurrentUser, getRBACProfile } from './auth';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,7 +13,8 @@ export async function fetchAdminVirtualToursList() {
   const session = await getCustomSession();
   if (!session) throw new Error("Unauthorized");
 
-  // Fetch projects and their associated virtual tours
+  // The dashboard represents Virtual Tours at the PROJECT level.
+  // Individual virtual_tours rows are units/models that belong to that project.
   const { data, error } = await supabaseAdmin
     .from('project_table')
     .select(`
@@ -36,26 +37,70 @@ export async function fetchAdminVirtualToursList() {
     throw new Error(error.message);
   }
 
-  // Format one entry per project
-  return (data || []).map((project: any) => {
-    const tours = project.virtual_tours || [];
-    const hasActiveTours = tours.some((t: any) => t.status === 'Active');
-    const totalTours = tours.length;
+  const parseAreas = (rawAreas: any): any[] => {
+    if (!rawAreas) return [];
+    if (Array.isArray(rawAreas)) return rawAreas;
 
-    // Count unique towers configured
+    if (typeof rawAreas === 'string') {
+      try {
+        const parsed = JSON.parse(rawAreas);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+
+    return [];
+  };
+
+  // Return one summary row per project. Do not expose a project id as though
+  // it were a virtual_tours row id; destructive/unit-level actions belong in
+  // the project Virtual Tour editor instead.
+  return (data || []).map((project: any) => {
+    const tours = Array.isArray(project.virtual_tours)
+      ? project.virtual_tours
+      : [];
+
     const uniqueTowers = Array.from(
-      new Set(tours.map((t: any) => t.tower_name?.trim()).filter(Boolean))
+      new Set(
+        tours
+          .map((tour: any) => tour.tower_name?.trim())
+          .filter(Boolean)
+      )
     );
 
+    const visibleUnits = tours.filter(
+      (tour: any) => tour.status === 'Active'
+    ).length;
+
+    const hiddenUnits = Math.max(0, tours.length - visibleUnits);
+
+    const areasByTour = tours.map((tour: any) =>
+      parseAreas(tour.view_areas)
+    );
+
+    const totalViewAreas = areasByTour.reduce(
+      (total: number, areas: any[]) => total + areas.length,
+      0
+    );
+
+    const firstPanorama = areasByTour
+      .flat()
+      .find((area: any) => area?.image)?.image;
+
     return {
-      id: project.id,
       project_id: project.id,
       title: `${project.title} Virtual Tours`,
       project_name: project.title,
-      image: project.image || '/images/placeholder.webp',
-      status: totalTours > 0 && hasActiveTours ? 'Active' : 'Draft',
-      total_units: totalTours,
+      preview_image:
+        firstPanorama ||
+        project.image ||
+        null,
       total_towers: uniqueTowers.length,
+      total_units: tours.length,
+      total_view_areas: totalViewAreas,
+      visible_units: visibleUnits,
+      hidden_units: hiddenUnits,
     };
   });
 }
@@ -63,11 +108,17 @@ export async function fetchAdminVirtualToursList() {
 export async function fetchProjectsForDropdown() {
   const session = await getCustomSession();
   if (!session) throw new Error("Unauthorized");
+
   const { data, error } = await supabaseAdmin
     .from('project_table')
     .select(`
-      id, 
+      id,
       title,
+      project_towers (
+        id,
+        name,
+        sort_order
+      ),
       unit_layout (
         tower_name
       )
@@ -75,8 +126,17 @@ export async function fetchProjectsForDropdown() {
     .is('deleted_at', null)
     .order('title', { ascending: true });
 
-  if (error) throw error; 
-  return data || [];
+  if (error) throw error;
+
+  return (data || []).map((project: any) => ({
+    ...project,
+    project_towers: [...(project.project_towers || [])].sort((a: any, b: any) => {
+      const aOrder = a.sort_order ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = b.sort_order ?? Number.MAX_SAFE_INTEGER;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true });
+    }),
+  }));
 }
 
 export async function fetchVirtualTourForEdit(editId: string | number) {
@@ -176,15 +236,21 @@ export async function saveProjectVirtualToursAction(
     }
   }
 
-  return { success: true };
+  const { data: savedTours, error: refreshError } = await supabaseAdmin
+    .from('virtual_tours')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('id', { ascending: true });
+
+  if (refreshError) throw new Error(refreshError.message);
+
+  return { success: true, tours: savedTours || [] };
 }
 
-export async function deleteRecordAction(table: string, id: number | string) {
+export async function deleteRecordAction(_table: string, _id: number | string) {
   const session = await getCustomSession();
   if (!session) throw new Error("Unauthorized");
-  const { error } = await supabaseAdmin.from(table).delete().eq('id', id);
-  if (error) throw error;
-  return { success: true };
+  throw new Error('Permanent deletion is disabled. Archive the record instead.');
 }
 
 // ==========================================
@@ -211,6 +277,64 @@ export async function fetchAdminStoryList() {
   if (error) throw error; return data;
 }
 
+const archivedCmsModules = {
+  promotions: 'promotion_code',
+  banks: 'edit_banks',
+  news_updates: 'edit_news',
+  'our story': 'our_story',
+} as const;
+
+type ArchivedCmsTable = keyof typeof archivedCmsModules;
+
+async function requireArchivePermission(table: ArchivedCmsTable, permission: 'can_view' | 'can_edit') {
+  const session = await getCustomSession();
+  if (!session) throw new Error('Unauthorized');
+
+  const profile = await getRBACProfile();
+  if (profile?.permissions === 'SUPER_ADMIN') return;
+
+  const permissions = profile?.permissions as Record<string, Record<string, boolean>> | undefined;
+  if (!permissions?.[archivedCmsModules[table]]?.[permission]) {
+    throw new Error('You do not have permission to access this archive.');
+  }
+}
+
+export async function fetchArchivedCmsRecordsAction(table: ArchivedCmsTable) {
+  if (!Object.prototype.hasOwnProperty.call(archivedCmsModules, table)) {
+    throw new Error('Invalid archive section.');
+  }
+  await requireArchivePermission(table, 'can_view');
+
+  const { data, error } = await supabaseAdmin
+    .from(table)
+    .select('*')
+    .not('is_archived', 'is', null)
+    .order('id', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function restoreArchivedCmsRecordAction(table: ArchivedCmsTable, id: number | string) {
+  if (!Object.prototype.hasOwnProperty.call(archivedCmsModules, table)) {
+    throw new Error('Invalid archive section.');
+  }
+  await requireArchivePermission(table, 'can_edit');
+
+  // Restore into the CMS without publishing to the public website.
+  const { data, error } = await supabaseAdmin
+    .from(table)
+    .update({ is_archived: null, is_active: false })
+    .eq('id', id)
+    .not('is_archived', 'is', null)
+    .select('id')
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error('This record is no longer archived. Refresh the archive and try again.');
+  return { success: true };
+}
+
 export async function toggleVirtualTourStatus(id: number | string, newStatus: string) {
   const session = await getCustomSession();
   if (!session) throw new Error("Unauthorized");
@@ -235,14 +359,31 @@ export async function savePromotionAction(payload: any, editId: string | null) {
   if (!session) throw new Error("Unauthorized");
 
   if (editId) {
-    const { error } = await supabaseAdmin.from('promotions').update(payload).eq('id', editId);
+    const { error } = await supabaseAdmin
+      .from('promotions')
+      .update(payload)
+      .eq('id', editId);
+
     if (error) throw error;
-  } else {
-    // Force is_active to true on creation
-    const { error } = await supabaseAdmin.from('promotions').insert([{ ...payload, is_active: true }]);
-    if (error) throw error;
+
+    return {
+      success: true,
+      id: Number(editId),
+    };
   }
-  return { success: true };
+
+  const { data, error } = await supabaseAdmin
+    .from('promotions')
+    .insert([{ ...payload, is_active: true }])
+    .select('id')
+    .limit(1);
+
+  if (error) throw error;
+
+  return {
+    success: true,
+    id: data?.[0]?.id ? Number(data[0].id) : null,
+  };
 }
 
 export async function fetchBankForEdit(editId: string | number) {
@@ -252,6 +393,27 @@ export async function fetchBankForEdit(editId: string | number) {
   const { data, error } = await supabaseAdmin.from('banks').select('*').eq('id', editId).limit(1);
   if (error) throw error; 
   return data?.[0] || null;
+}
+
+export async function fetchBankProjectLinksAction(bankId: string | number) {
+  const session = await getCustomSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const normalizedBankId = Number(bankId);
+  if (!Number.isFinite(normalizedBankId)) {
+    throw new Error('Invalid bank ID.');
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('project_banks')
+    .select('project_id')
+    .eq('banks_id', normalizedBankId);
+
+  if (error) throw error;
+
+  return (data || [])
+    .map((row: any) => row.project_id)
+    .filter((projectId: any) => projectId !== null && projectId !== undefined);
 }
 
 export async function saveBankAction(payload: any, editId: string | null) {
@@ -294,26 +456,88 @@ export async function saveStoryAction(payload: any, editId: string | null) {
   return { success: true };
 }
 
-export async function createAuditLogAction(action_type: string, entity_type: string, entity_name: string, details: string) {
-  const session = await getCustomSession();
-  if (!session) return { success: false, error: "Unauthorized" };
+type AuditContext = {
+  entityId?: number | string;
+  fieldKey?: string;
+  oldValue?: unknown;
+  newValue?: unknown;
+  parentEntityId?: number | string;
+};
 
+const auditRoutes: Record<string, { editor: string; archive: string }> = {
+  Projects: { editor: '/admin/projects', archive: 'Archived Projects' },
+  Promotions: { editor: '/admin/promotions', archive: 'Archived Promotions' },
+  'Partner Banks': { editor: '/admin/partnerbanks', archive: 'Archived Partner Banks' },
+  'News & Updates': { editor: '/admin/news', archive: 'Archived News & Updates' },
+  'Our Story': { editor: '/admin/story', archive: 'Archived Our Story' },
+};
+
+export async function createAuditLogAction(action_type: string, entity_type: string, entity_name: string, details: string, context?: AuditContext) {
+  const session = await getCustomSession();
+  if (!session) throw new Error('Unauthorized');
   const user = await getCurrentUser();
-  const user_email = user?.username || 'Unknown Admin';
+  if (!user) throw new Error('Unauthorized');
+
+  // Older dashboard callers still pass DELETE for Archive. Preserve their API,
+  // but never show an irreversible label for a reversible operation.
+  const action = action_type === 'DELETE' && /^archiv/i.test(details.trim()) ? 'ARCHIVED'
+    : /^restor/i.test(details.trim()) ? 'RESTORED'
+    : /^reorder/i.test(details.trim()) ? 'REORDERED'
+    : /^changed .*visibility/i.test(details.trim()) ? 'VISIBILITY'
+    : action_type;
+  const route = auditRoutes[entity_type];
+  const entityId = context?.entityId != null ? String(context.entityId) : null;
+  const focus = context?.fieldKey;
+  const targetUrl = entity_type === 'Navigation Setup'
+    ? '/admin/dashboard?section=Navbar%20Setup'
+    : route && entityId
+      ? action === 'ARCHIVED'
+        ? `/admin/dashboard?section=${encodeURIComponent(route.archive)}`
+        : `${route.editor}?edit=${encodeURIComponent(entityId)}${focus ? `&focus=${encodeURIComponent(focus)}` : ''}`
+      : null;
 
   const { error } = await supabaseAdmin.from('audit_logs').insert({
-    user_email,
-    action_type,
-    entity_type,
-    entity_name,
-    details
+    user_email: user.username, actor_id: String(user.id),
+    action_type: action, entity_type, entity_name, details,
+    entity_id: entityId, parent_entity_id: context?.parentEntityId != null ? String(context.parentEntityId) : null,
+    field_key: focus || null, old_value: context?.oldValue ?? null,
+    new_value: context?.newValue ?? null, target_url: targetUrl,
   });
-
   if (error) {
-    console.error("Audit Log Error:", error.message);
+    console.error('Audit Log Error:', error.message);
     return { success: false, error: error.message };
   }
-  
+  return { success: true };
+}
+
+export async function fetchDetailedAuditLogsAction(sortOrder: 'asc' | 'desc' = 'desc', offset: number = 0) {
+  const session = await getCustomSession();
+  if (!session) throw new Error('Unauthorized');
+  const profile = await getRBACProfile();
+  const allowed = profile?.permissions === 'SUPER_ADMIN' ||
+    (typeof profile?.permissions === 'object' && profile.permissions?.audit_log?.can_view === true);
+  if (!allowed) throw new Error('You do not have permission to view audit history.');
+  const safeOffset = Number.isInteger(offset) && offset >= 0 ? Math.min(offset, 100000) : 0;
+  // Fetch one extra row to tell the client whether a next page exists.
+  const { data, error } = await supabaseAdmin.from('audit_logs').select('*')
+    .order('created_at', { ascending: sortOrder === 'asc' })
+    .order('id', { ascending: sortOrder === 'asc' })
+    .range(safeOffset, safeOffset + 50);
+  if (error) throw error;
+  return data || [];
+}
+
+export async function deleteAuditLogAction(id: number) {
+  const session = await getCustomSession();
+  const user = await getCurrentUser();
+  if (!session || !user?.is_super_admin) throw new Error('Only a super admin can remove audit entries.');
+  if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Invalid audit entry ID.');
+  const { error } = await supabaseAdmin.rpc('remove_audit_log_entry', {
+    p_id: id,
+    p_actor_id: String(user.id),
+    p_actor_name: user.username,
+  });
+  if (error) throw new Error(error.message);
   return { success: true };
 }
 
@@ -322,6 +546,11 @@ export async function fetchRecentAuditLogsAction(limit: number = 5) {
 
   if (!session) {
     throw new Error("Unauthorized");
+  }
+  const profile = await getRBACProfile();
+  if (!(profile?.permissions === 'SUPER_ADMIN' ||
+    (typeof profile?.permissions === 'object' && profile.permissions?.audit_log?.can_view === true))) {
+    throw new Error('You do not have permission to view audit history.');
   }
 
   // Keep the dashboard compact even if a bigger number is accidentally passed.

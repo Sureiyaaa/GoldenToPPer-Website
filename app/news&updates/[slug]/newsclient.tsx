@@ -21,13 +21,13 @@ if (typeof window !== 'undefined') {
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 interface NewsArticle {
-  id: number;
+  id: string | number;
   title: string;
   slug: string;
   category: string;
   date: string;
-  image: string;
-  excerpt: string;
+  image: string | null;
+  excerpt: string | null;
 }
 
 export default function SingleNewsClient({ 
@@ -41,7 +41,7 @@ export default function SingleNewsClient({
 
   cardsRef.current = [];
 
-  // --- 1. Fetch Recommendations (WITH DEBUGGING) ---
+  // Show the latest other visible articles below the current story.
   useEffect(() => {
     const fetchRecommendations = async () => {
       if (!initialArticle) return;
@@ -53,19 +53,16 @@ export default function SingleNewsClient({
         .select('*')
         .neq('id', initialArticle.id)
         .is('is_archived', null)
-        .eq('is_active', true); 
+        .eq('is_active', true)
+        .order('date', { ascending: false })
+        .limit(3);
 
       if (error) {
-        console.error("SUPABASE ERROR FETCHING RECOMMENDATIONS:", error.message);
+        console.error('Could not load related articles:', error.message);
         return;
       }
 
-      console.log("SUPABASE RETURNED:", data); // Check your F12 Console for this!
-
-      if (data && data.length > 0) {
-        const shuffled = data.sort(() => 0.5 - Math.random());
-        setRecommendations(shuffled.slice(0, 3));
-      }
+      setRecommendations(data || []);
     };
 
     fetchRecommendations();
@@ -153,14 +150,18 @@ export default function SingleNewsClient({
         
         {/* --- 100VH HERO COVER --- */}
         <section className="relative w-full h-screen z-10 bg-black">
-          <Image 
-            src={initialArticle.image || '/images/placeholder.webp'}
-            alt={initialArticle.title}
-            fill
-            priority
-            sizes="100vw"
-            className="object-cover opacity-80"
-          />
+          {initialArticle.image ? (
+            <Image
+              src={initialArticle.image}
+              alt={initialArticle.title}
+              fill
+              priority
+              sizes="100vw"
+              className="object-cover opacity-80"
+            />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-brand-blue to-[#0d1b3e]" />
+          )}
           <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/20 z-10 pointer-events-none"></div>
         </section>
 
@@ -192,7 +193,7 @@ export default function SingleNewsClient({
             className="mt-12 w-full"
           >
             <div className="text-base md:text-[17px] text-gray-700 leading-[1.85]">
-              {initialArticle.excerpt
+              {(initialArticle.excerpt || '')
                 .split(/\n+/)
                 .filter(Boolean)
                 .map((paragraph, index) => (
@@ -210,22 +211,14 @@ export default function SingleNewsClient({
         </main>
 
         {/* --- THE LATEST UPDATES (RECOMMENDATIONS) --- */}
-        <section className="relative z-[30] w-full py-24 md:py-32">
+        {recommendations.length > 0 && (
+          <section className="relative z-[30] w-full py-24 md:py-32">
           <div className="max-w-[85rem] mx-auto px-6 md:px-12">
             
             <h2 className="text-3xl md:text-4xl font-serif text-brand-blue text-center mb-16 font-normal">
               The Latest Updates
             </h2>
 
-            {recommendations.length === 0 ? (
-              <div className="w-full p-8 border-2 border-red-500 border-dashed rounded-lg bg-red-50 flex flex-col items-center justify-center text-center">
-                <AlertCircle className="text-red-500 mb-4" size={32} />
-                <h3 className="text-red-700 font-bold mb-2">No Recommendations Found</h3>
-                <p className="text-red-600 text-sm max-w-lg">
-                  The UI is rendering perfectly, but Supabase returned 0 articles. Press F12 and check your browser Console for the "SUPABASE ERROR" log to see why the fetch failed.
-                </p>
-              </div>
-            ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {recommendations.map((article, index) => (
                   <Link 
@@ -237,13 +230,19 @@ export default function SingleNewsClient({
                     className="group flex flex-col bg-white rounded-sm overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-500 outline-none"
                   >
                     <div className="relative w-full aspect-[4/3] overflow-hidden bg-gray-200">
-                      <Image 
-                        src={article.image} 
-                        alt={article.title}
-                        fill
-                        sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                        className="object-cover group-hover:scale-105 transition-transform duration-[1.5s] ease-out"
-                      />
+                      {article.image ? (
+                        <Image
+                          src={article.image}
+                          alt={article.title}
+                          fill
+                          sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                          className="object-cover group-hover:scale-105 transition-transform duration-[1.5s] ease-out"
+                        />
+                      ) : (
+                        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-brand-blue to-[#0d1b3e] px-6 text-center font-serif text-xl text-white/70">
+                          News &amp; Updates
+                        </div>
+                      )}
                     </div>
 
                     <div className="p-6 md:p-8 flex flex-col flex-grow">
@@ -267,10 +266,10 @@ export default function SingleNewsClient({
                   </Link>
                 ))}
               </div>
-            )}
 
           </div>
-        </section>
+          </section>
+        )}
 
         <Footer />
         <BackToTop />

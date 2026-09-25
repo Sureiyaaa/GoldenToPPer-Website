@@ -1,29 +1,30 @@
 // app/admin/dashboard/page.tsx
 'use client';
 
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import {
   fetchLiveHomepageAdminDataAction,
   saveHomepageSettingsAction,
   upsertHomepageRowAction,
   toggleHomepageRowStatusAction,
-  deleteHomepageRowAction
+  deleteHomepageRowAction,
 } from '@/app/actions/homepage';
-
-import { useState, useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { z } from 'zod';
 import {
   LogOut, Building2, Landmark, LayoutDashboard, Search, Filter,
-  Edit2, Trash2, Plus, Loader2, Eye, EyeOff, History, Move3d,
-  Bell, CheckCircle2, X, Mail, MailOpen, CornerUpLeft, Menu, UserCircle2, Megaphone, Settings, ShieldAlert, AlertCircle, BookOpen, Upload, ChevronDown, GripVertical
+  Edit2, Archive, Plus, Loader2, Eye, EyeOff, History, Move3d, Newspaper, House,
+  Bell, CheckCircle2, X, Mail, MailOpen, CornerUpLeft, Menu, UserCircle2, Megaphone, Settings, ShieldAlert, AlertCircle, BookOpen, Upload, ChevronDown, GripVertical, ArrowUpRight
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { toggleActiveStatus, archiveRecord } from '@/app/actions/updates';
 import {
   fetchAdminProjectsList,
+  fetchArchivedProjectsList,
+  archiveProjectAction,
+  restoreArchivedProjectAction,
   ensureProjectNavigationEntriesAction,
-  hideProjectNavigationEntryAction,
   setProjectWebsiteVisibilityAction,
 } from '@/app/actions/projects';
 import {
@@ -31,10 +32,12 @@ import {
   fetchAdminPromotionsList,
   fetchAdminBanksList,
   fetchAdminStoryList,
-  deleteRecordAction,
-  toggleVirtualTourStatus,
+  fetchArchivedCmsRecordsAction,
+  restoreArchivedCmsRecordAction,
   createAuditLogAction,
   fetchRecentAuditLogsAction,
+  fetchDetailedAuditLogsAction,
+  deleteAuditLogAction,
   fetchNotificationsAction,
   fetchWebsiteSectionStatesAction,
   saveWebsiteSectionStatesAction,
@@ -44,7 +47,17 @@ import { getCustomSession, getCurrentUser, logoutAction, getRBACProfile } from '
 
 
 // --- SCHEMAS & TYPES ---
-const NewsArticleSchema = z.object({ id: z.string(), title: z.string(), category: z.string(), date: z.string(), slug: z.string(), excerpt: z.string(), image: z.string(), created_at: z.string().optional(), is_active: z.boolean().optional() });
+const NewsArticleSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  category: z.string().nullish().transform(value => value ?? ''),
+  date: z.string().nullish().transform(value => value ?? ''),
+  slug: z.string().nullish().transform(value => value ?? ''),
+  excerpt: z.string().nullish().transform(value => value ?? ''),
+  image: z.string().nullish().transform(value => value ?? ''),
+  created_at: z.string().nullish(),
+  is_active: z.boolean().nullish().transform(value => value === true),
+});
 type NewsArticle = z.infer<typeof NewsArticleSchema>;
 interface Project {
   id: number;
@@ -53,9 +66,16 @@ interface Project {
   status: string;
   is_active: boolean;
   image: string;
+  slug?: string | null;
+  deleted_at?: string | null;
 }
 interface Bank { id: number; bank_name: string; max_loan: string; terms: string; image: string; is_active: boolean; }
-interface AuditLog { id: number; created_at: string; user_email: string; action_type: string; entity_type: string; entity_name: string; details: string; }
+interface AuditLog {
+  id: number; created_at: string; user_email: string; action_type: string;
+  entity_type: string; entity_name: string; details: string;
+  actor_id?: string | null; entity_id?: string | null; parent_entity_id?: string | null;
+  field_key?: string | null; old_value?: unknown; new_value?: unknown; target_url?: string | null;
+}
 
 const formatDateTime = (dateString: string) => {
   const date = new Date(dateString);
@@ -301,6 +321,10 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
           router.push('/admin/dashboard?section=Navbar%20Setup');
         };
 
+        const openArchivedProjects = () => {
+          router.push('/admin/dashboard?section=Archived%20Projects');
+        };
+
   useEffect(() => {
     const fetchProjects = async () => {
       try {
@@ -324,23 +348,20 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
     setIsArchiving(true);
 
     try {
-      // A project and its navigation item are tied together. Hide the
-      // navigation entry first so an archived project can never leave a
-      // visible navigation card pointing to unavailable content.
-      await hideProjectNavigationEntryAction(projectToArchive.id);
-      await archiveRecord('project_table', projectToArchive.id, 'deleted_at');
+      await archiveProjectAction(projectToArchive.id);
 
-      // ✅ SERVER-SIDE AUDIT LOG
       await createAuditLogAction(
         'DELETE',
         'Projects',
         projectToArchive.title,
-        'Deleted project from dashboard and hid its linked navigation item.'
+        'Archived project. Removed it from active CMS views and hid its linked navigation item while retaining project data for recovery.',
+        { entityId: projectToArchive.id, fieldKey: 'is_active' }
       );
 
+      const archivedTitle = projectToArchive.title;
       setProjects(prevProjects => prevProjects.filter(p => p.id !== projectToArchive.id));
       setProjectToArchive(null);
-      setSuccessMessage(`Project "${projectToArchive.title}" successfully deleted.`);
+      setSuccessMessage(`Project "${archivedTitle}" archived.`);
       setTimeout(() => setSuccessMessage(''), 2500);
 
     } catch (error: any) {
@@ -362,7 +383,8 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
         title,
         nextStatus
           ? 'Changed project website visibility to Visible. Linked navigation now follows its saved visibility preference.'
-          : 'Changed project website visibility to Hidden. Linked navigation is automatically hidden while preserving its saved visibility preference.'
+          : 'Changed project website visibility to Hidden. Linked navigation is automatically hidden while preserving its saved visibility preference.',
+        { entityId: id, fieldKey: 'is_active', oldValue: currentStatus, newValue: nextStatus }
       );
 
       setProjects(prev =>
@@ -393,33 +415,24 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
             <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center shadow-inner mb-2">
               <AlertCircle size={40} />
             </div>
-            <h2 className="text-2xl font-serif text-brand-blue text-center font-bold">Delete Project?</h2>
+            <h2 className="text-2xl font-serif text-brand-blue text-center font-bold">Archive Project?</h2>
             <p className="text-gray-600 text-center text-sm font-medium leading-relaxed">
-              Are you sure you want to delete{' '}
-              <strong>{projectToArchive.title}</strong>?
-              It will be removed from the admin project list.
+              Archive <strong>{projectToArchive.title}</strong>? It will be removed from the website and active admin lists, but its content will be retained and can be restored later.
             </p>
 
             <div className="flex gap-3 w-full mt-4">
               <button type="button" onClick={() => setProjectToArchive(null)} disabled={isArchiving} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors text-xs uppercase tracking-widest outline-none">Cancel</button>
               <button type="button" onClick={confirmArchive} disabled={isArchiving} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors text-xs uppercase tracking-widest flex items-center justify-center gap-2 outline-none">
-                {isArchiving ? <Loader2 size={16} className="animate-spin" /> : 'Yes'}
+                {isArchiving ? <Loader2 size={16} className="animate-spin" /> : 'Archive'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* === SUCCESS MODAL === */}
       {successMessage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm animate-in fade-in duration-300 p-4">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-3 max-w-sm w-full animate-in zoom-in-95 duration-300">
-            <div className="w-20 h-20 bg-green-50 text-green-500 rounded-full flex items-center justify-center mb-2 shadow-inner">
-              <CheckCircle2 size={40} />
-            </div>
-            <h2 className="text-2xl font-serif text-brand-blue text-center font-bold">Success!</h2>
-            <p className="text-gray-600 text-center font-medium text-sm">{successMessage}</p>
-          </div>
+        <div role="status" className="fixed right-6 top-24 z-[120] flex max-w-sm items-center gap-3 rounded-xl border border-green-100 bg-white px-4 py-3 text-sm text-brand-blue shadow-xl">
+          <CheckCircle2 size={18} className="shrink-0 text-green-600" />{successMessage}
         </div>
       )}
 
@@ -441,13 +454,21 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
         >
           Navigation Setup
         </button>
+
+        <button
+          type="button"
+          onClick={openArchivedProjects}
+          className="pb-3 text-sm font-medium text-gray-400 transition-colors hover:text-brand-blue"
+        >
+          Archived
+        </button>
       </div>
 
       {/* PAGE INTRO */}
       <div className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-gold">Projects · Content</p>
-          <h2 className="mt-1 text-2xl font-serif font-bold text-brand-blue">Project Website Content</h2>
+          <h2 className="mt-2 font-serif text-4xl leading-none text-brand-blue">Project Website Content</h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
             Select a project to manage its website content, visibility, layouts, amenities, and other project details.
           </p>
@@ -777,7 +798,7 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
           </div>
 
 
-          {/* DELETE */}
+          {/* ARCHIVE */}
           <div
             className="
               md:col-span-1
@@ -806,10 +827,10 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
                   hover:bg-red-50
                   transition-colors
                 "
-                title={`Delete ${proj.title}`}
-                aria-label={`Delete ${proj.title}`}
+                title={`Archive ${proj.title}`}
+                aria-label={`Archive ${proj.title}`}
               >
-                <Trash2 size={16} />
+                <Archive size={16} />
               </button>
             )}
           </div>
@@ -827,173 +848,470 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
   );
 }
 
-// --- VIRTUAL TOURS MANAGER ---
-function VirtualToursManager({ checkPerm }: ManagerProps) {
+// --- ARCHIVED PROJECTS MANAGER ---
+function ArchivedProjectsManager({ checkPerm }: ManagerProps) {
   const router = useRouter();
-  const [tours, setTours] = useState<any[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-
-  const [tourToArchive, setTourToArchive] = useState<{ id: number, title: string } | null>(null);
-  const [isArchiving, setIsArchiving] = useState(false);
+  const [isWorking, setIsWorking] = useState(false);
+  const [restoreTarget, setRestoreTarget] = useState<Project | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
-  useEffect(() => {
-    const fetchTours = async () => {
-      try {
-        const data = await fetchAdminVirtualToursList();
-        setTours(data || []);
-      } catch (error) { console.error(error); } finally { setIsLoading(false); }
-    };
-    fetchTours();
-  }, []);
-
-  const handleArchiveClick = (id: number, title: string) => {
-    setTourToArchive({ id, title });
-  };
-
-  const confirmArchive = async () => {
-    if (!tourToArchive) return;
-    setIsArchiving(true);
+  const loadArchivedProjects = async () => {
+    setIsLoading(true);
+    setErrorMessage('');
     try {
-      await deleteRecordAction('virtual_tours', tourToArchive.id);
-
-      // ✅ SERVER-SIDE AUDIT LOG
-      await createAuditLogAction('DELETE', 'Virtual Tours', tourToArchive.title, 'Deleted 360 virtual tour.');
-
-      setTours(prev => prev.filter(t => t.id !== tourToArchive.id));
-      setTourToArchive(null);
-      setSuccessMessage(`Tour "${tourToArchive.title}" deleted.`);
-      setTimeout(() => setSuccessMessage(''), 2500);
+      const data = await fetchArchivedProjectsList();
+      setProjects((data || []) as Project[]);
     } catch (error: any) {
-      alert(`Failed to delete: ${error.message}`);
+      setErrorMessage(error?.message || 'Failed to load archived projects.');
     } finally {
-      setIsArchiving(false);
+      setIsLoading(false);
     }
   };
 
-  const handleToggleStatus = async (id: number, currentStatus: string, title: string) => {
-    try {
-      const newStatus = currentStatus === 'Active' ? 'Hidden' : 'Active';
-      await toggleVirtualTourStatus(id, newStatus);
+  useEffect(() => {
+    loadArchivedProjects();
+  }, []);
 
-      // ✅ SERVER-SIDE AUDIT LOG
-      await createAuditLogAction('EDIT', 'Virtual Tours', title, `Changed active status to ${newStatus}.`);
-
-      setTours(prev => prev.map(t => t.id === id ? { ...t, status: newStatus } : t));
-    } catch (error: any) { alert(`Failed to toggle: ${error.message}`); }
+  const openProjects = () => {
+    router.push('/admin/dashboard?section=Projects');
   };
 
-  const filtered = tours.filter(t => t.title.toLowerCase().includes(searchQuery.toLowerCase()));
+  const openNavigationSetup = () => {
+    router.push('/admin/dashboard?section=Navbar%20Setup');
+  };
 
-  if (isLoading) return <div className="flex justify-center items-center h-64"><Loader2 className="animate-spin text-brand-blue" size={40} /></div>;
+  const confirmRestore = async () => {
+    if (!restoreTarget) return;
+    setIsWorking(true);
+    setErrorMessage('');
+
+    try {
+      await restoreArchivedProjectAction(restoreTarget.id);
+      const restoredTitle = restoreTarget.title;
+      setProjects((current) => current.filter((project) => project.id !== restoreTarget.id));
+      setRestoreTarget(null);
+      setSuccessMessage(`Project "${restoredTitle}" restored as Hidden.`);
+      window.setTimeout(() => setSuccessMessage(''), 2600);
+      try {
+        await createAuditLogAction(
+          'EDIT',
+          'Projects',
+          restoredTitle,
+          'Restored archived project as Hidden. Linked navigation remains hidden until intentionally republished.',
+          { entityId: restoreTarget.id, fieldKey: 'is_active' }
+        );
+      } catch (auditError) {
+        console.error('Project restored, but its audit log failed:', auditError);
+      }
+    } catch (error: any) {
+      setErrorMessage(error?.message || 'Failed to restore project.');
+    } finally {
+      setIsWorking(false);
+    }
+  };
+
+  const filteredProjects = projects.filter((project) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+    return (
+      String(project.title || '').toLowerCase().includes(query) ||
+      String(project.city || '').toLowerCase().includes(query)
+    );
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="animate-spin text-brand-blue" size={40} />
+      </div>
+    );
+  }
 
   return (
-    <div className="animate-in fade-in duration-300">
-      {/* Archive Modal */}
-      {tourToArchive && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm p-4">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 max-w-sm w-full">
-            <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-2"><AlertCircle size={40} /></div>
-            <h2 className="text-2xl font-serif text-brand-blue font-bold">Delete Tour?</h2>
-            <p className="text-gray-600 text-center text-sm font-medium">Permanently delete <strong>{tourToArchive.title}</strong>?</p>
-            <div className="flex gap-3 w-full mt-4">
-              <button onClick={() => setTourToArchive(null)} className="flex-1 py-3 bg-gray-100 font-bold rounded-xl text-xs uppercase">Cancel</button>
-              <button onClick={confirmArchive} disabled={isArchiving} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl text-xs uppercase flex items-center justify-center">
-                {isArchiving ? <Loader2 size={16} className="animate-spin" /> : 'Delete'}
+    <div className="animate-in fade-in duration-300 max-w-6xl mx-auto">
+      {successMessage && (
+        <div className="fixed top-24 right-8 z-[120] flex items-center gap-2 rounded-xl border border-green-200 bg-white px-4 py-3 shadow-xl">
+          <CheckCircle2 size={17} className="text-green-500" />
+          <span className="text-xs font-semibold text-brand-blue">{successMessage}</span>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="fixed top-24 right-8 z-[120] flex max-w-lg items-start gap-2 rounded-xl border border-red-200 bg-white px-4 py-3 shadow-xl">
+          <AlertCircle size={17} className="mt-0.5 shrink-0 text-red-500" />
+          <span className="text-xs font-semibold leading-relaxed text-red-600">{errorMessage}</span>
+        </div>
+      )}
+
+      {restoreTarget && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-brand-blue/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl">
+            <h2 className="text-center font-serif text-2xl font-bold text-brand-blue">Restore Project?</h2>
+            <p className="mt-3 text-center text-sm leading-relaxed text-gray-500">
+              <strong className="text-brand-blue">{restoreTarget.title}</strong> will return to the active CMS as <strong>Hidden</strong>. It will not be published automatically.
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button type="button" disabled={isWorking} onClick={() => setRestoreTarget(null)} className="flex-1 rounded-xl bg-gray-100 py-3 text-xs font-bold uppercase tracking-widest text-gray-600 hover:bg-gray-200 disabled:opacity-60">Cancel</button>
+              <button type="button" disabled={isWorking} onClick={confirmRestore} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand-blue py-3 text-xs font-bold uppercase tracking-widest text-white hover:bg-brand-gold disabled:opacity-60">
+                {isWorking ? <Loader2 size={15} className="animate-spin" /> : null}
+                Restore
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Success Modal */}
-      {successMessage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm p-4">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-3 max-w-sm w-full">
-            <div className="w-20 h-20 bg-green-50 text-green-500 rounded-full flex items-center justify-center mb-2"><CheckCircle2 size={40} /></div>
-            <h2 className="text-2xl font-serif text-brand-blue font-bold">Success!</h2>
-            <p className="text-gray-600 text-sm">{successMessage}</p>
-          </div>
-        </div>
-      )}
+      <div className="mb-7 flex items-center gap-6 border-b border-gray-200">
+        <button type="button" onClick={openProjects} className="pb-3 text-sm font-medium text-gray-400 transition-colors hover:text-brand-blue">Projects</button>
+        <button type="button" onClick={openNavigationSetup} className="pb-3 text-sm font-medium text-gray-400 transition-colors hover:text-brand-blue">Navigation Setup</button>
+        <button type="button" className="relative pb-3 text-sm font-bold text-brand-blue" aria-current="page">
+          Archived
+          <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-brand-blue" />
+        </button>
+      </div>
 
-      <div className="flex justify-between items-center mb-6">
-        <div className="text-sm font-medium"><span className="text-brand-blue font-bold">Showing ({filtered.length})</span> | Virtual Tours</div>
-        <div className="relative w-72">
-          <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input type="text" placeholder="Search tours..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-2 text-sm outline-none focus:border-brand-gold" />
+      <div className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-gold">Projects · Archive</p>
+          <h2 className="mt-2 font-serif text-4xl leading-none text-brand-blue">Archived Projects</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
+            Archived projects are removed from the website and active admin lists. Restore them later with their content retained.
+          </p>
+        </div>
+        <span className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+          {projects.length} Archived
+        </span>
+      </div>
+
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-gray-400">Showing <span className="font-semibold text-brand-blue">{filteredProjects.length}</span> of {projects.length}</p>
+        <div className="relative w-full sm:w-80">
+          <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input type="text" placeholder="Search archived projects..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-blue shadow-sm outline-none transition-all focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/10" />
         </div>
       </div>
 
-      <div className="w-full overflow-x-auto pb-4">
-        <div className="min-w-[600px]">
-          <div className="grid grid-cols-12 gap-4 py-4 border-y border-gray-200 text-[10px] font-bold tracking-widest uppercase text-brand-blue/60">
-            <div className="col-span-4">Tour Title</div>
-            <div className="col-span-3">Linked Project</div>
-            <div className="col-span-2">Status</div>
-            <div className="col-span-3 text-right">Actions</div>
+      <div className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
+        <div className="hidden grid-cols-12 gap-4 border-b border-gray-100 bg-gray-50/70 px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-brand-blue/50 md:grid">
+          <div className="col-span-4">Project</div>
+          <div className="col-span-2">Location</div>
+          <div className="col-span-2">Status</div>
+          <div className="col-span-2">Archived</div>
+          <div className="col-span-2 text-right">Restore</div>
+        </div>
+
+        {filteredProjects.length === 0 ? (
+          <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center">
+            <Archive size={30} className="mb-3 text-gray-300" />
+            <p className="text-sm font-semibold text-brand-blue">No archived projects</p>
+            <p className="mt-1 text-xs text-gray-400">Projects you archive will appear here.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {filteredProjects.map((project) => (
+              <div key={project.id} className="grid grid-cols-1 items-center gap-4 px-6 py-4 md:grid-cols-12">
+                <div className="col-span-4 flex min-w-0 items-center gap-4">
+                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-gray-100 bg-gray-100">
+                    <img src={project.image || 'https://via.placeholder.com/150?text=No+Image'} alt={project.title} className="h-full w-full object-cover" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-brand-blue">{project.title}</p>
+                    <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">Archived</p>
+                  </div>
+                </div>
+                <div className="col-span-2 text-sm text-gray-500">{project.city || '—'}</div>
+                <div className="col-span-2"><span className="inline-flex rounded-lg bg-brand-gold/10 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-wider text-brand-gold">{project.status || 'No status'}</span></div>
+                <div className="col-span-2 text-xs text-gray-400">{project.deleted_at ? formatDateTime(project.deleted_at) : '—'}</div>
+                <div className="col-span-2 flex items-center gap-2 md:justify-end">
+                  {checkPerm('edit_project', 'can_edit') && (
+                    <button type="button" onClick={() => setRestoreTarget(project)} className="rounded-lg border border-brand-blue/15 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-brand-blue transition-colors hover:bg-brand-blue hover:text-white">Restore</button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue/60">
+          Restore safely
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-gray-500">
+          Restored projects return as Hidden. Review their content and website visibility before publishing.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// --- VIRTUAL TOURS MANAGER ---
+
+function VirtualToursManager({ checkPerm }: ManagerProps) {
+  const router = useRouter();
+  const [tours, setTours] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    const fetchTours = async () => {
+      try {
+        const data = await fetchAdminVirtualToursList();
+        setTours(data || []);
+      } catch (error) {
+        console.error('Failed to fetch virtual tour project summaries:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchTours();
+  }, []);
+
+  const filtered = tours.filter((tour) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+
+    return (
+      String(tour.title || '').toLowerCase().includes(query) ||
+      String(tour.project_name || '').toLowerCase().includes(query)
+    );
+  });
+
+  const totalProjects = tours.length;
+  const configuredProjects = tours.filter(
+    (tour) => Number(tour.total_units || 0) > 0
+  ).length;
+  const totalVisibleUnits = tours.reduce(
+    (sum, tour) => sum + Number(tour.visible_units || 0),
+    0
+  );
+
+  const openProjectTours = (projectId: number) => {
+    if (!checkPerm('virtual_tours', 'can_edit')) return;
+    router.push(`/admin/virtualtours?project=${projectId}`);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="animate-spin text-brand-blue" size={40} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="animate-in fade-in duration-300">
+      <div className="max-w-6xl mx-auto w-full">
+        <div className="mb-7">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-2xl">
+              <p className="text-[11px] font-bold tracking-[0.24em] uppercase text-brand-gold">
+                Content · Virtual Tours
+              </p>
+
+              <h2 className="mt-2 text-4xl font-serif text-brand-blue leading-none">
+                360° Virtual Tours
+              </h2>
+
+              <p className="mt-3 text-sm text-gray-500 leading-relaxed">
+                Select a project to manage its towers, unit tours, visibility, and 360° view areas.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                {totalProjects} {totalProjects === 1 ? 'project' : 'projects'}
+              </span>
+
+              <span className="inline-flex items-center rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-green-700">
+                {configuredProjects} configured
+              </span>
+
+              <span className="inline-flex items-center rounded-full bg-brand-blue/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-brand-blue">
+                {totalVisibleUnits} visible units
+              </span>
+            </div>
           </div>
 
-          <div className="flex flex-col">
+          <div className="mt-7 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <div className="text-sm font-bold text-brand-blue">
+                Showing {filtered.length} of {tours.length}
+              </div>
+
+              <p className="text-xs text-gray-400 mt-1">
+                Select a project to manage its virtual tour content.
+              </p>
+            </div>
+
+            <div className="relative w-full sm:w-80">
+              <Search
+                size={16}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+              />
+
+              <input
+                type="text"
+                placeholder="Search project tours..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-brand-blue text-sm outline-none shadow-sm focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/10 transition-all"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full overflow-x-auto pb-4">
+          <div className="min-w-[920px] bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+            <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3.5 bg-gray-50/70 border-b border-gray-100 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              <div className="col-span-4">Virtual Tour Project</div>
+              <div className="col-span-2">Towers</div>
+              <div className="col-span-2">Units</div>
+              <div className="col-span-2">View Areas</div>
+              <div className="col-span-2 text-right">Visibility</div>
+            </div>
+
             {filtered.length === 0 ? (
-              <div className="py-12 text-center text-gray-400 text-sm">
-                No virtual tours found. Click 'Add Tour' to create one.
+              <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+                <div className="w-12 h-12 rounded-xl bg-brand-blue/5 text-brand-blue/40 flex items-center justify-center mb-4">
+                  <Move3d size={22} />
+                </div>
+
+                <p className="text-sm font-bold text-brand-blue">
+                  {tours.length === 0 ? 'No virtual tours available yet' : 'No virtual tours found'}
+                </p>
+
+                <p className="text-xs text-gray-400 mt-1">
+                  {tours.length === 0
+                    ? 'Add a tour to start linking projects, towers, and units.'
+                    : 'Try another search term.'}
+                </p>
               </div>
             ) : (
-              filtered.map((tour) => {
-                const firstRoomImage = tour.rooms && tour.rooms.length > 0 ? tour.rooms[0].image : null;
+              <div className="divide-y divide-gray-100">
+                {filtered.map((tour) => {
+                  const hasUnits = Number(tour.total_units || 0) > 0;
+                  const canEdit = checkPerm('virtual_tours', 'can_edit');
+                  const previewImage = tour.preview_image || null;
 
-                return (
-                  <div key={tour.id} className="grid grid-cols-12 gap-4 py-4 items-center border-b border-gray-100 hover:bg-gray-50 transition-colors group">
+                  return (
+                    <div
+                      key={tour.project_id}
+                      role={canEdit ? 'button' : undefined}
+                      tabIndex={canEdit ? 0 : -1}
+                      onClick={() => {
+                        if (canEdit) {
+                          openProjectTours(tour.project_id);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (!canEdit) return;
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          openProjectTours(tour.project_id);
+                        }
+                      }}
+                      className={`group grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-4 items-center transition-colors ${
+                        canEdit ? 'cursor-pointer hover:bg-gray-50/80 focus:outline-none focus:bg-gray-50/80' : ''
+                      }`}
+                    >
+                      <div className="md:col-span-4 flex items-center gap-4 min-w-0">
+                        <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden shrink-0 border border-gray-100 flex items-center justify-center">
+                          {previewImage ? (
+                            <img
+                              src={previewImage}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <Move3d size={18} className="text-gray-300" />
+                          )}
+                        </div>
 
-                    <div className="col-span-4 flex items-center gap-4">
-                      <div className="w-10 h-10 rounded bg-gray-200 overflow-hidden shrink-0">
-                        <img src={firstRoomImage || 'https://via.placeholder.com/150'} alt={tour.title} className="w-full h-full object-cover" />
+                        <div className="min-w-0">
+                          <div className="text-sm font-bold text-brand-blue truncate group-hover:text-brand-gold transition-colors">
+                            {tour.title}
+                          </div>
+
+                          <div className="text-xs text-gray-400 mt-1 truncate">
+                            Linked to {tour.project_name}
+                          </div>
+                        </div>
                       </div>
-                      <span className="font-bold text-sm text-brand-blue truncate">{tour.title}</span>
-                    </div>
 
-                    <div className="col-span-3 text-sm text-gray-500 truncate">
-                      {tour.project_table ? (Array.isArray(tour.project_table) ? tour.project_table[0]?.title : tour.project_table?.title) : 'None'}
-                    </div>
+                      <div className="md:col-span-2">
+                        <span className="text-sm font-bold text-brand-blue">
+                          {tour.total_towers}
+                        </span>
+                        <span className="text-xs text-gray-400 ml-1.5">
+                          {Number(tour.total_towers) === 1 ? 'tower' : 'towers'}
+                        </span>
+                      </div>
 
-                    <div className="col-span-2">
-                      <span className={`text-[10px] font-bold uppercase tracking-widest ${tour.status === 'Active' ? 'bg-brand-gold/10 text-brand-gold' : 'bg-gray-100 text-gray-500'} px-3 py-1.5 rounded-md`}>
-                        {tour.status}
-                      </span>
-                    </div>
+                      <div className="md:col-span-2">
+                        <span className="text-sm font-bold text-brand-blue">
+                          {tour.total_units}
+                        </span>
+                        <span className="text-xs text-gray-400 ml-1.5">
+                          {Number(tour.total_units) === 1 ? 'unit' : 'units'}
+                        </span>
+                      </div>
 
-                    <div className="col-span-3 flex items-center justify-end gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                      {checkPerm('virtual_tours', 'can_edit') && (
-                        <Link 
-                          href={`/admin/virtualtours?project=${tour.project_id || tour.id}`}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-white shadow-sm border border-gray-200 text-brand-blue hover:bg-brand-blue hover:text-white rounded-lg transition-colors text-xs font-bold uppercase tracking-wider"
-                        >
-                          <Edit2 size={13} />
-                          <span>Manage Tours</span>
-                        </Link>
-                      )}
-                      {checkPerm('virtual_tours', 'can_delete') && (
-                        <button 
-                          onClick={() => handleArchiveClick(tour.id, tour.title)} 
-                          className="p-2 bg-white shadow-sm border border-gray-200 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors"
-                          title="Delete Project Tours"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
+                      <div className="md:col-span-2">
+                        <span className="text-sm font-bold text-brand-blue">
+                          {tour.total_view_areas}
+                        </span>
+                        <span className="text-xs text-gray-400 ml-1.5">
+                          {Number(tour.total_view_areas) === 1 ? 'area' : 'areas'}
+                        </span>
+                      </div>
+
+                      <div className="md:col-span-2 flex items-center justify-start md:justify-end gap-1.5 flex-nowrap whitespace-nowrap">
+                        {!hasUnits ? (
+                          <span className="inline-flex shrink-0 items-center rounded-lg bg-gray-100 px-2 py-1.5 text-[8px] font-bold uppercase tracking-wider text-gray-500">
+                            Not configured
+                          </span>
+                        ) : (
+                          <>
+                            <span className="inline-flex items-center rounded-lg bg-green-50 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-wider text-green-700 whitespace-nowrap">
+                              {tour.visible_units} visible
+                            </span>
+
+                            {Number(tour.hidden_units || 0) > 0 && (
+                              <span className="inline-flex items-center rounded-lg bg-gray-100 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-wider text-gray-500 whitespace-nowrap">
+                                {tour.hidden_units} hidden
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })
+                  );
+                })}
+              </div>
             )}
           </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue/60">
+            Visibility tip
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-gray-500">
+            Visibility is managed per unit inside each project's Virtual Tour editor. Open a
+            project to manage its towers, units, and 360° view areas.
+          </p>
         </div>
       </div>
     </div>
   );
 }
+
 
 // --- PROMOTIONS MANAGER ---
 function PromotionsManager({ checkPerm }: ManagerProps) {
@@ -1002,19 +1320,38 @@ function PromotionsManager({ checkPerm }: ManagerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const [promoToArchive, setPromoToArchive] = useState<{ id: number, title: string } | null>(null);
+  const [promoToArchive, setPromoToArchive] = useState<{ id: number; title: string } | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     const fetchPromos = async () => {
       try {
         const data = await fetchAdminPromotionsList();
         setPromotions(data || []);
-      } catch (error) { console.error(error); } finally { setIsLoading(false); }
+      } catch (error: any) {
+        console.error(error);
+        setErrorMessage(error?.message || 'Failed to load promotions.');
+      } finally {
+        setIsLoading(false);
+      }
     };
+
     fetchPromos();
   }, []);
+
+  const showSuccess = (message: string) => {
+    setErrorMessage('');
+    setSuccessMessage(message);
+    window.setTimeout(() => setSuccessMessage(''), 2500);
+  };
+
+  const showError = (message: string) => {
+    setSuccessMessage('');
+    setErrorMessage(message);
+    window.setTimeout(() => setErrorMessage(''), 3500);
+  };
 
   const handleArchiveClick = (id: number, title: string) => {
     setPromoToArchive({ id, title });
@@ -1022,136 +1359,396 @@ function PromotionsManager({ checkPerm }: ManagerProps) {
 
   const confirmArchive = async () => {
     if (!promoToArchive) return;
+
+    const target = promoToArchive;
     setIsArchiving(true);
 
     try {
-      await archiveRecord('promotions', promoToArchive.id, 'is_archived');
+      await archiveRecord('promotions', target.id, 'is_archived');
 
-      // ✅ SERVER-SIDE AUDIT LOG
-      await createAuditLogAction('DELETE', 'Promotions', promoToArchive.title, 'Archived promotion. (Soft Delete)');
+      await createAuditLogAction(
+        'DELETE',
+        'Promotions',
+        target.title,
+        'Archived promotion. Content retained for restoration.',
+        { entityId: target.id }
+      );
 
-      setPromotions(prev => prev.filter(p => p.id !== promoToArchive.id));
+      setPromotions((prev) => prev.filter((promo) => promo.id !== target.id));
       setPromoToArchive(null);
-      setSuccessMessage(`Promotion "${promoToArchive.title}" successfully deleted.`);
-      setTimeout(() => setSuccessMessage(''), 2500);
-
+      showSuccess(`Promotion "${target.title}" archived.`);
     } catch (error: any) {
-      alert(`Failed to archive promotion: ${error.message}`);
+      setPromoToArchive(null);
+      showError(error?.message || 'Failed to archive promotion.');
     } finally {
       setIsArchiving(false);
     }
   };
 
-  const handleToggleStatus = async (id: number, currentStatus: boolean, title: string) => {
+  const handleToggleStatus = async (
+    id: number,
+    currentStatus: boolean,
+    title: string
+  ) => {
     try {
       await toggleActiveStatus('promotions', id, currentStatus);
 
-      // ✅ SERVER-SIDE AUDIT LOG
-      await createAuditLogAction('EDIT', 'Promotions', title, `Changed active status to ${!currentStatus ? 'Visible' : 'Hidden'}.`);
+      await createAuditLogAction(
+        'EDIT',
+        'Promotions',
+        title,
+        `Changed website visibility to ${!currentStatus ? 'Visible' : 'Hidden'}.`,
+        { entityId: id, fieldKey: 'is_active', oldValue: currentStatus, newValue: !currentStatus }
+      );
 
-      setPromotions(prev => prev.map(p => p.id === id ? { ...p, is_active: !currentStatus } : p));
-    } catch (error: any) { alert(`Failed to toggle: ${error.message}`); }
+      setPromotions((prev) =>
+        prev.map((promo) =>
+          promo.id === id ? { ...promo, is_active: !currentStatus } : promo
+        )
+      );
+
+      showSuccess(
+        `"${title}" is now ${!currentStatus ? 'visible' : 'hidden'} on the website.`
+      );
+    } catch (error: any) {
+      showError(error?.message || 'Failed to update promotion visibility.');
+    }
   };
 
-  const filtered = promotions.filter(p => p.title.toLowerCase().includes(searchQuery.toLowerCase()));
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const filtered = promotions.filter((promo) =>
+    String(promo.title || '')
+      .toLowerCase()
+      .includes(normalizedSearch)
+  );
 
-  if (isLoading) return <div className="flex justify-center items-center h-64"><Loader2 className="animate-spin text-brand-blue" size={40} /></div>;
+  const visibleCount = promotions.filter((promo) => Boolean(promo.is_active)).length;
+  const hiddenCount = promotions.length - visibleCount;
+
+  const openPromotion = (id: number) => {
+    if (!checkPerm('promotion_code', 'can_edit')) return;
+    router.push(`/admin/promotions?edit=${id}`);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="animate-spin text-brand-blue" size={40} />
+      </div>
+    );
+  }
 
   return (
     <div className="animate-in fade-in duration-300">
-      {/* === ARCHIVE CONFIRMATION MODAL === */}
       {promoToArchive && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm animate-in fade-in duration-300 p-4">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 max-w-sm w-full animate-in zoom-in-95 duration-300">
-            <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center shadow-inner mb-2">
-              <AlertCircle size={40} />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-3xl bg-white p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="mb-1 flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-500 shadow-inner">
+              <AlertCircle size={32} />
             </div>
-            <h2 className="text-2xl font-serif text-brand-blue text-center font-bold">Delete Promotion?</h2>
-            <p className="text-gray-600 text-center text-sm font-medium">
-              Are you sure you want to delete <strong>{promoToArchive.title}</strong>? It will no longer be visible on the public site.
+
+            <h2 className="text-center font-serif text-2xl font-bold text-brand-blue">
+              Archive Promotion?
+            </h2>
+
+            <p className="text-center text-sm leading-relaxed text-gray-500">
+              <strong className="text-brand-blue">{promoToArchive.title}</strong> will be
+              removed from the active Promotions list and will no longer appear on the
+              public website.
             </p>
 
-            <div className="flex gap-3 w-full mt-4">
+            <div className="mt-3 flex w-full gap-3">
               <button
                 type="button"
                 onClick={() => setPromoToArchive(null)}
                 disabled={isArchiving}
-                className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors text-xs uppercase tracking-widest outline-none"
+                className="flex-1 rounded-xl bg-gray-100 py-3 text-xs font-bold uppercase tracking-widest text-gray-700 outline-none transition-colors hover:bg-gray-200 disabled:opacity-60"
               >
                 Cancel
               </button>
+
               <button
                 type="button"
                 onClick={confirmArchive}
                 disabled={isArchiving}
-                className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors text-xs uppercase tracking-widest flex items-center justify-center gap-2 outline-none"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 py-3 text-xs font-bold uppercase tracking-widest text-white outline-none transition-colors hover:bg-red-700 disabled:opacity-60"
               >
-                {isArchiving ? <Loader2 size={16} className="animate-spin" /> : 'Yes'}
+                {isArchiving ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  'Archive'
+                )}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* === SUCCESS MODAL === */}
       {successMessage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm animate-in fade-in duration-300 p-4">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-3 max-w-sm w-full animate-in zoom-in-95 duration-300">
-            <div className="w-20 h-20 bg-green-50 text-green-500 rounded-full flex items-center justify-center mb-2 shadow-inner">
-              <CheckCircle2 size={40} />
+        <div className="fixed top-24 right-6 z-[120] max-w-sm rounded-2xl border border-green-100 bg-white px-4 py-3 shadow-xl animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-50 text-green-600">
+              <CheckCircle2 size={17} />
             </div>
-            <h2 className="text-2xl font-serif text-brand-blue text-center font-bold">Success!</h2>
-            <p className="text-gray-600 text-center font-medium text-sm">{successMessage}</p>
+
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-green-700">
+                Updated
+              </p>
+              <p className="mt-1 text-sm text-gray-600">{successMessage}</p>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-        <div className="text-sm text-brand-blue/70 font-medium"><span className="text-brand-blue font-bold">Showing ({filtered.length})</span> <span className="mx-2 hidden sm:inline">|</span><br className="sm:hidden" /> Active Promos</div>
-        <div className="relative w-full sm:w-72">
-          <Search size={16} className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
-          <input type="text" placeholder="Search promotions..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-2 text-brand-blue text-sm focus:border-brand-gold outline-none shadow-sm" />
+      {errorMessage && (
+        <div className="fixed top-24 right-6 z-[120] max-w-sm rounded-2xl border border-red-100 bg-white px-4 py-3 shadow-xl animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-500">
+              <AlertCircle size={17} />
+            </div>
+
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-red-600">
+                Could not update
+              </p>
+              <p className="mt-1 text-sm text-gray-600">{errorMessage}</p>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="w-full overflow-x-auto pb-4">
-        <div className="min-w-[600px]">
-          <div className="grid grid-cols-12 gap-4 py-4 border-y border-gray-200 text-[10px] font-bold tracking-widest uppercase text-brand-blue/60">
-            <div className="col-span-5">Promotion Title</div>
-            <div className="col-span-2">Status</div>
-            <div className="col-span-3">Validity</div>
-            <div className="col-span-2 text-right">Actions</div>
+      <div className="mx-auto w-full max-w-6xl">
+        <div className="mb-7">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-2xl">
+              <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-brand-gold">
+                Content · Promotions
+              </p>
+
+              <h2 className="mt-2 font-serif text-4xl leading-none text-brand-blue">
+                Promotions
+              </h2>
+
+              <p className="mt-3 text-sm leading-relaxed text-gray-500">
+                Manage promotional offers shown on the website, including campaign status,
+                validity, and website visibility.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                {promotions.length} {promotions.length === 1 ? 'promotion' : 'promotions'}
+              </span>
+
+              <span className="inline-flex items-center rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-green-700">
+                {visibleCount} visible
+              </span>
+
+              {hiddenCount > 0 && (
+                <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                  {hiddenCount} hidden
+                </span>
+              )}
+            </div>
           </div>
 
-          <div className="flex flex-col">
-            {filtered.length === 0 ? <div className="py-12 text-center text-gray-400 text-sm">No promotions found.</div> : filtered.map((promo) => (
-              <div key={promo.id} className="grid grid-cols-12 gap-4 py-4 items-center border-b border-gray-100 hover:bg-gray-50/50 transition-colors group">
-
-                <div className="col-span-5">
-                  {checkPerm('promotion_code', 'can_edit') ? (
-                    <button onClick={() => router.push(`/admin/promotions?edit=${promo.id}`)} className="text-brand-blue font-bold text-sm hover:text-brand-gold text-left">{promo.title}</button>
-                  ) : (
-                    <span className="text-brand-blue font-bold text-sm text-left">{promo.title}</span>
-                  )}
-                </div>
-
-                <div className="col-span-2"><span className="text-[10px] font-bold uppercase tracking-widest px-2 sm:px-3 py-1.5 rounded-md bg-brand-gold/10 text-brand-gold">{promo.status}</span></div>
-                <div className="col-span-3 text-xs sm:text-sm text-gray-500 font-medium">{promo.validity_date}</div>
-
-                <div className="col-span-2 flex justify-end gap-1 sm:gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                  {checkPerm('promotion_code', 'can_edit') && (
-                    <button onClick={() => handleToggleStatus(promo.id, promo.is_active, promo.title)} className={`p-1.5 sm:p-2 bg-white shadow-sm border rounded-lg ${promo.is_active ? 'border-green-200 text-green-600' : 'border-gray-200 text-gray-400'}`}>{promo.is_active ? <Eye size={14} /> : <EyeOff size={14} />}</button>
-                  )}
-                  {checkPerm('promotion_code', 'can_edit') && (
-                    <button onClick={() => router.push(`/admin/promotions?edit=${promo.id}`)} className="p-1.5 sm:p-2 bg-white shadow-sm border border-gray-200 text-brand-blue hover:bg-brand-blue hover:text-white rounded-lg transition-colors"><Edit2 size={14} /></button>
-                  )}
-                  {checkPerm('promotion_code', 'can_delete') && (
-                    <button onClick={() => handleArchiveClick(promo.id, promo.title)} className="p-1.5 sm:p-2 bg-white shadow-sm border border-gray-200 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors"><Trash2 size={14} /></button>
-                  )}
-                </div>
+          <div className="mt-7 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-sm font-bold text-brand-blue">
+                Showing {filtered.length} of {promotions.length}
               </div>
-            ))}
+
+              <p className="mt-1 text-xs text-gray-400">
+                Select a promotion to edit its website content.
+              </p>
+            </div>
+
+            <div className="relative w-full sm:w-80">
+              <Search
+                size={16}
+                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+
+              <input
+                type="text"
+                placeholder="Search promotions..."
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-blue shadow-sm outline-none transition-all focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/10"
+              />
+            </div>
           </div>
+        </div>
+
+        <div className="w-full overflow-x-auto pb-4">
+          <div className="min-w-[820px] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <div className="hidden grid-cols-12 gap-4 border-b border-gray-100 bg-gray-50/70 px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-gray-400 md:grid">
+              <div className="col-span-4">Promotion</div>
+              <div className="col-span-2">Campaign Status</div>
+              <div className="col-span-3">Validity</div>
+              <div className="col-span-2">Website Visibility</div>
+              <div className="col-span-1 text-right">Archive</div>
+            </div>
+
+            {filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-blue/5 text-brand-blue/40">
+                  <Megaphone size={22} />
+                </div>
+
+                <p className="text-sm font-bold text-brand-blue">
+                  {promotions.length === 0 ? 'No promotions yet' : 'No promotions found'}
+                </p>
+
+                <p className="mt-1 text-xs text-gray-400">
+                  {promotions.length === 0
+                    ? 'Use Add Promo to create the first promotional offer.'
+                    : 'Try another search term.'}
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {filtered.map((promo) => {
+                  const canEdit = checkPerm('promotion_code', 'can_edit');
+
+                  return (
+                    <div
+                      key={promo.id}
+                      role={canEdit ? 'button' : undefined}
+                      tabIndex={canEdit ? 0 : -1}
+                      onClick={() => {
+                        if (canEdit) openPromotion(promo.id);
+                      }}
+                      onKeyDown={(event) => {
+                        if (!canEdit) return;
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          openPromotion(promo.id);
+                        }
+                      }}
+                      className={`group grid grid-cols-1 items-center gap-4 px-6 py-4 transition-colors md:grid-cols-12 ${
+                        canEdit
+                          ? 'cursor-pointer hover:bg-gray-50/80 focus:bg-gray-50/80 focus:outline-none'
+                          : ''
+                      }`}
+                    >
+                      <div className="flex min-w-0 items-center gap-4 md:col-span-4">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50 shadow-sm">
+                          {promo.image ? (
+                            <img
+                              src={promo.image}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              onError={(event) => {
+                                event.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <Megaphone size={18} className="text-gray-300" />
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-bold text-brand-blue transition-colors group-hover:text-brand-gold">
+                            {promo.title || 'Untitled Promotion'}
+                          </div>
+
+                          <div className="mt-1 text-xs text-gray-400 md:hidden">
+                            {promo.validity_date || 'No validity date'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <span className="inline-flex items-center rounded-lg bg-brand-gold/10 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-wider text-brand-gold">
+                          {promo.status || 'Promotion'}
+                        </span>
+                      </div>
+
+                      <div className="text-sm font-medium text-gray-500 md:col-span-3">
+                        {promo.validity_date || 'No validity date'}
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <button
+                          type="button"
+                          disabled={!canEdit}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleToggleStatus(
+                              promo.id,
+                              Boolean(promo.is_active),
+                              promo.title || 'Untitled Promotion'
+                            );
+                          }}
+                          className={`inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider transition-all ${
+                            canEdit
+                              ? 'cursor-pointer'
+                              : 'cursor-not-allowed opacity-60'
+                          }`}
+                          title={
+                            promo.is_active
+                              ? 'Hide this promotion from the website'
+                              : 'Show this promotion on the website'
+                          }
+                        >
+                          <span className={promo.is_active ? 'text-green-700' : 'text-gray-400'}>
+                            {promo.is_active ? 'Visible' : 'Hidden'}
+                          </span>
+
+                          <span
+                            className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${
+                              promo.is_active ? 'bg-green-500' : 'bg-gray-300'
+                            } ${canEdit ? 'hover:ring-4 hover:ring-brand-blue/5' : ''}`}
+                            aria-hidden="true"
+                          >
+                            <span
+                              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                                promo.is_active
+                                  ? 'translate-x-5'
+                                  : 'translate-x-0.5'
+                              }`}
+                            />
+                          </span>
+                        </button>
+                      </div>
+
+                      <div className="flex md:col-span-1 md:justify-end">
+                        {checkPerm('promotion_code', 'can_delete') && (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleArchiveClick(
+                                promo.id,
+                                promo.title || 'Untitled Promotion'
+                              );
+                            }}
+                            className="cursor-pointer rounded-lg p-2 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500"
+                            title={`Archive ${promo.title || 'promotion'}`}
+                            aria-label={`Archive ${promo.title || 'promotion'}`}
+                          >
+                            <Archive size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue/60">
+            Visibility & archiving
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-gray-500">
+            Hiding a promotion keeps it available for editing while removing it from the
+            public website. Archiving removes it from the active Promotions list.
+          </p>
         </div>
       </div>
     </div>
@@ -1174,8 +1771,13 @@ function PartnerBanksManager({ checkPerm }: ManagerProps) {
       try {
         const data = await fetchAdminBanksList();
         setBanks(data || []);
-      } catch (error) { console.error(error); } finally { setIsLoading(false); }
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setIsLoading(false);
+      }
     };
+
     fetchBanks();
   }, []);
 
@@ -1190,14 +1792,19 @@ function PartnerBanksManager({ checkPerm }: ManagerProps) {
     try {
       await archiveRecord('banks', bankToArchive.id, 'is_archived');
 
-      // ✅ SERVER-SIDE AUDIT LOG
-      await createAuditLogAction('DELETE', 'Partner Banks', bankToArchive.name, 'Archived bank. (Soft Delete)');
+      await createAuditLogAction(
+        'DELETE',
+        'Partner Banks',
+        bankToArchive.name,
+        'Archived bank. Content retained for restoration.',
+        { entityId: bankToArchive.id }
+      );
 
-      setBanks(prev => prev.filter(b => b.id !== bankToArchive.id));
+      const archivedName = bankToArchive.name;
+      setBanks((prev) => prev.filter((bank) => bank.id !== bankToArchive.id));
       setBankToArchive(null);
-      setSuccessMessage(`Bank "${bankToArchive.name}" successfully deleted.`);
+      setSuccessMessage(`Bank "${archivedName}" archived.`);
       setTimeout(() => setSuccessMessage(''), 2500);
-
     } catch (error: any) {
       alert(`Failed to archive bank: ${error.message}`);
     } finally {
@@ -1205,120 +1812,326 @@ function PartnerBanksManager({ checkPerm }: ManagerProps) {
     }
   };
 
-  const handleToggleBank = async (id: number, currentStatus: boolean, bankName: string) => {
+  const handleToggleBank = async (
+    id: number,
+    currentStatus: boolean,
+    bankName: string
+  ) => {
     try {
       await toggleActiveStatus('banks', id, currentStatus);
 
-      // ✅ SERVER-SIDE AUDIT LOG
-      await createAuditLogAction('EDIT', 'Partner Banks', bankName, `Changed active status to ${!currentStatus ? 'Visible' : 'Hidden'}.`);
+      await createAuditLogAction(
+        'EDIT',
+        'Partner Banks',
+        bankName,
+        `Changed website visibility to ${!currentStatus ? 'Visible' : 'Hidden'}.`,
+        { entityId: id, fieldKey: 'is_active', oldValue: currentStatus, newValue: !currentStatus }
+      );
 
-      setBanks(prev => prev.map(b => b.id === id ? { ...b, is_active: !currentStatus } : b));
-    } catch (error: any) { alert(`Failed to toggle status: ${error.message}`); }
+      setBanks((prev) =>
+        prev.map((bank) =>
+          bank.id === id ? { ...bank, is_active: !currentStatus } : bank
+        )
+      );
+    } catch (error: any) {
+      alert(`Failed to toggle status: ${error.message}`);
+    }
   };
 
-  const filteredBanks = banks.filter(bank => bank.bank_name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredBanks = banks.filter((bank) =>
+    String(bank.bank_name || '')
+      .toLowerCase()
+      .includes(searchQuery.trim().toLowerCase())
+  );
 
-  if (isLoading) return <div className="flex justify-center items-center h-64"><Loader2 className="animate-spin text-brand-blue" size={40} /></div>;
+  const visibleCount = banks.filter((bank) => bank.is_active).length;
+  const hiddenCount = banks.length - visibleCount;
+
+  const openBank = (id: number) => {
+    if (!checkPerm('edit_banks', 'can_edit')) return;
+    router.push(`/admin/partnerbanks?edit=${id}`);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="animate-spin text-brand-blue" size={40} />
+      </div>
+    );
+  }
 
   return (
     <div className="animate-in fade-in duration-300">
-
-      {/* === ARCHIVE CONFIRMATION MODAL === */}
       {bankToArchive && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm animate-in fade-in duration-300 p-4">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 max-w-sm w-full animate-in zoom-in-95 duration-300">
-            <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center shadow-inner mb-2">
-              <AlertCircle size={40} />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm animate-in fade-in duration-200 p-4">
+          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 max-w-sm w-full animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center shadow-inner mb-1">
+              <AlertCircle size={32} />
             </div>
-            <h2 className="text-2xl font-serif text-brand-blue text-center font-bold">Delete Bank?</h2>
-            <p className="text-gray-600 text-center text-sm font-medium">
-              Are you sure you want to delete <strong>{bankToArchive.name}</strong>? It will no longer be visible on the public site.
+
+            <h2 className="text-2xl font-serif text-brand-blue text-center font-bold">
+              Archive Partner Bank?
+            </h2>
+
+            <p className="text-gray-500 text-center text-sm leading-relaxed">
+              <strong className="text-brand-blue">{bankToArchive.name}</strong> will leave the active list and website. Its content will be retained for restoration.
             </p>
 
-            <div className="flex gap-3 w-full mt-4">
+            <div className="flex gap-3 w-full mt-3">
               <button
                 type="button"
                 onClick={() => setBankToArchive(null)}
                 disabled={isArchiving}
-                className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors text-xs uppercase tracking-widest outline-none"
+                className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors text-xs uppercase tracking-widest outline-none disabled:opacity-60"
               >
                 Cancel
               </button>
+
               <button
                 type="button"
                 onClick={confirmArchive}
                 disabled={isArchiving}
-                className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors text-xs uppercase tracking-widest flex items-center justify-center gap-2 outline-none"
+                className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors text-xs uppercase tracking-widest flex items-center justify-center gap-2 outline-none disabled:opacity-60"
               >
-                {isArchiving ? <Loader2 size={16} className="animate-spin" /> : 'Yes'}
+                {isArchiving ? <Loader2 size={16} className="animate-spin" /> : 'Archive'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* === SUCCESS MODAL === */}
       {successMessage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm animate-in fade-in duration-300 p-4">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-3 max-w-sm w-full animate-in zoom-in-95 duration-300">
-            <div className="w-20 h-20 bg-green-50 text-green-500 rounded-full flex items-center justify-center mb-2 shadow-inner">
-              <CheckCircle2 size={40} />
+        <div className="fixed right-6 top-24 z-[120] max-w-sm rounded-2xl border border-green-100 bg-white px-4 py-3 shadow-xl animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-50 text-green-600">
+              <CheckCircle2 size={17} />
             </div>
-            <h2 className="text-2xl font-serif text-brand-blue text-center font-bold">Success!</h2>
-            <p className="text-gray-600 text-center font-medium text-sm">{successMessage}</p>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-green-700">
+                Updated
+              </p>
+              <p className="mt-1 text-sm text-gray-600">{successMessage}</p>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-        <div className="text-sm text-brand-blue/70 font-medium"><span className="text-brand-blue font-bold">Showing ({filteredBanks.length})</span> <span className="mx-2 hidden sm:inline">|</span><br className="sm:hidden" /> Active Banks</div>
-        <div className="relative w-full sm:w-72">
-          <Search size={16} className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
-          <input type="text" placeholder="Search banks..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-2 text-brand-blue text-sm focus:border-brand-gold outline-none shadow-sm" />
-        </div>
-      </div>
+      <div className="max-w-6xl mx-auto w-full">
+        <div className="mb-7">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-2xl">
+              <p className="text-[11px] font-bold tracking-[0.24em] uppercase text-brand-gold">
+                Content · Partner Banks
+              </p>
 
-      <div className="w-full overflow-x-auto pb-4">
-        <div className="min-w-[600px]">
-          <div className="grid grid-cols-12 gap-4 py-4 border-y border-gray-200 text-[10px] font-bold tracking-widest uppercase text-brand-blue/60">
-            <div className="col-span-5">Bank Name</div>
-            <div className="col-span-2">Max Loan</div>
-            <div className="col-span-3">Terms</div>
-            <div className="col-span-2 text-right">Actions</div>
+              <h2 className="mt-2 text-4xl font-serif text-brand-blue leading-none">
+                Partner Banks
+              </h2>
+
+              <p className="mt-3 text-sm text-gray-500 leading-relaxed">
+                Manage financing partners shown on the website, including each bank's logo,
+                maximum loan value, financing terms, and website visibility.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                {banks.length} {banks.length === 1 ? 'bank' : 'banks'}
+              </span>
+
+              <span className="inline-flex items-center rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-green-700">
+                {visibleCount} visible
+              </span>
+
+              {hiddenCount > 0 && (
+                <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                  {hiddenCount} hidden
+                </span>
+              )}
+            </div>
           </div>
 
-          <div className="flex flex-col">
-            {filteredBanks.length === 0 ? <div className="py-12 text-center text-gray-400 text-sm">No banks found.</div> : filteredBanks.map((bank) => (
-              <div key={bank.id} className="grid grid-cols-12 gap-4 py-4 items-center border-b border-gray-100 hover:bg-gray-50/50 transition-colors group">
-
-                <div className="col-span-5 flex items-center gap-3 sm:gap-4">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-white shadow-sm border border-gray-100 overflow-hidden flex items-center justify-center p-1 shrink-0"><img src={bank.image} alt={bank.bank_name} className="w-full h-full object-contain" /></div>
-                  {checkPerm('edit_banks', 'can_edit') ? (
-                    <button onClick={() => router.push(`/admin/partnerbanks?edit=${bank.id}`)} className="text-brand-blue font-bold text-sm hover:text-brand-gold text-left">{bank.bank_name}</button>
-                  ) : (
-                    <span className="text-brand-blue font-bold text-sm text-left">{bank.bank_name}</span>
-                  )}
-                </div>
-
-                <div className="col-span-2"><span className="text-[10px] font-bold uppercase tracking-widest px-2 sm:px-3 py-1.5 rounded-md bg-green-50 text-green-600 border border-green-100">{bank.max_loan}% MAX</span></div>
-                <div className="col-span-3 text-xs sm:text-sm text-gray-500 font-medium truncate pr-4">{bank.terms}</div>
-
-                <div className="col-span-2 flex justify-end gap-1 sm:gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                  {checkPerm('edit_banks', 'can_edit') && (
-                    <button onClick={() => handleToggleBank(bank.id, bank.is_active, bank.bank_name)} className={`p-1.5 sm:p-2 bg-white shadow-sm border rounded-lg ${bank.is_active ? 'border-green-200 text-green-600' : 'border-gray-200 text-gray-400'}`}>{bank.is_active ? <Eye size={14} /> : <EyeOff size={14} />}</button>
-                  )}
-                  {checkPerm('edit_banks', 'can_edit') && (
-                    <button onClick={() => router.push(`/admin/partnerbanks?edit=${bank.id}`)} className="p-1.5 sm:p-2 bg-white shadow-sm border border-gray-200 text-brand-blue hover:bg-brand-blue hover:text-white rounded-lg transition-colors"><Edit2 size={14} /></button>
-                  )}
-                  {checkPerm('edit_banks', 'can_delete') && (
-                    <button onClick={() => handleArchiveClick(bank.id, bank.bank_name)} className="p-1.5 sm:p-2 bg-white shadow-sm border border-gray-200 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors">
-                      <Trash2 size={14} />
-                    </button>
-                  )}
-                </div>
+          <div className="mt-7 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <div className="text-sm font-bold text-brand-blue">
+                Showing {filteredBanks.length} of {banks.length}
               </div>
-            ))}
+
+              <p className="text-xs text-gray-400 mt-1">
+                Select a bank to edit its website content.
+              </p>
+            </div>
+
+            <div className="relative w-full sm:w-80">
+              <Search
+                size={16}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+              />
+
+              <input
+                type="text"
+                placeholder="Search banks..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-brand-blue text-sm outline-none shadow-sm focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/10 transition-all"
+              />
+            </div>
           </div>
+        </div>
+
+        <div className="w-full overflow-x-auto pb-4">
+          <div className="min-w-[820px] bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+            <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3.5 bg-gray-50/70 border-b border-gray-100 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              <div className="col-span-4">Partner Bank</div>
+              <div className="col-span-2">Max Loan</div>
+              <div className="col-span-3">Terms</div>
+              <div className="col-span-2">Website Visibility</div>
+              <div className="col-span-1 text-right">Actions</div>
+            </div>
+
+            {filteredBanks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+                <div className="w-12 h-12 rounded-xl bg-brand-blue/5 text-brand-blue/40 flex items-center justify-center mb-4">
+                  <Landmark size={22} />
+                </div>
+
+                <p className="text-sm font-bold text-brand-blue">
+                  {banks.length === 0 ? 'No partner banks yet' : 'No banks found'}
+                </p>
+
+                <p className="text-xs text-gray-400 mt-1">
+                  {banks.length === 0
+                    ? 'Use Add Bank to create the first financing partner.'
+                    : 'Try another search term.'}
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {filteredBanks.map((bank) => {
+                  const canEdit = checkPerm('edit_banks', 'can_edit');
+
+                  return (
+                    <div
+                      key={bank.id}
+                      role={canEdit ? 'button' : undefined}
+                      tabIndex={canEdit ? 0 : -1}
+                      onClick={() => {
+                        if (canEdit) openBank(bank.id);
+                      }}
+                      onKeyDown={(e) => {
+                        if (!canEdit) return;
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          openBank(bank.id);
+                        }
+                      }}
+                      className={`group grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-4 items-center transition-colors ${
+                        canEdit
+                          ? 'cursor-pointer hover:bg-gray-50/80 focus:outline-none focus:bg-gray-50/80'
+                          : ''
+                      }`}
+                    >
+                      <div className="md:col-span-4 flex items-center gap-4 min-w-0">
+                        <div className="w-12 h-12 rounded-xl bg-white overflow-hidden shrink-0 border border-gray-100 shadow-sm flex items-center justify-center p-1.5">
+                          {bank.image ? (
+                            <img
+                              src={bank.image}
+                              alt={bank.bank_name}
+                              className="w-full h-full object-contain"
+                            />
+                          ) : (
+                            <Landmark size={18} className="text-gray-300" />
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="text-sm font-bold text-brand-blue truncate group-hover:text-brand-gold transition-colors">
+                            {bank.bank_name}
+                          </div>
+
+                          <div className="md:hidden text-xs text-gray-400 mt-1">
+                            {bank.max_loan || '—'}% maximum loan
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <span className="inline-flex items-center rounded-lg bg-brand-gold/10 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-wider text-brand-gold">
+                          {bank.max_loan || '—'}% max
+                        </span>
+                      </div>
+
+                      <div className="md:col-span-3 text-sm text-gray-500 leading-relaxed md:truncate md:pr-4">
+                        {bank.terms || 'No financing terms provided.'}
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <button
+                          type="button"
+                          disabled={!canEdit}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleBank(bank.id, bank.is_active, bank.bank_name);
+                          }}
+                          className={`inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider transition-all ${
+                            canEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
+                          }`}
+                          title={
+                            bank.is_active
+                              ? 'Hide this bank from the website'
+                              : 'Show this bank on the website'
+                          }
+                        >
+                          <span className={bank.is_active ? 'text-green-700' : 'text-gray-400'}>
+                            {bank.is_active ? 'Visible' : 'Hidden'}
+                          </span>
+
+                          <span
+                            className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${
+                              bank.is_active ? 'bg-green-500' : 'bg-gray-300'
+                            } ${canEdit ? 'hover:ring-4 hover:ring-brand-blue/5' : ''}`}
+                            aria-hidden="true"
+                          >
+                            <span
+                              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                                bank.is_active ? 'translate-x-5' : 'translate-x-0.5'
+                              }`}
+                            />
+                          </span>
+                        </button>
+                      </div>
+
+                      <div className="md:col-span-1 flex md:justify-end">
+                        {checkPerm('edit_banks', 'can_delete') && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleArchiveClick(bank.id, bank.bank_name);
+                            }}
+                            className="p-2 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
+                            title={`Archive ${bank.bank_name}`}
+                            aria-label={`Archive ${bank.bank_name}`}
+                          >
+                            <Archive size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue/60">
+            Website visibility
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-gray-500">
+            A hidden bank stays available in the admin but is removed from the public website until it is made visible again.
+          </p>
         </div>
       </div>
     </div>
@@ -1331,172 +2144,372 @@ function OurStoryManager({ checkPerm }: ManagerProps) {
   const [milestones, setMilestones] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-
-  const [milestoneToArchive, setMilestoneToArchive] = useState<{ id: number, title: string } | null>(null);
+  const [milestoneToArchive, setMilestoneToArchive] = useState<{ id: number; title: string } | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
+  const [pendingVisibilityId, setPendingVisibilityId] = useState<number | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    const fetchMilestones = async () => {
-      try {
-        const data = await fetchAdminStoryList();
-        setMilestones(data || []);
-      } catch (error) { console.error(error); } finally { setIsLoading(false); }
-    };
-    fetchMilestones();
+    fetchAdminStoryList()
+      .then(data => setMilestones(data || []))
+      .catch(error => {
+        console.error('Could not load Our Story milestones:', error);
+        setErrorMessage('Could not load milestones.');
+      })
+      .finally(() => setIsLoading(false));
   }, []);
 
-  const handleArchiveClick = (id: number, title: string) => {
-    setMilestoneToArchive({ id, title });
+  const showSuccess = (message: string) => {
+    setErrorMessage('');
+    setSuccessMessage(message);
+    window.setTimeout(() => setSuccessMessage(''), 2500);
+  };
+  const showError = (message: string) => {
+    setSuccessMessage('');
+    setErrorMessage(message);
+    window.setTimeout(() => setErrorMessage(''), 3500);
   };
 
   const confirmArchive = async () => {
     if (!milestoneToArchive) return;
+    const target = milestoneToArchive;
     setIsArchiving(true);
-
     try {
-      await archiveRecord('our story', milestoneToArchive.id, 'is_archived');
-
-      // ✅ SERVER-SIDE AUDIT LOG
-      await createAuditLogAction('DELETE', 'Our Story', milestoneToArchive.title, 'Archived milestone.');
-
-      setMilestones(prev => prev.filter(m => m.id !== milestoneToArchive.id));
+      await archiveRecord('our story', target.id, 'is_archived');
+      setMilestones(prev => prev.filter(item => item.id !== target.id));
       setMilestoneToArchive(null);
-      setSuccessMessage(`Milestone successfully deleted.`);
-      setTimeout(() => setSuccessMessage(''), 2500);
-
+      showSuccess(`Milestone "${target.title}" archived.`);
+      try {
+        await createAuditLogAction('DELETE', 'Our Story', target.title, 'Archived milestone.', { entityId: target.id });
+      } catch (auditError) {
+        console.error('Milestone archived, but its audit log failed:', auditError);
+      }
     } catch (error: any) {
-      alert(`Failed to archive milestone: ${error.message}`);
+      showError(error?.message || 'Could not archive milestone.');
     } finally {
       setIsArchiving(false);
     }
   };
 
   const handleToggleStatus = async (id: number, currentStatus: boolean, title: string) => {
+    if (pendingVisibilityId !== null) return;
+    setPendingVisibilityId(id);
     try {
       await toggleActiveStatus('our story', id, currentStatus);
-
-      // ✅ SERVER-SIDE AUDIT LOG
-      await createAuditLogAction('EDIT', 'Our Story', title, `Changed active status to ${!currentStatus ? 'Visible' : 'Hidden'}.`);
-
-      setMilestones(prev => prev.map(m => m.id === id ? { ...m, is_active: !currentStatus } : m));
-    } catch (error: any) { alert(`Failed to toggle status: ${error.message}`); }
+      const visible = !currentStatus;
+      setMilestones(prev => prev.map(item => item.id === id ? { ...item, is_active: visible } : item));
+      showSuccess(`"${title}" is now ${visible ? 'visible' : 'hidden'} on the website.`);
+      try {
+        await createAuditLogAction('EDIT', 'Our Story', title, `Changed website visibility to ${visible ? 'Visible' : 'Hidden'}.`, { entityId: id, fieldKey: 'is_active', oldValue: currentStatus, newValue: visible });
+      } catch (auditError) {
+        console.error('Milestone visibility changed, but its audit log failed:', auditError);
+      }
+    } catch (error: any) {
+      showError(error?.message || 'Could not change website visibility.');
+    } finally {
+      setPendingVisibilityId(null);
+    }
   };
 
-  const filtered = milestones.filter(m => m.title.toLowerCase().includes(searchQuery.toLowerCase()) || m.year.toString().includes(searchQuery));
+  const term = searchQuery.trim().toLowerCase();
+  const filtered = milestones.filter(item =>
+    !term || String(item.title || '').toLowerCase().includes(term) || String(item.year ?? '').includes(term),
+  );
+  const visibleCount = milestones.filter(item => item.is_active === true).length;
+  const hiddenCount = milestones.length - visibleCount;
+  const canEdit = checkPerm('our_story', 'can_edit');
 
-  if (isLoading) return <div className="flex justify-center items-center h-64"><Loader2 className="animate-spin text-brand-blue" size={40} /></div>;
+  if (isLoading) return <div className="flex h-64 items-center justify-center"><Loader2 size={40} className="animate-spin text-brand-blue" /></div>;
 
   return (
-    <div className="animate-in fade-in duration-300">
-      {/* === ARCHIVE CONFIRMATION MODAL === */}
+    <div className="mx-auto w-full max-w-6xl animate-in fade-in duration-300">
       {milestoneToArchive && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm animate-in fade-in duration-300 p-4">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 max-w-sm w-full animate-in zoom-in-95 duration-300">
-            <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center shadow-inner mb-2"><AlertCircle size={40} /></div>
-            <h2 className="text-2xl font-serif text-brand-blue text-center font-bold">Delete Milestone?</h2>
-            <p className="text-gray-600 text-center text-sm font-medium">Are you sure you want to delete <strong>{milestoneToArchive.title}</strong>?</p>
-            <div className="flex gap-3 w-full mt-4">
-              <button type="button" onClick={() => setMilestoneToArchive(null)} disabled={isArchiving} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors text-xs uppercase tracking-widest outline-none">Cancel</button>
-              <button type="button" onClick={confirmArchive} disabled={isArchiving} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors text-xs uppercase tracking-widest flex items-center justify-center gap-2 outline-none">
-                {isArchiving ? <Loader2 size={16} className="animate-spin" /> : 'Yes'}
-              </button>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 p-4 backdrop-blur-sm">
+          <div role="alertdialog" aria-modal="true" aria-labelledby="story-archive-title" className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-500"><AlertCircle size={24} /></div>
+            <h2 id="story-archive-title" className="font-serif text-2xl text-brand-blue">Archive Milestone?</h2>
+            <p className="mt-2 text-sm leading-relaxed text-gray-500"><strong className="text-brand-blue">{milestoneToArchive.title}</strong> will leave the active list and public website. Its content will be retained.</p>
+            <div className="mt-6 flex gap-3">
+              <button type="button" onClick={() => setMilestoneToArchive(null)} disabled={isArchiving} className="flex-1 rounded-xl bg-gray-100 py-3 text-xs font-bold uppercase tracking-widest text-gray-700 hover:bg-gray-200 disabled:opacity-60">Cancel</button>
+              <button type="button" onClick={confirmArchive} disabled={isArchiving} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 py-3 text-xs font-bold uppercase tracking-widest text-white hover:bg-red-700 disabled:opacity-60">{isArchiving ? <Loader2 size={16} className="animate-spin" /> : 'Archive'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {successMessage && <div role="status" className="fixed top-24 right-6 z-[120] flex max-w-sm items-center gap-3 rounded-xl border border-green-100 bg-white px-4 py-3 text-sm text-brand-blue shadow-xl"><CheckCircle2 size={18} className="shrink-0 text-green-600" />{successMessage}</div>}
+      {errorMessage && <div role="alert" className="fixed top-24 right-6 z-[120] flex max-w-sm items-center gap-3 rounded-xl border border-red-100 bg-white px-4 py-3 text-sm text-red-600 shadow-xl"><AlertCircle size={18} className="shrink-0" />{errorMessage}</div>}
+
+      <div className="mb-7">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-2xl">
+            <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-brand-gold">Content · Our Story</p>
+            <h2 className="mt-2 font-serif text-4xl leading-none text-brand-blue">Our Story</h2>
+            <p className="mt-3 text-sm leading-relaxed text-gray-500">Manage the milestones in the public timeline, their images, and website visibility.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            <span className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">{milestones.length} {milestones.length === 1 ? 'milestone' : 'milestones'}</span>
+            <span className="rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-green-700">{visibleCount} visible</span>
+            {hiddenCount > 0 && <span className="rounded-full bg-gray-100 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">{hiddenCount} hidden</span>}
+          </div>
+        </div>
+        <div className="mt-7 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div><p className="text-sm font-bold text-brand-blue">Showing {filtered.length} of {milestones.length}</p><p className="mt-1 text-xs text-gray-400">Select a milestone row to edit its content.</p></div>
+          <div className="relative w-full sm:w-80">
+            <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input type="search" placeholder="Search milestones..." value={searchQuery} onChange={event => setSearchQuery(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-blue shadow-sm outline-none focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/10" />
+          </div>
+        </div>
+      </div>
+
+      <div className="w-full overflow-x-auto pb-4">
+        <div className="min-w-[800px] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+          <div className="grid grid-cols-12 gap-4 border-b border-gray-100 bg-gray-50/70 px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+            <div className="col-span-2">Year</div><div className="col-span-4">Milestone</div><div className="col-span-3">Description</div><div className="col-span-2">Website Visibility</div><div className="col-span-1 text-right">Archive</div>
+          </div>
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center px-6 py-16 text-center"><p className="text-sm font-bold text-brand-blue">{milestones.length === 0 ? 'No milestones yet' : 'No milestones found'}</p><p className="mt-1 text-xs text-gray-400">{milestones.length === 0 ? 'Use Add Milestone to create the first entry.' : 'Try another year or title.'}</p></div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {filtered.map(item => {
+                const visible = item.is_active === true;
+                return (
+                  <div key={item.id} role={canEdit ? 'button' : undefined} tabIndex={canEdit ? 0 : -1}
+                    onClick={() => { if (canEdit) router.push(`/admin/story?edit=${item.id}`); }}
+                    onKeyDown={event => { if (!canEdit || event.target !== event.currentTarget) return; if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); router.push(`/admin/story?edit=${item.id}`); } }}
+                    className={`group grid grid-cols-12 items-center gap-4 px-6 py-4 transition-colors ${canEdit ? 'cursor-pointer hover:bg-gray-50/80 focus:bg-gray-50/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-gold/60' : ''}`}>
+                    <div className="col-span-2 font-serif text-xl font-bold text-brand-gold">{item.year}</div>
+                    <div className="col-span-4 flex min-w-0 items-center gap-4">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-brand-blue/5">
+                        {item.image ? <img src={item.image} alt="" className="h-full w-full object-cover" /> : <BookOpen size={18} className="text-brand-blue/30" />}
+                      </div>
+                      <p className="min-w-0 truncate text-sm font-bold text-brand-blue group-hover:text-brand-gold">{item.title}</p>
+                    </div>
+                    <div className="col-span-3 truncate text-xs text-gray-500">{item.description}</div>
+                    <div className="col-span-2">
+                      <button type="button" disabled={!canEdit || pendingVisibilityId !== null} aria-pressed={visible} aria-label={`${visible ? 'Hide' : 'Show'} ${item.title} on the website`}
+                        onClick={event => { event.stopPropagation(); handleToggleStatus(item.id, visible, item.title); }}
+                        className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider disabled:cursor-not-allowed disabled:opacity-60">
+                        <span className={visible ? 'text-green-700' : 'text-gray-400'}>{visible ? 'Visible' : 'Hidden'}</span>
+                        <span aria-hidden="true" className={`relative inline-flex h-6 w-11 shrink-0 rounded-full ${visible ? 'bg-green-500' : 'bg-gray-300'}`}><span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${visible ? 'translate-x-5' : 'translate-x-0.5'}`} /></span>
+                      </button>
+                    </div>
+                    <div className="col-span-1 flex justify-end">
+                      {checkPerm('our_story', 'can_delete') && <button type="button" onClick={event => { event.stopPropagation(); setMilestoneToArchive({ id: item.id, title: item.title }); }} aria-label={`Archive ${item.title}`} title={`Archive ${item.title}`} className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-500"><Archive size={16} /></button>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="mt-4 rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3"><p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue/60">Visibility & archiving</p><p className="mt-1 text-xs leading-relaxed text-gray-500">Hiding keeps a milestone available in the CMS while removing it from the website. Archiving removes it from the active list and retains its content.</p></div>
+    </div>
+  );
+}
+
+const archiveSections = {
+  'Archived Promotions': { table: 'promotions', moduleCode: 'promotion_code', label: 'Promotions', itemName: 'promotion' },
+  'Archived Partner Banks': { table: 'banks', moduleCode: 'edit_banks', label: 'Partner Banks', itemName: 'bank' },
+  'Archived News & Updates': { table: 'news_updates', moduleCode: 'edit_news', label: 'News & Updates', itemName: 'article' },
+  'Archived Our Story': { table: 'our story', moduleCode: 'our_story', label: 'Our Story', itemName: 'milestone' },
+} as const;
+
+type ArchivedContentSection = keyof typeof archiveSections;
+
+function ContentArchiveTabs({ section, archived, checkPerm }: ManagerProps & { section: ArchivedContentSection; archived?: boolean }) {
+  const router = useRouter();
+  const config = archiveSections[section];
+  if (!checkPerm(config.moduleCode, 'can_view')) return null;
+  const activeSection = section === 'Archived Our Story' ? 'our story' : config.label;
+  const tabs = [
+    { label: config.label, target: activeSection, current: !archived },
+    { label: 'Archived', target: section, current: Boolean(archived) },
+  ];
+
+  return (
+    <div className="mb-7 flex items-center gap-6 border-b border-gray-200">
+      {tabs.map(tab => (
+        <button
+          key={tab.label}
+          type="button"
+          onClick={tab.current ? undefined : () => router.push(`/admin/dashboard?section=${encodeURIComponent(tab.target)}`)}
+          aria-current={tab.current ? 'page' : undefined}
+          className={tab.current
+            ? 'relative pb-3 text-sm font-bold text-brand-blue'
+            : 'pb-3 text-sm font-medium text-gray-400 transition-colors hover:text-brand-blue'}
+        >
+          {tab.label}
+          {tab.current && <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-brand-blue" />}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ArchivedContentManager({ section, checkPerm }: ManagerProps & { section: ArchivedContentSection }) {
+  const config = archiveSections[section];
+  const [records, setRecords] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [restoreTarget, setRestoreTarget] = useState<any | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setErrorMessage('');
+    fetchArchivedCmsRecordsAction(config.table)
+      .then(data => { if (!cancelled) setRecords(data || []); })
+      .catch((error: any) => { if (!cancelled) setErrorMessage(error?.message || 'Could not load archived records.'); })
+      .finally(() => { if (!cancelled) setIsLoading(false); });
+    return () => { cancelled = true; };
+  }, [section]);
+
+  const nameOf = (record: any) => String(record.bank_name || record.title || `Untitled ${config.itemName}`);
+  const confirmRestore = async () => {
+    if (!restoreTarget) return;
+    const target = restoreTarget;
+    setIsRestoring(true);
+    setErrorMessage('');
+    try {
+      await restoreArchivedCmsRecordAction(config.table, target.id);
+      setRecords(previous => previous.filter(record => record.id !== target.id));
+      setRestoreTarget(null);
+      setSuccessMessage(`"${nameOf(target)}" restored as Hidden.`);
+      window.setTimeout(() => setSuccessMessage(''), 2600);
+      try {
+        await createAuditLogAction('EDIT', config.label, nameOf(target), 'Restored archived record as Hidden. Website visibility remains off.', { entityId: target.id });
+      } catch (auditError) {
+        console.error('Record restored, but its audit log failed:', auditError);
+      }
+    } catch (error: any) {
+      setErrorMessage(error?.message || 'Could not restore the record.');
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
+  const term = searchQuery.trim().toLowerCase();
+  const filtered = records.filter(record =>
+    !term || nameOf(record).toLowerCase().includes(term) || String(record.year ?? '').toLowerCase().includes(term),
+  );
+  if (!checkPerm(config.moduleCode, 'can_view')) {
+    return <div className="rounded-2xl bg-white p-10 text-center text-sm text-gray-500">You do not have access to this archive.</div>;
+  }
+  if (isLoading) return <div className="flex h-64 items-center justify-center"><Loader2 size={40} className="animate-spin text-brand-blue" /></div>;
+
+  return (
+    <div className="mx-auto w-full max-w-6xl animate-in fade-in duration-300">
+      {successMessage && <div role="status" className="fixed right-6 top-24 z-[120] flex items-center gap-2 rounded-xl border border-green-100 bg-white px-4 py-3 text-xs font-semibold text-brand-blue shadow-xl"><CheckCircle2 size={17} className="text-green-600" />{successMessage}</div>}
+      {errorMessage && <div role="alert" className="fixed right-6 top-24 z-[120] flex max-w-lg items-start gap-2 rounded-xl border border-red-100 bg-white px-4 py-3 text-xs font-semibold text-red-600 shadow-xl"><AlertCircle size={17} className="shrink-0" />{errorMessage}</div>}
+      {restoreTarget && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-brand-blue/60 p-4 backdrop-blur-sm">
+          <div role="alertdialog" aria-modal="true" aria-labelledby="restore-record-title" className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl">
+            <h2 id="restore-record-title" className="font-serif text-2xl text-brand-blue">Restore {config.itemName}?</h2>
+            <p className="mt-3 text-sm leading-relaxed text-gray-500"><strong className="text-brand-blue">{nameOf(restoreTarget)}</strong> will return to {config.label} as <strong>Hidden</strong>. You can review it before making it visible on the website.</p>
+            <div className="mt-6 flex gap-3">
+              <button type="button" onClick={() => setRestoreTarget(null)} disabled={isRestoring} className="flex-1 rounded-xl bg-gray-100 py-3 text-xs font-bold uppercase tracking-widest text-gray-600 hover:bg-gray-200 disabled:opacity-60">Cancel</button>
+              <button type="button" onClick={confirmRestore} disabled={isRestoring} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand-blue py-3 text-xs font-bold uppercase tracking-widest text-white hover:bg-brand-gold disabled:opacity-60">{isRestoring && <Loader2 size={15} className="animate-spin" />}Restore</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* === SUCCESS MODAL === */}
-      {successMessage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm animate-in fade-in duration-300 p-4">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-3 max-w-sm w-full animate-in zoom-in-95 duration-300">
-            <div className="w-20 h-20 bg-green-50 text-green-500 rounded-full flex items-center justify-center mb-2 shadow-inner"><CheckCircle2 size={40} /></div>
-            <h2 className="text-2xl font-serif text-brand-blue text-center font-bold">Success!</h2>
-            <p className="text-gray-600 text-center font-medium text-sm">{successMessage}</p>
-          </div>
-        </div>
-      )}
-
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-        <div className="text-sm text-brand-blue/70 font-medium"><span className="text-brand-blue font-bold">Showing ({filtered.length})</span> <span className="mx-2 hidden sm:inline">|</span><br className="sm:hidden" /> Active Milestones</div>
-        <div className="relative w-full sm:w-72">
-          <Search size={16} className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
-          <input type="text" placeholder="Search milestones..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-2 text-brand-blue text-sm focus:border-brand-gold outline-none shadow-sm" />
-        </div>
+      <div className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-gold">{config.label} · Archive</p><h2 className="mt-1 font-serif text-2xl font-bold text-brand-blue">{section}</h2><p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">Archived {config.itemName}s are off the website and retained here for restoration.</p></div>
+        <span className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">{records.length} Archived</span>
       </div>
-
-      <div className="w-full overflow-x-auto pb-4">
-        <div className="min-w-[600px]">
-          <div className="grid grid-cols-12 gap-4 py-4 border-y border-gray-200 text-[10px] font-bold tracking-widest uppercase text-brand-blue/60">
-            <div className="col-span-2">Year</div>
-            <div className="col-span-4">Title</div>
-            <div className="col-span-4">Description</div>
-            <div className="col-span-2 text-right">Actions</div>
-          </div>
-
-          <div className="flex flex-col">
-            {filtered.length === 0 ? <div className="py-12 text-center text-gray-400 text-sm">No milestones found.</div> : filtered.map((m) => (
-              <div key={m.id} className="grid grid-cols-12 gap-4 py-4 items-center border-b border-gray-100 hover:bg-gray-50/50 transition-colors group">
-                <div className="col-span-2 font-serif text-xl font-bold text-brand-gold pl-2">{m.year}</div>
-
-                <div className="col-span-4 flex items-center gap-3 sm:gap-4 pr-4">
-                  <div className="w-10 h-10 rounded-lg bg-gray-200 overflow-hidden shrink-0 shadow-sm">
-                    <img src={m.image || 'https://via.placeholder.com/150?text=No+Image'} alt={m.title} className="w-full h-full object-cover" />
-                  </div>
-                  <div className="font-bold text-sm text-brand-blue truncate flex-1">
-                    {m.title}
-                  </div>
-                </div>
-
-                <div className="col-span-4 text-xs text-gray-500 truncate pr-4">{m.description}</div>
-
-                <div className="col-span-2 flex justify-end gap-1 sm:gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                  {checkPerm('our_story', 'can_edit') && (
-                    <button onClick={() => handleToggleStatus(m.id, m.is_active, m.title)} className={`p-1.5 sm:p-2 bg-white shadow-sm border rounded-lg ${m.is_active !== false ? 'border-green-200 text-green-600' : 'border-gray-200 text-gray-400'}`}>{m.is_active !== false ? <Eye size={14} /> : <EyeOff size={14} />}</button>
-                  )}
-                  {checkPerm('our_story', 'can_edit') && (
-                    <button onClick={() => router.push(`/admin/story?edit=${m.id}`)} className="p-1.5 sm:p-2 bg-white shadow-sm border border-gray-200 text-brand-blue hover:bg-brand-blue hover:text-white rounded-lg transition-colors"><Edit2 size={14} /></button>
-                  )}
-                  {checkPerm('our_story', 'can_delete') && (
-                    <button onClick={() => handleArchiveClick(m.id, m.title)} className="p-1.5 sm:p-2 bg-white shadow-sm border border-gray-200 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors"><Trash2 size={14} /></button>
-                  )}
-                </div>
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-gray-400">Showing <span className="font-semibold text-brand-blue">{filtered.length}</span> of {records.length}</p>
+        <div className="relative w-full sm:w-80"><Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" /><input type="search" placeholder={`Search archived ${config.itemName}s...`} value={searchQuery} onChange={event => setSearchQuery(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-blue shadow-sm outline-none focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/10" /></div>
+      </div>
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <div className="hidden grid-cols-12 gap-4 border-b border-gray-100 bg-gray-50/70 px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-gray-400 md:grid"><div className="col-span-6">{config.itemName}</div><div className="col-span-3">Archived</div><div className="col-span-3 text-right">Restore</div></div>
+        {filtered.length === 0 ? (
+          <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center"><Archive size={30} className="mb-3 text-gray-300" /><p className="text-sm font-semibold text-brand-blue">No archived {config.itemName}s</p><p className="mt-1 text-xs text-gray-400">{term ? 'Try another search term.' : `Items you archive from ${config.label} will appear here.`}</p></div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {filtered.map(record => (
+              <div key={record.id} className="grid grid-cols-1 items-center gap-4 px-6 py-4 md:grid-cols-12">
+                <div className="col-span-6 flex min-w-0 items-center gap-4"><div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-brand-blue/5">{record.image ? <img src={record.image} alt="" className="h-full w-full object-cover" /> : <Archive size={18} className="text-brand-blue/30" />}</div><div className="min-w-0"><p className="truncate text-sm font-bold text-brand-blue">{nameOf(record)}</p><p className="mt-1 truncate text-[10px] text-gray-400">{record.year ?? record.category ?? record.status ?? ''}</p></div></div>
+                <div className="col-span-3 text-xs text-gray-500">{typeof record.is_archived === 'string' ? formatDateTime(record.is_archived) : 'Archived'}</div>
+                <div className="col-span-3 md:text-right">{checkPerm(config.moduleCode, 'can_edit') && <button type="button" onClick={() => setRestoreTarget(record)} className="rounded-lg border border-brand-blue/15 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-brand-blue hover:bg-brand-blue hover:text-white">Restore</button>}</div>
               </div>
             ))}
           </div>
-        </div>
+        )}
       </div>
+      <div className="mt-4 rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3"><p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue/60">Restore safely</p><p className="mt-1 text-xs leading-relaxed text-gray-500">Restored items return as Hidden with their content intact. Publish them explicitly from the active list.</p></div>
     </div>
   );
 }
 
 // --- AUDIT LOGS MANAGER ---
-function AuditLogsManager() {
-  const supabase = createClient();
+function AuditLogsManager({ checkPerm, canDelete }: ManagerProps & { canDelete: boolean }) {
+  const router = useRouter();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [deleteTarget, setDeleteTarget] = useState<AuditLog | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    const fetchLogs = async () => {
-      setIsLoading(true);
-      const { data, error } = await supabase
-        .from('audit_logs')
-        .select('*')
-        .order('created_at', { ascending: sortOrder === 'asc' })
-        .limit(100);
+    let cancelled = false;
+    setIsLoading(true);
+    fetchDetailedAuditLogsAction(sortOrder, page * 50)
+      .then(data => { if (!cancelled) { setHasMore(data.length > 50); setLogs(data.slice(0, 50) as AuditLog[]); setErrorMessage(''); } })
+      .catch(error => { if (!cancelled) setErrorMessage(error?.message || 'Could not load audit history.'); })
+      .finally(() => { if (!cancelled) setIsLoading(false); });
+    return () => { cancelled = true; };
+  }, [sortOrder, page, refreshKey]);
 
-      if (!error && data) setLogs(data);
-      setIsLoading(false);
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await deleteAuditLogAction(deleteTarget.id);
+      setDeleteTarget(null);
+      setSelectedLog(null);
+      setPage(0);
+      setRefreshKey(value => value + 1);
+      setSuccessMessage('Audit entry removed. A receipt was recorded.');
+      window.setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error: any) {
+      setErrorMessage(error?.message || 'Could not remove the audit entry.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const readableAction = (log: AuditLog) => log.action_type === 'DELETE' && /^archiv/i.test(log.details)
+    ? 'ARCHIVED' : log.action_type;
+  const valueLabel = (value: unknown) => value == null || value === '' ? '(empty)'
+    : typeof value === 'string' ? value : JSON.stringify(value);
+  const canOpenLog = (log: AuditLog) => {
+    if (!log.target_url?.startsWith('/admin/') || log.target_url.startsWith('//')) return false;
+    const codes: Record<string, string> = {
+      Projects: 'edit_project', Promotions: 'promotion_code', 'Partner Banks': 'edit_banks',
+      'News & Updates': 'edit_news', 'Our Story': 'our_story', 'Navigation Setup': 'edit_project',
     };
-    fetchLogs();
-  }, [supabase, sortOrder]);
+    const code = codes[log.entity_type];
+    return Boolean(code && checkPerm(code, log.action_type === 'ARCHIVED' ? 'can_view' : 'can_edit'));
+  };
 
   const filteredLogs = logs.filter(log =>
-    log.entity_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    log.user_email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    String(log.entity_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    String(log.user_email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    String(log.details || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     log.action_type.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -1504,6 +2517,19 @@ function AuditLogsManager() {
 
   return (
     <div className="animate-in fade-in duration-300">
+      {successMessage && <div role="status" className="fixed right-6 top-24 z-[120] rounded-xl border border-green-100 bg-white px-4 py-3 text-sm font-semibold text-brand-blue shadow-xl">{successMessage}</div>}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-brand-blue/60 p-4 backdrop-blur-sm">
+          <div role="alertdialog" aria-modal="true" aria-label="Delete audit entry" className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl">
+            <h2 className="font-serif text-2xl text-brand-blue">Delete audit entry?</h2>
+            <p className="mt-3 text-sm leading-relaxed text-gray-500">Entry #{deleteTarget.id} will be removed permanently. A separate receipt will retain who removed it and which entry was removed.</p>
+            <div className="mt-6 flex gap-3">
+              <button type="button" onClick={() => setDeleteTarget(null)} disabled={isDeleting} className="flex-1 rounded-xl bg-gray-100 py-3 text-xs font-bold uppercase tracking-widest text-gray-600 disabled:opacity-60">Cancel</button>
+              <button type="button" onClick={confirmDelete} disabled={isDeleting} className="flex-1 rounded-xl bg-red-600 py-3 text-xs font-bold uppercase tracking-widest text-white hover:bg-red-700 disabled:opacity-60">{isDeleting ? 'Removing...' : 'Delete entry'}</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <div className="flex items-center gap-4 text-brand-blue/60 font-bold text-xs">
           <History size={16} /> <span className="hidden sm:inline">RECENT ACTIVITY</span>
@@ -1524,6 +2550,7 @@ function AuditLogsManager() {
         </div>
       </div>
 
+      {errorMessage && <div role="alert" className="mb-4 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">{errorMessage}</div>}
       <div className="w-full overflow-x-auto pb-4">
         <div className="min-w-[600px]">
           <div className="grid grid-cols-12 gap-4 py-4 border-y border-gray-200 text-[10px] font-bold tracking-widest uppercase text-brand-blue/60">
@@ -1534,49 +2561,39 @@ function AuditLogsManager() {
           </div>
 
           {selectedLog && (
-            <div className="fixed inset-0 bg-brand-blue/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-              <div className="bg-white rounded-2xl md:rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-[#f8f9fa]">
-                  <h3 className="text-brand-blue font-bold text-sm tracking-widest uppercase">Audit Log Details</h3>
-                  <button onClick={() => setSelectedLog(null)} className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors outline-none">
-                    <X size={20} />
-                  </button>
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 p-4 backdrop-blur-sm">
+              <div role="dialog" aria-modal="true" aria-label="Audit log details" className="w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
+                  <h3 className="text-sm font-bold uppercase tracking-widest text-brand-blue">Audit Log Details</h3>
+                  <button type="button" onClick={() => setSelectedLog(null)} aria-label="Close audit log" className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-900"><X size={20} /></button>
                 </div>
-
-                <div className="p-6 sm:p-8">
-                  <div className="grid grid-cols-2 gap-6 mb-6">
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Date & Time</div>
-                      <div className="text-sm font-semibold text-gray-900">{formatDateTime(selectedLog.created_at)}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">User</div>
-                      <div className="text-sm font-semibold text-brand-blue break-all">{selectedLog.user_email}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Action Type</div>
-                      <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-md inline-block mt-1 ${selectedLog.action_type === 'CREATE' ? 'bg-green-100 text-green-700' :
-                        selectedLog.action_type === 'DELETE' ? 'bg-red-100 text-red-700' :
-                          'bg-blue-100 text-blue-700'
-                        }`}>
-                        {selectedLog.action_type}
-                      </span>
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Entity</div>
-                      <div className="text-sm font-semibold text-gray-900">{selectedLog.entity_type}: {selectedLog.entity_name}</div>
-                    </div>
+                <div className="max-h-[75vh] overflow-y-auto p-6 sm:p-8">
+                  <div className="mb-6 grid grid-cols-2 gap-6">
+                    <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Date & Time</p><p className="text-sm font-semibold text-gray-900">{formatDateTime(selectedLog.created_at)}</p></div>
+                    <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">User</p><p className="break-all text-sm font-semibold text-brand-blue">{selectedLog.user_email}</p></div>
+                    <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Action</p><span className="inline-block rounded-md bg-blue-100 px-2 py-1 text-[10px] font-bold uppercase text-brand-blue">{readableAction(selectedLog)}</span></div>
+                    <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Content</p><p className="text-sm font-semibold text-brand-blue">{selectedLog.entity_type} › {selectedLog.entity_name}</p></div>
                   </div>
-
                   <div className="border-t border-gray-100 pt-6">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Full Details</div>
-                    <div className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap bg-gray-50 p-4 sm:p-5 rounded-xl border border-gray-100 shadow-inner">
-                      {selectedLog.details}
-                    </div>
+                    <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">Change</p>
+                    <p className="whitespace-pre-wrap rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm leading-relaxed text-gray-800">{selectedLog.details}</p>
+                    {selectedLog.field_key && (
+                      <div className="mt-4 rounded-xl border border-gray-100 p-4 text-sm">
+                        <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-brand-blue/60">Field · {selectedLog.field_key}</p>
+                        <p className="break-words text-gray-500"><strong>Before:</strong> {valueLabel(selectedLog.old_value)}</p>
+                        <p className="mt-2 break-words text-brand-blue"><strong>After:</strong> {valueLabel(selectedLog.new_value)}</p>
+                      </div>
+                    )}
+                    {canOpenLog(selectedLog) && (
+                      <button type="button" onClick={() => router.push(selectedLog.target_url!)} className="mt-5 rounded-lg bg-brand-blue px-4 py-2.5 text-xs font-bold text-white hover:bg-brand-gold">
+                        Open {readableAction(selectedLog) === 'ARCHIVED' ? 'archive' : 'edited content'}
+                      </button>
+                    )}
+                    {canDelete && selectedLog.action_type !== 'AUDIT_REMOVED' && (
+                      <button type="button" onClick={() => setDeleteTarget(selectedLog)} className="ml-3 mt-5 rounded-lg border border-red-200 px-4 py-2.5 text-xs font-bold text-red-600 hover:bg-red-50">Delete entry</button>
+                    )}
                   </div>
                 </div>
-
               </div>
             </div>
           )}
@@ -1588,7 +2605,7 @@ function AuditLogsManager() {
                 <div className="col-span-3 font-medium text-brand-blue truncate pr-2" title={log.user_email}>{log.user_email}</div>
                 <div className="col-span-2">
                   <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-md ${log.action_type === 'CREATE' ? 'bg-green-100 text-green-700' :
-                    log.action_type === 'DELETE' ? 'bg-red-100 text-red-700' :
+                    readableAction(log) === 'REMOVED' ? 'bg-red-100 text-red-700' :
                       'bg-blue-100 text-blue-700'
                     }`}>
                     {log.action_type}
@@ -1603,6 +2620,13 @@ function AuditLogsManager() {
                 </div>
               </div>
             ))}
+          </div>
+          <div className="flex items-center justify-between pt-5 text-xs text-gray-500">
+            <span>Showing up to 50 entries per page · Page {page + 1}</span>
+            <div className="flex items-center gap-3">
+              <button type="button" disabled={page === 0} onClick={() => setPage(current => current - 1)} className="rounded-lg border border-gray-200 px-3 py-2 text-brand-blue disabled:opacity-40">Previous</button>
+              <button type="button" disabled={!hasMore} onClick={() => setPage(current => current + 1)} className="rounded-lg border border-gray-200 px-3 py-2 text-brand-blue disabled:opacity-40">Next</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1795,7 +2819,15 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
       if (error) {
         showError(`Unable to load navigation items: ${error.message}`);
       } else if (data) {
-        setNavProjects(data);
+        const activeProjectNavigationItems = data.filter((item: any) => {
+          const linkedProject = Array.isArray(item.project_table)
+            ? item.project_table[0]
+            : item.project_table;
+
+          return Boolean(linkedProject && !linkedProject.deleted_at);
+        });
+
+        setNavProjects(activeProjectNavigationItems);
       }
 
       setIsLoading(false);
@@ -1938,11 +2970,14 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
 
     try {
       await persistNavigationOrder(normalized);
+      const oldOrder = previous.map(item => String(item.nav_title || item.project_table?.title || item.id));
+      const newOrder = normalized.map(item => String(item.nav_title || item.project_table?.title || item.id));
       await createAuditLogAction(
-        'EDIT',
+        'REORDERED',
         'Navigation Setup',
         'Project Navigation',
-        'Reordered projects in the website navigation.'
+        `Reordered navigation: ${oldOrder.join(' → ')} to ${newOrder.join(' → ')}.`,
+        { fieldKey: 'navigation-order', oldValue: oldOrder, newValue: newOrder }
       );
       showSuccess('Navigation order saved.');
     } catch (error: any) {
@@ -1955,6 +2990,10 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
 
   const openProjects = () => {
     router.push('/admin/dashboard?section=Projects');
+  };
+
+  const openArchivedProjects = () => {
+    router.push('/admin/dashboard?section=Archived%20Projects');
   };
 
   const isProjectAvailable = (item: any) => {
@@ -2245,13 +3284,21 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
           Navigation Setup
           <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-brand-blue" />
         </button>
+
+        <button
+          type="button"
+          onClick={openArchivedProjects}
+          className="pb-3 text-sm font-medium text-gray-400 transition-colors hover:text-brand-blue"
+        >
+          Archived
+        </button>
       </div>
 
       {/* PAGE INTRO */}
       <div className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-gold">Projects · Navigation</p>
-          <h2 className="mt-1 text-2xl font-serif font-bold text-brand-blue">Website Navigation Order</h2>
+          <h2 className="mt-2 font-serif text-4xl leading-none text-brand-blue">Website Navigation Order</h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
             Every project gets one navigation item automatically. Project visibility temporarily hides its navigation item without overwriting your navigation preference.
           </p>
@@ -2314,7 +3361,24 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
               return (
                 <div
                   key={item.id}
+                  role={canEdit ? 'button' : undefined}
+                  tabIndex={canEdit ? 0 : -1}
+                  aria-label={
+                    canEdit
+                      ? `Edit navigation item for ${item.nav_title || linkedProject?.title || 'project'}`
+                      : undefined
+                  }
                   draggable={canEdit && !isReordering}
+                  onClick={() => {
+                    if (canEdit) handleEditClick(item);
+                  }}
+                  onKeyDown={(event) => {
+                    if (!canEdit || event.target !== event.currentTarget) return;
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      handleEditClick(item);
+                    }
+                  }}
                   onDragStart={() => setDraggedId(item.id)}
                   onDragEnd={() => setDraggedId(null)}
                   onDragOver={(event) => {
@@ -2327,12 +3391,15 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                   className={`group grid grid-cols-[auto_1fr] gap-3 rounded-2xl border px-3 py-3 transition-all sm:grid-cols-[auto_80px_1fr_auto] sm:items-center sm:gap-4 sm:px-4 ${
                     isBeingDragged
                       ? 'border-brand-gold bg-brand-gold/5 opacity-60'
-                      : 'border-gray-100 bg-[#fbfbfc] hover:border-brand-blue/15 hover:bg-white hover:shadow-sm'
+                      : canEdit
+                        ? 'cursor-pointer border-gray-100 bg-[#fbfbfc] hover:border-brand-blue/20 hover:bg-white hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-gold/20'
+                        : 'border-gray-100 bg-[#fbfbfc]'
                   }`}
                 >
                   <div className="row-span-2 flex items-center gap-2 sm:row-span-1">
                     <button
                       type="button"
+                      onClick={(event) => event.stopPropagation()}
                       className={`flex h-10 w-8 items-center justify-center rounded-lg text-gray-300 transition-colors ${
                         canEdit ? 'cursor-grab hover:bg-white hover:text-brand-gold active:cursor-grabbing' : 'cursor-default'
                       }`}
@@ -2360,11 +3427,7 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => canEdit && handleEditClick(item)}
-                    className={`min-w-0 text-left ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}
-                  >
+                  <div className="min-w-0 text-left">
                     <div className="flex min-w-0 items-center gap-2">
                       <h3 className="truncate text-sm font-bold text-brand-blue transition-colors group-hover:text-brand-gold sm:text-base">
                         {item.nav_title || item.project_table?.title || 'Untitled Project'}
@@ -2387,7 +3450,7 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                     <p className="mt-1.5 text-[10px] font-medium text-gray-400">
                       Linked to {linkedProject?.title || 'project unavailable'}
                     </p>
-                  </button>
+                  </div>
 
                   <div className="col-start-2 flex items-center justify-between gap-3 sm:col-start-auto sm:justify-end">
                     <div className="flex items-center gap-2">
@@ -2406,7 +3469,8 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                       </span>
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={(event) => {
+                          event.stopPropagation();
                           if (!projectIsVisible) return;
                           handleToggleActive(
                             item.id,
@@ -2448,16 +3512,6 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                       </button>
                     </div>
 
-                    {canEdit && (
-                      <button
-                        type="button"
-                        onClick={() => handleEditClick(item)}
-                        className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-brand-blue transition-all hover:border-brand-gold hover:text-brand-gold"
-                      >
-                        <Edit2 size={13} />
-                        Edit
-                      </button>
-                    )}
                   </div>
                 </div>
               );
@@ -2497,11 +3551,13 @@ function HomeDashboard({
   const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
   const [isSavingSections, setIsSavingSections] = useState(false);
   const [sectionSaveSuccess, setSectionSaveSuccess] = useState(false);
+  const [sectionSaveError, setSectionSaveError] = useState('');
 
   useEffect(() => {
     let isMounted = true;
 
     const loadRecentActivity = async () => {
+      if (!checkPerm('audit_log', 'can_view')) { if (isMounted) setIsLoadingLogs(false); return; }
       try {
         const data = await fetchRecentAuditLogsAction(5);
 
@@ -2553,7 +3609,16 @@ function HomeDashboard({
 
       const sectionCards = [
       {
+        label: 'Homepage',
+        description: 'Hero, features, and featured content',
+        tab: 'Homepage',
+        moduleCode: 'homepage_manage',
+        moduleName: 'HOMEPAGE',
+        icon: House,
+      },
+      {
         label: 'Our Story',
+        description: 'Milestones and company history',
         tab: 'our story',
         moduleCode: 'our_story',
         moduleName: 'OUR STORY',
@@ -2561,6 +3626,7 @@ function HomeDashboard({
       },
       {
         label: 'Projects',
+        description: 'Project pages and developments',
         tab: 'Projects',
         moduleCode: 'edit_project',
         moduleName: 'PROJECTS',
@@ -2568,6 +3634,7 @@ function HomeDashboard({
       },
       {
         label: 'Virtual Tours',
+        description: 'Towers, units, and 360° views',
         tab: 'Virtual Tours',
         moduleCode: 'virtual_tours',
         moduleName: 'VIRTUAL TOURS',
@@ -2575,6 +3642,7 @@ function HomeDashboard({
       },
       {
         label: 'Partner Banks',
+        description: 'Financing partners and offers',
         tab: 'Partner Banks',
         moduleCode: 'edit_banks',
         moduleName: 'BANKS',
@@ -2582,26 +3650,21 @@ function HomeDashboard({
       },
       {
         label: 'News & Updates',
+        description: 'Articles and announcements',
         tab: 'News & Updates',
         moduleCode: 'edit_news',
         moduleName: 'NEWS AND UPDATES',
-        icon: LayoutDashboard,
+        icon: Newspaper,
       },
       {
         label: 'Promotions',
+        description: 'Current offers and promotions',
         tab: 'Promotions',
         moduleCode: 'promotion_code',
         moduleName: 'PROMOTION',
         icon: Megaphone,
       },
 
-      {
-        label: 'Homepage Content',
-        tab: 'Homepage Content',
-        moduleCode: 'homepage_manage',
-        moduleName: 'HOMEPAGE',
-        icon: LayoutDashboard,
-      },
     ];
 
   const visibleCards = sectionCards.filter((card) =>
@@ -2658,6 +3721,7 @@ const handleSectionVisibilityToggle = (
   );
 
   setSectionSaveSuccess(false);
+  setSectionSaveError('');
 };
 
 
@@ -2667,6 +3731,7 @@ const handleResetSectionChanges = () => {
   );
 
   setSectionSaveSuccess(false);
+  setSectionSaveError('');
 };
 
 
@@ -2699,20 +3764,23 @@ const handleSaveSectionChanges = async () => {
 
       setShowSaveConfirmation(false);
       setSectionSaveSuccess(true);
+      setSectionSaveError('');
 
-      const refreshedLogs = await fetchRecentAuditLogsAction(5);
-      setRecentLogs(refreshedLogs as AuditLog[]);
+      if (checkPerm('audit_log', 'can_view')) {
+        try {
+          const refreshedLogs = await fetchRecentAuditLogsAction(5);
+          setRecentLogs(refreshedLogs as AuditLog[]);
+        } catch (activityError) {
+          console.error('Visibility saved, but recent activity could not refresh:', activityError);
+        }
+      }
 
       setTimeout(() => {
         setSectionSaveSuccess(false);
       }, 3000);
     } catch (error: any) {
       console.error('Failed to save website section visibility:', error);
-      alert(
-        `Failed to save changes: ${
-          error?.message || 'Unknown error'
-        }`
-      );
+      setSectionSaveError(error?.message || 'Could not save website visibility. Please try again.');
     } finally {
       setIsSavingSections(false);
     }
@@ -2735,7 +3803,7 @@ const handleSaveSectionChanges = async () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto animate-in fade-in duration-300">
+    <div className="mx-auto w-full max-w-[1280px]">
 
         {showSaveConfirmation && (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/55 backdrop-blur-sm p-4">
@@ -2759,7 +3827,7 @@ const handleSaveSectionChanges = async () => {
               className="flex items-center justify-between gap-4 py-2"
             >
               <span className="text-sm font-medium text-brand-blue">
-                {section.module_name}
+                {sectionCards.find((card) => card.moduleCode === section.module_code)?.label || section.module_name}
               </span>
 
               <span
@@ -2839,33 +3907,20 @@ const handleSaveSectionChanges = async () => {
       {/* PENDING WEBSITE CHANGES */}
       {hasPendingSectionChanges && (
         <div
-          className="
-            sticky top-0 z-30
-            mb-6
-            flex flex-col sm:flex-row
-            sm:items-center
-            justify-between
-            gap-4
-            bg-[#0f1d40]
-            text-white
-            px-5 py-4
-            rounded-2xl
-            shadow-xl
-            border border-white/10
-          "
+          role="alert"
+          className="fixed left-1/2 top-24 z-[90] flex w-[calc(100vw-2rem)] max-w-[680px] -translate-x-1/2 flex-col gap-3 rounded-2xl border border-brand-gold/70 bg-[#0f1d40] px-4 py-4 text-white shadow-2xl ring-4 ring-brand-gold/15 sm:flex-row sm:items-center sm:justify-between sm:gap-5 sm:px-5"
         >
-          <div>
+          <div className="min-w-0">
             <div className="text-sm font-bold">
               {pendingSectionChanges.length}{' '}
-              {pendingSectionChanges.length === 1 ? 'change' : 'changes'} not saved
+              {pendingSectionChanges.length === 1 ? 'website change' : 'website changes'} waiting for review
             </div>
-
-            <div className="text-xs text-white/60 mt-1">
-              The live website will not change until you save.
+            <div className="mt-1 text-xs leading-snug text-white/75">
+              Visibility affects the live website. Review and save, or reset your changes.
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
             <button
               type="button"
               onClick={handleResetSectionChanges}
@@ -2898,21 +3953,27 @@ const handleSaveSectionChanges = async () => {
                 disabled:opacity-50
               "
             >
-              Save changes
+              Review &amp; save
             </button>
           </div>
         </div>
       )}
 
-            {sectionSaveSuccess && (
-        <div className="mb-6 flex items-center gap-2 text-sm font-medium text-green-700 bg-green-50 border border-green-100 rounded-xl px-4 py-3">
-          <CheckCircle2 size={17} />
-          Website visibility updated successfully.
+      {sectionSaveSuccess && (
+        <div role="status" className="fixed right-5 top-5 z-[120] flex items-center gap-2 rounded-xl border border-green-100 bg-white px-4 py-3 text-xs font-semibold text-green-700 shadow-xl">
+          <CheckCircle2 size={17} /> Website visibility updated.
+        </div>
+      )}
+      {sectionSaveError && (
+        <div role="alert" className="fixed right-5 top-5 z-[120] flex max-w-sm items-start gap-2 rounded-xl border border-red-200 bg-white px-4 py-3 text-xs text-red-700 shadow-xl">
+          <AlertCircle size={17} className="shrink-0" />
+          <span>{sectionSaveError}</span>
+          <button type="button" aria-label="Dismiss error" onClick={() => setSectionSaveError('')} className="ml-1 rounded p-0.5 hover:bg-red-50"><X size={14} /></button>
         </div>
       )}
       {/* PAGE INTRO */}
-      <div className="mb-8">
-        <h2 className="text-2xl md:text-3xl font-serif text-brand-blue mb-2">
+      <div className="mb-5">
+        <h2 className="mb-1 font-serif text-2xl text-brand-blue md:text-[26px]">
           Manage Website Sections
         </h2>
 
@@ -2923,186 +3984,81 @@ const handleSaveSectionChanges = async () => {
 
       {/* WEBSITE SECTION CARDS */}
       {visibleCards.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 mb-12">
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {visibleCards.map((card) => {
-          const Icon = card.icon;
-          const module = getModuleForCard(card.moduleCode);
+            const Icon = card.icon;
+            const module = getModuleForCard(card.moduleCode);
+            const canEditVisibility = Boolean(module) && checkPerm(card.moduleCode, 'can_edit');
+            const isShown = module?.is_active !== false;
+            const statusReady = !isLoadingSections && Boolean(module);
+            const originalModule = module ? getOriginalModule(module.id) : null;
+            const hasUnsavedChange = Boolean(originalModule && originalModule.is_active !== module.is_active);
 
-          const isShown = module?.is_active !== false;
+            return (
+              <article
+                key={card.tab}
+                className={`group relative flex min-h-[156px] flex-col rounded-2xl border bg-white p-5 shadow-sm transition-[background-color,border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-brand-gold hover:bg-brand-blue hover:shadow-lg focus-within:border-brand-gold focus-within:ring-2 focus-within:ring-brand-gold/25 ${hasUnsavedChange ? 'border-brand-gold/70 ring-1 ring-brand-gold/20' : 'border-gray-200'}`}
+              >
+                <button
+                  type="button"
+                  onClick={() => onOpenSection(card.tab)}
+                  aria-label={`Open ${card.label}`}
+                  className="absolute inset-0 z-0 rounded-2xl focus-visible:outline-none"
+                />
 
-          return (
-            <div
-              key={card.tab}
-              role="button"
-              tabIndex={0}
-             onClick={() => {
-                if (card.tab === 'Homepage Content') {
-                  router.push('/admin/homepage');
-                } else {
-                  onOpenSection(card.tab);
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  onOpenSection(card.tab);
-                }
-              }}
-              className={`
-                group
-                relative
-                min-h-[160px]
-                bg-white
-                border
-                rounded-2xl
-                p-6
-                text-left
-                shadow-sm
-                hover:shadow-md
-                transition-all
-                duration-200
-                outline-none
-                focus-visible:ring-2
-                focus-visible:ring-brand-gold
-                cursor-pointer
-                ${
-                  isShown
-                    ? 'border-gray-200 hover:border-brand-gold/60'
-                    : 'border-gray-200 bg-gray-50/70'
-                }
-              `}
-            >
-              <div className="flex items-start justify-between gap-4">
-
-                <div
-                  className={`
-                    w-11 h-11
-                    rounded-xl
-                    flex items-center justify-center
-                    transition-colors
-                    ${
-                      isShown
-                        ? 'bg-brand-blue/5 text-brand-blue group-hover:bg-brand-blue group-hover:text-brand-gold'
-                        : 'bg-gray-100 text-gray-400'
-                    }
-                  `}
-                >
-                  <Icon size={21} />
+                <div className="pointer-events-none relative z-[1] flex items-start justify-between gap-2">
+                  <Icon size={25} strokeWidth={1.8} aria-hidden="true" className="shrink-0 text-brand-blue transition-colors group-hover:text-white" />
+                  <div className="pointer-events-auto relative z-10 shrink-0 text-right">
+                    {statusReady ? (
+                      canEditVisibility ? (
+                        <button
+                          type="button"
+                          onClick={(event) => handleSectionVisibilityToggle(event, module!.id)}
+                          disabled={isSavingSections}
+                          aria-pressed={isShown}
+                          aria-label={`${isShown ? 'Hide' : 'Show'} ${card.label} on the website`}
+                          title="Changes to website visibility take effect after you save"
+                          className="inline-flex min-h-9 items-center gap-2 rounded-lg px-1 text-[10px] font-semibold text-gray-600 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold group-hover:text-white group-hover:hover:bg-white/10 disabled:cursor-wait disabled:opacity-60"
+                        >
+                          <span className="whitespace-nowrap">{isShown ? 'Shown on website' : 'Hidden from website'}</span>
+                          <span aria-hidden="true" className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${isShown ? 'bg-green-500' : 'bg-gray-300'}`}>
+                            <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${isShown ? 'translate-x-4' : ''}`} />
+                          </span>
+                        </button>
+                      ) : (
+                        <span className="inline-block py-2 text-[10px] font-semibold text-gray-500 group-hover:text-white/80">{isShown ? 'Shown on website' : 'Hidden from website'}</span>
+                      )
+                    ) : (
+                      <span className="inline-block py-2 text-[10px] font-semibold text-gray-400 group-hover:text-white/70">{isLoadingSections ? 'Loading status...' : 'Status unavailable'}</span>
+                    )}
+                  </div>
                 </div>
 
-                {module && checkPerm(card.moduleCode, 'can_edit') && (
-                  <button
-                    type="button"
-                    onClick={(e) =>
-                      handleSectionVisibilityToggle(e, module.id)
-                    }
-                    className="
-                      flex items-center gap-2
-                      rounded-full
-                      px-3 py-1.5
-                      hover:bg-gray-50
-                      transition-colors
-                      outline-none
-                    "
-                    title={
-                      isShown
-                        ? 'Hide this section from the website'
-                        : 'Show this section on the website'
-                    }
-                  >
-                    <span
-                      className={`
-                        text-[10px]
-                        font-bold
-                        ${
-                          isShown
-                            ? 'text-green-700'
-                            : 'text-gray-500'
-                        }
-                      `}
-                    >
-                      {isShown
-                        ? 'Shown on website'
-                        : 'Hidden from website'}
-                    </span>
-
-                    <span
-                      className={`
-                        relative
-                        inline-flex
-                        h-5 w-9
-                        shrink-0
-                        rounded-full
-                        transition-colors
-                        ${
-                          isShown
-                            ? 'bg-green-500'
-                            : 'bg-gray-300'
-                        }
-                      `}
-                    >
-                      <span
-                        className={`
-                          absolute top-0.5
-                          h-4 w-4
-                          rounded-full
-                          bg-white
-                          shadow-sm
-                          transition-transform
-                          ${
-                            isShown
-                              ? 'translate-x-[18px]'
-                              : 'translate-x-0.5'
-                          }
-                        `}
-                      />
-                    </span>
-                  </button>
-                )}
-              </div>
-
-              <div className="absolute left-6 right-6 bottom-6 flex items-end justify-between gap-4">
-                <h3
-                  className={`
-                    text-lg font-bold
-                    ${
-                      isShown
-                        ? 'text-brand-blue'
-                        : 'text-gray-500'
-                    }
-                  `}
-                >
-                  {card.label}
-                </h3>
-
-                <span
-                  className="
-                    text-brand-blue/30
-                    group-hover:text-brand-gold
-                    group-hover:translate-x-1
-                    transition-all
-                    text-xl
-                  "
-                >
-                  →
-                </span>
-              </div>
-            </div>
-          );
-        })}
+                <div className="pointer-events-none relative z-[1] mt-2">
+                  <h3 className="text-lg font-semibold leading-tight tracking-tight text-brand-blue transition-colors group-hover:text-white">{card.label}</h3>
+                  <p className="mt-1 text-xs leading-snug text-gray-500 transition-colors group-hover:text-white/75">{card.description}</p>
+                </div>
+                <div className="pointer-events-none relative z-[1] mt-auto flex items-center justify-between gap-2 pt-2">
+                  <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-brand-blue transition-colors group-hover:text-white">
+                    Open section <ArrowUpRight size={14} aria-hidden="true" />
+                  </span>
+                  {hasUnsavedChange && <span className="rounded-full border border-brand-gold/40 bg-brand-gold/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-brand-blue group-hover:border-brand-gold/70 group-hover:text-white">Not saved</span>}
+                </div>
+              </article>
+            );
+          })}
         </div>
       ) : (
-        <div className="mb-12 bg-white border border-gray-200 rounded-2xl p-8 text-center">
-          <p className="text-sm text-gray-500">
-            No website sections have been assigned to your account.
-          </p>
+        <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-8 text-center">
+          <p className="text-sm text-gray-500">No website sections have been assigned to your account.</p>
         </div>
       )}
 
       {/* RECENT CHANGES */}
       <section>
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-3 flex items-center justify-between">
           <div>
-            <h3 className="text-xl font-serif text-brand-blue">
+            <h3 className="font-serif text-lg text-brand-blue">
               Recent Changes
             </h3>
 
@@ -3136,7 +4092,7 @@ const handleSaveSectionChanges = async () => {
               hidden md:grid
               grid-cols-12
               gap-4
-              px-6 py-3
+              px-4 py-2
               border-b border-gray-100
               bg-gray-50/70
               text-[10px]
@@ -3180,8 +4136,8 @@ const handleSaveSectionChanges = async () => {
                   className={`
                     w-full
                     grid grid-cols-1 md:grid-cols-12
-                    gap-2 md:gap-4
-                    px-6 py-4
+                    gap-1 md:gap-4
+                    px-4 py-2
                     border-b border-gray-100
                     last:border-b-0
                     text-left
@@ -3193,12 +4149,12 @@ const handleSaveSectionChanges = async () => {
                     }
                   `}
                 >
-                  <div className="md:col-span-3">
+                  <div className="min-w-0 md:col-span-3 lg:flex lg:items-center lg:gap-2">
                     <div className="font-bold text-sm text-brand-blue truncate">
                       {log.entity_type}
                     </div>
 
-                    <div className="text-xs text-gray-400 truncate mt-1">
+                    <div className="mt-0.5 min-w-0 truncate text-xs text-gray-400 lg:mt-0">
                       {log.entity_name}
                     </div>
                   </div>
@@ -3252,33 +4208,37 @@ const handleSaveSectionChanges = async () => {
 
 function HomepageManager({ checkPerm }: ManagerProps) {
   const router = useRouter();
+  const canEdit = checkPerm('homepage_manage', 'can_edit');
 
   return (
-    <div className="animate-in fade-in duration-300 max-w-4xl mx-auto py-12">
-      <div className="bg-white border border-gray-200 rounded-3xl p-10 shadow-sm text-center flex flex-col items-center">
-        <div className="w-16 h-16 rounded-2xl bg-brand-blue/5 text-brand-blue flex items-center justify-center mb-5">
-          <LayoutDashboard size={32} />
+    <section className="mx-auto w-full max-w-6xl animate-in fade-in duration-300">
+      <div className="flex flex-wrap items-end justify-between gap-5">
+        <div className="max-w-2xl">
+          <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-brand-gold">Homepage · Content</p>
+          <h2 className="mt-2 font-serif text-4xl text-brand-blue">Homepage</h2>
+          <p className="mt-3 text-sm leading-relaxed text-gray-500">
+            Manage the homepage hero, About Us, development areas, process, awards, video, and news.
+          </p>
         </div>
-        
-        <h2 className="text-2xl font-serif font-bold text-brand-blue mb-2">
-          Homepage Visual Canvas Editor
-        </h2>
-        
-        <p className="text-sm text-gray-500 max-w-md mx-auto mb-8 leading-relaxed">
-          Manage your hero carousel, About Us statistics, development areas, the process timeline, and video banner directly on a live interactive preview.
-        </p>
-
-        {checkPerm('homepage_manage', 'can_edit') && (
-          <button
-            type="button"
-            onClick={() => router.push('/admin/homepage')}
-            className="inline-flex items-center justify-center gap-3 px-8 py-4 bg-brand-blue text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-brand-gold hover:text-brand-blue transition-all shadow-md active:scale-95"
-          >
-            <LayoutDashboard size={16} /> Open Interactive Homepage Editor
-          </button>
-        )}
+        <span className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">1 Page</span>
       </div>
-    </div>
+      <p className="mb-5 mt-9 text-xs text-gray-400">Select the homepage to manage its website content.</p>
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center border-b border-gray-100 bg-gray-50/70 px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-400 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+          <span>Page</span><span className="hidden sm:block">Sections</span><span>Action</span>
+        </div>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-6 py-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-brand-gold/20 bg-brand-blue/5 text-brand-gold"><House size={21} /></div>
+            <div className="min-w-0"><h3 className="font-semibold text-brand-blue">Homepage</h3><p className="text-xs text-gray-400">Main website landing page</p></div>
+          </div>
+          <span className="hidden text-xs leading-relaxed text-gray-500 sm:block">Hero, About Us, developments, process, awards, video, news</span>
+          {canEdit ? (
+            <button type="button" onClick={() => router.push('/admin/homepage')} className="rounded-lg bg-brand-blue px-4 py-2.5 text-xs font-bold text-white transition-colors hover:bg-brand-gold hover:text-brand-blue">Open editor</button>
+          ) : <span className="text-xs text-gray-400">View only</span>}
+        </div>
+      </div>
+    </section>
   );
 }
 // ==========================================
@@ -3287,27 +4247,39 @@ function HomepageManager({ checkPerm }: ManagerProps) {
 function AdminMainDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
   const [isLoading, setIsLoading] = useState(true);
+  const [startupError, setStartupError] = useState('');
+  const signOutAndRedirect = useCallback(async () => {
+    try {
+      await logoutAction();
+      // Reload the login route after the server has cleared the HttpOnly cookie.
+      window.location.replace('/admin');
+    } catch (error) {
+      console.error('Could not clear the admin session:', error);
+      setStartupError('Could not sign out. Please try again.');
+      setIsLoading(false);
+    }
+  }, []);
   const [newsList, setNewsList] = useState<NewsArticle[]>([]);
   const [activeTab, setActiveTab] = useState(
-    () => searchParams.get('section') || 'Home'
+    () => (searchParams.get('section') === 'Homepage Content' ? 'Homepage' : searchParams.get('section')) || 'Home'
   );
   useEffect(() => {
   const requestedSection = searchParams.get('section');
 
   if (requestedSection) {
-    setActiveTab(requestedSection);
+    setActiveTab(requestedSection === 'Homepage Content' ? 'Homepage' : requestedSection);
   }
 }, [searchParams]);
   const [searchQuery, setSearchQuery] = useState(() => {
           if (typeof window === 'undefined') return '';
 
-          return sessionStorage.getItem('admin-projects-search') || '';
+          return sessionStorage.getItem('admin-news-search') || '';
         });
         useEffect(() => {
           sessionStorage.setItem(
-            'admin-projects-search',
+            'admin-news-search',
             searchQuery
           );
         }, [searchQuery]);
@@ -3315,7 +4287,22 @@ function AdminMainDashboardContent() {
 
   const [articleToArchive, setArticleToArchive] = useState<{ id: string, title: string } | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
+  const [pendingNewsStatusId, setPendingNewsStatusId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
+  const [newsErrorMessage, setNewsErrorMessage] = useState('');
+
+  const showNewsSuccess = (message: string) => {
+    setNewsErrorMessage('');
+    setSuccessMessage(message);
+    window.setTimeout(() => setSuccessMessage(''), 2500);
+  };
+
+  const showNewsError = (message: string) => {
+    setSuccessMessage('');
+    setNewsErrorMessage(message);
+    window.setTimeout(() => setNewsErrorMessage(''), 3500);
+  };
+
   const handleArchiveClick = (id: string, title: string) => {
     setArticleToArchive({ id, title });
   };
@@ -3336,6 +4323,11 @@ function AdminMainDashboardContent() {
   };
 
 const ALL_MENU_ITEMS = [
+  {
+    name: 'Homepage',
+    icon: House,
+    moduleCode: 'homepage_manage'
+  },
   {
     name: 'our story',
     icon: BookOpen,
@@ -3363,7 +4355,7 @@ const ALL_MENU_ITEMS = [
   },
   {
     name: 'News & Updates',
-    icon: LayoutDashboard,
+    icon: Newspaper,
     moduleCode: 'edit_news'
   },
   {
@@ -3384,22 +4376,37 @@ const ALL_MENU_ITEMS = [
     moduleCode: 'admin_manage'
   },
 
-  {
-    name: 'Homepage Content',
-    icon: LayoutDashboard,
-    moduleCode: 'homepage_manage'
-  },
 ];
 
   const allowedMenuItems = ALL_MENU_ITEMS.filter(item => checkPerm(item.moduleCode, 'can_view'));
 
   useEffect(() => {
-    const initData = async () => {
-      const userId = await getCustomSession();
-      if (!userId) { router.replace('/admin'); return; }
-
+    let cancelled = false;
+    const withTimeout = async <T,>(request: PromiseLike<T>, label: string): Promise<T> => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        const rbac = await getRBACProfile();
+        return await Promise.race([
+          Promise.resolve(request),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error(`${label} took too long. Check your connection and try again.`)), 12000);
+          }),
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    };
+    const initData = async () => {
+      try {
+        const userId = await withTimeout(getCustomSession(), 'Checking your session');
+        if (cancelled) return;
+        if (!userId) {
+          setStartupError('Your session has expired. Signing out...');
+          await signOutAndRedirect();
+          return;
+        }
+
+        const rbac = await withTimeout(getRBACProfile(), 'Loading your permissions');
+        if (cancelled) return;
         if (!rbac) { setUserPermissions({}); setCurrentUserRole('viewer'); } 
         else {
            if (rbac.permissions === 'SUPER_ADMIN') setUserPermissions('SUPER_ADMIN');
@@ -3418,52 +4425,157 @@ const ALL_MENU_ITEMS = [
              });
            }
         }
-      } catch (error) { setUserPermissions({}); setCurrentUserRole('viewer'); }
-
-      const { data } = await supabase.from('news_updates').select('*').is('is_archived', null).order('date', { ascending: false });
-      if (data) try { setNewsList(z.array(NewsArticleSchema).parse(data)); } catch (e) { }
-
-      setIsLoading(false);
+        try {
+          const { data, error: newsLoadError } = await withTimeout(
+            supabase.from('news_updates').select('*').is('is_archived', null).order('date', { ascending: false }),
+            'Loading News & Updates'
+          );
+          if (cancelled) return;
+          if (newsLoadError) throw newsLoadError;
+          if (data) {
+          setNewsList(z.array(NewsArticleSchema).parse(data));
+          }
+        } catch (error) {
+          console.error('Failed to read News & Updates:', error);
+          setNewsErrorMessage('Could not load the article list.');
+        }
+      } catch (error: any) {
+        console.error('Dashboard initialization failed:', error);
+        if (!cancelled) setStartupError(error?.message || 'Could not load the dashboard.');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
     };
     initData();
-  }, [router, supabase]);
+    return () => { cancelled = true; };
+  }, [router, supabase, signOutAndRedirect]);
 
-  const handleSignOut = async () => { localStorage.clear(); await logoutAction(); router.replace('/admin'); router.refresh(); };
+  const handleSignOut = async () => { localStorage.clear(); await signOutAndRedirect(); };
 
   const confirmArchive = async () => {
     if (!articleToArchive) return;
+
+    const target = articleToArchive;
     setIsArchiving(true);
+    setNewsErrorMessage('');
+
     try {
-      await archiveRecord('news_updates', articleToArchive.id);
-      await createAuditLogAction('DELETE', 'News & Updates', articleToArchive.title, 'Archived news article.');
-      setNewsList(prev => prev.filter(a => a.id !== articleToArchive.id));
+      await archiveRecord('news_updates', target.id);
+      await createAuditLogAction(
+        'DELETE',
+        'News & Updates',
+        target.title,
+        'Archived news article.', { entityId: target.id }
+      );
+
+      setNewsList(prev => prev.filter(article => article.id !== target.id));
       setArticleToArchive(null);
-      setSuccessMessage(`Article deleted.`);
-      setTimeout(() => setSuccessMessage(''), 2500);
-    } catch (error: any) { alert(`Failed to archive: ${error.message}`); } finally { setIsArchiving(false); }
+      showNewsSuccess(`Article "${target.title}" archived.`);
+    } catch (error: any) {
+      setArticleToArchive(null);
+      showNewsError(error?.message || 'Failed to archive article.');
+    } finally {
+      setIsArchiving(false);
+    }
   };
 
-  const handleToggleNewsStatus = async (id: string, currentStatus: boolean, title: string) => {
+  const handleToggleNewsStatus = async (
+    id: string,
+    currentStatus: boolean,
+    title: string
+  ) => {
+    if (pendingNewsStatusId) return;
+    setPendingNewsStatusId(id);
     try {
-      await toggleActiveStatus('news_updates', id, currentStatus !== false);
-      await createAuditLogAction('EDIT', 'News & Updates', title, `Changed active status.`);
-      setNewsList(newsList.map(article => article.id === id ? { ...article, is_active: currentStatus === false } : article));
-    } catch (error: any) { alert(`Failed to toggle: ${error.message}`); }
+      await toggleActiveStatus('news_updates', id, currentStatus);
+
+      const nextStatus = !currentStatus;
+
+      setNewsList(prev =>
+        prev.map(article =>
+          article.id === id
+            ? { ...article, is_active: nextStatus }
+            : article
+        )
+      );
+
+      showNewsSuccess(
+        `"${title}" is now ${nextStatus ? 'visible' : 'hidden'} on the website.`
+      );
+
+      try {
+        await createAuditLogAction(
+          'EDIT',
+          'News & Updates',
+          title,
+          `Changed website visibility to ${nextStatus ? 'Visible' : 'Hidden'}.`,
+          { entityId: id, fieldKey: 'is_active', oldValue: currentStatus, newValue: nextStatus }
+        );
+      } catch (auditError) {
+        console.error('Article visibility changed, but the audit log failed:', auditError);
+      }
+    } catch (error: any) {
+      showNewsError(error?.message || 'Failed to update article visibility.');
+    } finally {
+      setPendingNewsStatusId(null);
+    }
   };
 
   const filteredNews = newsList.filter(article => {
     const cat = (article.category || '').toLowerCase();
-    const dropdownMatch = filterCategory ? cat === filterCategory.toLowerCase() : true;
-    const searchMatch = article.title.toLowerCase().includes(searchQuery.toLowerCase()) || cat.includes(searchQuery.toLowerCase());
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    const dropdownMatch = filterCategory
+      ? cat === filterCategory.toLowerCase()
+      : true;
+    const searchMatch =
+      !normalizedSearch ||
+      article.title.toLowerCase().includes(normalizedSearch) ||
+      cat.includes(normalizedSearch);
+
     return dropdownMatch && searchMatch;
   });
 
-  if (isLoading) return <div className="min-h-screen bg-[#F8F9FA]" />;
+  const visibleNewsCount = newsList.filter(
+    article => article.is_active === true
+  ).length;
+  const hiddenNewsCount = newsList.length - visibleNewsCount;
+
+  const openNewsArticle = (id: string) => {
+    if (!checkPerm('edit_news', 'can_edit')) return;
+    router.push(`/admin/news?edit=${id}`);
+  };
+
+  const formatNewsDate = (value: string) => {
+    if (!value) return 'No date';
+
+    const date = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return value;
+
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  if (isLoading) return <div role="status" className="flex min-h-screen items-center justify-center bg-[#F8F9FA] text-sm text-brand-blue">Loading dashboard...</div>;
+  if (startupError) return (
+    <div role="alert" className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#F8F9FA] p-6 text-center">
+      <p className="text-lg font-semibold text-brand-blue">{startupError}</p>
+      <button type="button" onClick={() => window.location.reload()} className="rounded-lg bg-brand-blue px-5 py-3 text-sm font-semibold text-white">Try again</button>
+      <button type="button" onClick={signOutAndRedirect} className="text-sm text-brand-blue underline">Sign out and go to login</button>
+    </div>
+  );
 
 const contentMenuItems = allowedMenuItems.filter(
   item =>
     !['Audit Logs', 'Modules', 'Navbar Setup'].includes(item.name)
 );
+  // Keep the active and archived tabs together for every archivable content module.
+  const contentArchiveSection = (Object.keys(archiveSections) as ArchivedContentSection[])
+    .find(section => section === activeTab || archiveSections[section].label === activeTab ||
+      (section === 'Archived Our Story' && activeTab === 'our story'));
+
 
   return (
     <div className="flex h-screen bg-[#F8F9FA] text-gray-900 font-sans overflow-hidden relative">
@@ -3662,7 +4774,8 @@ const contentMenuItems = allowedMenuItems.filter(
               if (item.name === 'Projects') {
                 const isProjectSection =
                   activeTab === 'Projects' ||
-                  activeTab === 'Navbar Setup';
+                  activeTab === 'Navbar Setup' ||
+                  activeTab === 'Archived Projects';
 
                 const showProjectMenu =
                   sidebarExpanded &&
@@ -3813,6 +4926,33 @@ const contentMenuItems = allowedMenuItems.filter(
                         >
                           Navigation Setup
                         </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTab('Archived Projects');
+                            setFilterCategory('');
+                            setSearchQuery('');
+                            setIsSidebarOpen(false);
+                          }}
+                          className={`
+                            w-full
+                            text-left
+                            px-3 py-2.5
+                            rounded-lg
+                            text-xs
+                            font-medium
+                            transition-colors
+
+                            ${
+                              activeTab === 'Archived Projects'
+                                ? 'text-brand-gold bg-white/5'
+                                : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            }
+                          `}
+                        >
+                          Archived Projects
+                        </button>
                       </div>
                     )}
 
@@ -3825,7 +4965,9 @@ const contentMenuItems = allowedMenuItems.filter(
               /* NORMAL MENU ITEMS */
               /* ===================================== */
 
-              const isActive = activeTab === item.name;
+              const isActive = activeTab === item.name ||
+                activeTab === `Archived ${item.name}` ||
+                (activeTab === 'Archived Our Story' && item.name === 'our story');
 
               return (
                 <button
@@ -3958,22 +5100,86 @@ const contentMenuItems = allowedMenuItems.filter(
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col overflow-hidden relative md:ml-20">
+      <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden md:ml-20">
         {articleToArchive && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm p-4">
-            <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 max-w-sm w-full"><AlertCircle size={40} className="text-red-500 mb-2"/>
-              <h2 className="text-2xl font-serif text-brand-blue font-bold">Delete Article?</h2>
-              <div className="flex gap-3 w-full mt-4">
-                <button onClick={() => setArticleToArchive(null)} disabled={isArchiving} className="flex-1 py-3 bg-gray-100 font-bold rounded-xl text-xs uppercase">Cancel</button>
-                <button onClick={confirmArchive} disabled={isArchiving} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl text-xs uppercase flex justify-center">{isArchiving ? <Loader2 size={16} className="animate-spin" /> : 'Yes'}</button>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 p-4 backdrop-blur-sm">
+            <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-3xl bg-white p-8 shadow-2xl">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-500 shadow-inner">
+                <AlertCircle size={32} />
+              </div>
+
+              <h2 className="text-center font-serif text-2xl font-bold text-brand-blue">
+                Archive Article?
+              </h2>
+
+              <p className="text-center text-sm leading-relaxed text-gray-500">
+                <strong className="text-brand-blue">
+                  {articleToArchive.title}
+                </strong>{' '}
+                will be removed from the active News & Updates list and from the public website.
+              </p>
+
+              <div className="mt-3 flex w-full gap-3">
+                <button
+                  type="button"
+                  onClick={() => setArticleToArchive(null)}
+                  disabled={isArchiving}
+                  className="flex-1 rounded-xl bg-gray-100 py-3 text-xs font-bold uppercase tracking-widest text-gray-700 hover:bg-gray-200 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={confirmArchive}
+                  disabled={isArchiving}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 py-3 text-xs font-bold uppercase tracking-widest text-white hover:bg-red-700 disabled:opacity-60"
+                >
+                  {isArchiving ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    'Archive'
+                  )}
+                </button>
               </div>
             </div>
           </div>
         )}
+
         {successMessage && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 backdrop-blur-sm p-4">
-            <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-3 max-w-sm w-full"><CheckCircle2 size={40} className="text-green-500 mb-2"/>
-              <h2 className="text-2xl font-serif text-brand-blue font-bold">Success!</h2><p className="text-gray-600 text-sm">{successMessage}</p>
+          <div className="fixed top-24 right-6 z-[120] max-w-sm rounded-2xl border border-green-100 bg-white px-4 py-3 shadow-xl">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-50 text-green-600">
+                <CheckCircle2 size={17} />
+              </div>
+
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-green-700">
+                  Updated
+                </p>
+                <p className="mt-1 text-sm text-gray-600">
+                  {successMessage}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {newsErrorMessage && (
+          <div className="fixed top-24 right-6 z-[120] max-w-sm rounded-2xl border border-red-100 bg-white px-4 py-3 shadow-xl">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-500">
+                <AlertCircle size={17} />
+              </div>
+
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-red-600">
+                  Could not update
+                </p>
+                <p className="mt-1 text-sm text-gray-600">
+                  {newsErrorMessage}
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -3988,14 +5194,17 @@ const contentMenuItems = allowedMenuItems.filter(
                 ? 'Our Story'
                 : activeTab === 'Navbar Setup'
                 ? 'Navigation Setup'
+                : activeTab === 'Archived Projects'
+                ? 'Projects'
+                : Object.prototype.hasOwnProperty.call(archiveSections, activeTab)
+                ? archiveSections[activeTab as ArchivedContentSection].label
                 : activeTab}
             </h1>
             {activeTab === 'Projects' && checkPerm('edit_project', 'can_create') && <button onClick={() => router.push('/admin/projects')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Project</button>}
-            {activeTab === 'Virtual Tours' && checkPerm('virtual_tours', 'can_create') && <button onClick={() => router.push('/admin/virtualtours')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Tour</button>}
             {activeTab === 'Promotions' && checkPerm('promotion_code', 'can_create') && <button onClick={() => router.push('/admin/promotions')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Promo</button>}
             {activeTab === 'Partner Banks' && checkPerm('edit_banks', 'can_create') && <button onClick={() => router.push('/admin/partnerbanks')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Bank</button>}
             {activeTab === 'our story' && checkPerm('our_story', 'can_create') && <button onClick={() => router.push('/admin/story')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Milestone</button>}
-            {activeTab === 'News & Updates' && checkPerm('edit_news', 'can_create') && <Link href="/admin/news" className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add New</Link>}
+            {activeTab === 'News & Updates' && checkPerm('edit_news', 'can_create') && <Link href="/admin/news" className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Article</Link>}
           </div>
           <div className="flex items-center gap-4 shrink-0">
             {checkPerm('notifications_code', 'can_view') && <NotificationCenter />}
@@ -4003,7 +5212,16 @@ const contentMenuItems = allowedMenuItems.filter(
           </div>
         </header>
 
-                <div className="flex-1 p-8 overflow-y-auto">
+                <div className={`min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] ${activeTab === 'Home' ? 'px-4 py-4 sm:px-6 sm:py-5 xl:px-8' : 'p-8'}`}>
+          {contentArchiveSection && (
+            <div className="mx-auto w-full max-w-6xl">
+              <ContentArchiveTabs
+                section={contentArchiveSection}
+                archived={activeTab === contentArchiveSection}
+                checkPerm={checkPerm}
+              />
+            </div>
+          )}
           {activeTab === 'Home' ? (
             <HomeDashboard
               checkPerm={checkPerm}
@@ -4016,41 +5234,260 @@ const contentMenuItems = allowedMenuItems.filter(
           ) : allowedMenuItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-32 text-center"><div className="w-20 h-20 bg-brand-blue/5 rounded-full flex justify-center items-center mb-6"><ShieldAlert size={32} className="text-brand-blue/40" /></div><h2 className="text-2xl font-serif text-brand-blue mb-3">No Access</h2><p className="text-gray-500 text-sm">Please contact your Super Admin to request access.</p></div>
         ): activeTab === 'Modules' ? <SystemModulesManager />
-          : activeTab === 'Homepage Content' ? <HomepageManager checkPerm={checkPerm} />
+          : activeTab === 'Homepage' ? <HomepageManager checkPerm={checkPerm} />
           : activeTab === 'Projects' ? <ProjectsManager checkPerm={checkPerm} />
           : activeTab === 'Virtual Tours' ? <VirtualToursManager checkPerm={checkPerm} />
           : activeTab === 'Navbar Setup' ? <NavbarProjectsManager checkPerm={checkPerm} />
+          : activeTab === 'Archived Projects' ? <ArchivedProjectsManager checkPerm={checkPerm} />
           : activeTab === 'Promotions' ? <PromotionsManager checkPerm={checkPerm} />
           : activeTab === 'Partner Banks' ? <PartnerBanksManager checkPerm={checkPerm} />
           : activeTab === 'our story' ? <OurStoryManager checkPerm={checkPerm} />
-          : activeTab === 'Audit Logs' ? <AuditLogsManager />
+          : activeTab === 'Audit Logs' ? <AuditLogsManager checkPerm={checkPerm} canDelete={userPermissions === 'SUPER_ADMIN'} />
+          : Object.prototype.hasOwnProperty.call(archiveSections, activeTab) ? <ArchivedContentManager section={activeTab as ArchivedContentSection} checkPerm={checkPerm} />
           : (
-            <div className="animate-in fade-in duration-300">
-              <div className="flex justify-between items-center mb-6">
-                <div className="text-sm font-medium"><span className="text-brand-blue font-bold">Showing ({filteredNews.length})</span> | Published</div>
-                <div className="flex gap-4">
-                  <div className="relative w-48"><Filter size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" /><select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-2 text-sm outline-none appearance-none"><option value="">All</option><option value="News">News</option><option value="Updates">Updates</option></select></div>
-                  <div className="relative w-72"><Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" /><input type="text" placeholder="Search articles..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-2 text-sm outline-none" /></div>
+            <div className="mx-auto w-full max-w-6xl animate-in fade-in duration-300">
+              <div className="mb-7">
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="max-w-2xl">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-brand-gold">
+                      Content · News & Updates
+                    </p>
+
+                    <h2 className="mt-2 font-serif text-4xl leading-none text-brand-blue">
+                      News & Updates
+                    </h2>
+
+                    <p className="mt-3 text-sm leading-relaxed text-gray-500">
+                      Manage published company news and updates, including article content,
+                      publication details, featured images, and website visibility.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                    <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                      {newsList.length} {newsList.length === 1 ? 'article' : 'articles'}
+                    </span>
+
+                    <span className="inline-flex items-center rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-green-700">
+                      {visibleNewsCount} visible
+                    </span>
+
+                    {hiddenNewsCount > 0 && (
+                      <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                        {hiddenNewsCount} hidden
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-7 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <div className="text-sm font-bold text-brand-blue">
+                      Showing {filteredNews.length} of {newsList.length}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-400">
+                      Select an article row to edit its content.
+                    </p>
+                  </div>
+
+                  <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto">
+                    <div className="relative w-full sm:w-48">
+                      <Filter
+                        size={16}
+                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                      />
+                      <select
+                        value={filterCategory}
+                        onChange={(event) => setFilterCategory(event.target.value)}
+                        className="w-full appearance-none rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-blue shadow-sm outline-none transition-all focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/10"
+                      >
+                        <option value="">All categories</option>
+                        <option value="News">News</option>
+                        <option value="Updates">Updates</option>
+                      </select>
+                    </div>
+
+                    <div className="relative w-full sm:w-80">
+                      <Search
+                        size={16}
+                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Search articles..."
+                        value={searchQuery}
+                        onChange={(event) => setSearchQuery(event.target.value)}
+                        className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-blue shadow-sm outline-none transition-all focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/10"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="w-full overflow-x-auto pb-4"><div className="min-w-[600px]">
-                <div className="grid grid-cols-12 gap-4 py-4 border-y border-gray-200 text-[10px] font-bold tracking-widest uppercase text-brand-blue/60"><div className="col-span-5">Title</div><div className="col-span-2">Category</div><div className="col-span-3">Date</div><div className="col-span-2 text-right">Actions</div></div>
-                <div className="flex flex-col">
-                  {filteredNews.map((article) => (
-                    <div key={article.id} className="grid grid-cols-12 gap-4 py-4 items-center border-b border-gray-100 hover:bg-gray-50/50 group">
-                      <div className="col-span-5 flex items-center gap-4"><div className="w-10 h-10 rounded-lg bg-gray-200 overflow-hidden"><img src={article.image} alt="" className="w-full h-full object-cover" /></div><button onClick={() => router.push(`/admin/news?edit=${article.id}`)} className="text-brand-blue font-bold text-sm hover:text-brand-gold text-left truncate">{article.title}</button></div>
-                      <div className="col-span-2"><span className="text-[10px] font-bold uppercase tracking-widest text-brand-gold bg-brand-gold/10 px-3 py-1.5 rounded-md">{article.category}</span></div>
-                      <div className="col-span-3 text-xs text-gray-500">Published<br /><span className="text-[10px] font-light">{article.date}</span></div>
-                      <div className="col-span-2 flex justify-end gap-2 opacity-0 group-hover:opacity-100">
-                        {checkPerm('edit_news', 'can_edit') && <button onClick={() => handleToggleNewsStatus(article.id, article.is_active !== false, article.title)} className={`p-2 bg-white border rounded-lg ${article.is_active !== false ? 'border-green-200 text-green-600' : 'border-gray-200 text-gray-400'}`}>{article.is_active !== false ? <Eye size={14} /> : <EyeOff size={14} />}</button>}
-                        {checkPerm('edit_news', 'can_edit') && <button onClick={() => router.push(`/admin/news?edit=${article.id}`)} className="p-2 bg-white border border-gray-200 text-brand-blue rounded-lg"><Edit2 size={14} /></button>}
-                        {checkPerm('edit_news', 'can_delete') && <button onClick={() => handleArchiveClick(article.id, article.title)} className="p-2 bg-white border border-gray-200 text-red-500 rounded-lg"><Trash2 size={14} /></button>}
+              <div className="w-full overflow-x-auto pb-4">
+                <div className="min-w-[900px] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                  <div className="grid grid-cols-12 gap-4 border-b border-gray-100 bg-gray-50/70 px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                    <div className="col-span-4">Article</div>
+                    <div className="col-span-2">Category</div>
+                    <div className="col-span-2">Published</div>
+                    <div className="col-span-3">Website Visibility</div>
+                    <div className="col-span-1 text-right">Archive</div>
+                  </div>
+
+                  {filteredNews.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+                      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-blue/5 text-brand-blue/40">
+                        <Newspaper size={22} />
                       </div>
+                      <p className="text-sm font-bold text-brand-blue">
+                        {newsList.length === 0 ? 'No articles yet' : 'No articles found'}
+                      </p>
+                      <p className="mt-1 text-xs text-gray-400">
+                        {newsList.length === 0
+                          ? 'Use Add Article to create the first News & Updates entry.'
+                          : 'Try another search term or category.'}
+                      </p>
                     </div>
-                  ))}
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {filteredNews.map((article) => {
+                        const canEditNews = checkPerm('edit_news', 'can_edit');
+                        const isVisible = article.is_active === true;
+
+                        return (
+                          <div
+                            key={article.id}
+                            role={canEditNews ? 'button' : undefined}
+                            tabIndex={canEditNews ? 0 : -1}
+                            onClick={() => {
+                              if (canEditNews) openNewsArticle(article.id);
+                            }}
+                            onKeyDown={(event) => {
+                              if (!canEditNews) return;
+                              if (event.target !== event.currentTarget) return;
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                openNewsArticle(article.id);
+                              }
+                            }}
+                            className={`group grid grid-cols-12 items-center gap-4 px-6 py-4 transition-colors ${
+                              canEditNews
+                                ? 'cursor-pointer hover:bg-gray-50/80 focus:bg-gray-50/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-gold/60'
+                                : ''
+                            }`}
+                          >
+                            <div className="col-span-4 flex min-w-0 items-center gap-4">
+                              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50 shadow-sm">
+                                {article.image ? (
+                                  <img
+                                    src={article.image}
+                                    alt=""
+                                    className="h-full w-full object-cover"
+                                    onError={(event) => {
+                                      event.currentTarget.style.display = 'none';
+                                    }}
+                                  />
+                                ) : (
+                                  <LayoutDashboard size={18} className="text-gray-300" />
+                                )}
+                              </div>
+
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-bold text-brand-blue transition-colors group-hover:text-brand-gold">
+                                  {article.title}
+                                </div>
+                                <div className="mt-1 truncate text-[10px] text-gray-400">
+                                  /{article.slug}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="col-span-2">
+                              <span className="inline-flex rounded-lg bg-brand-gold/10 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-wider text-brand-gold">
+                                {article.category || 'News'}
+                              </span>
+                            </div>
+
+                            <div className="col-span-2 text-xs font-medium text-gray-500">
+                              {formatNewsDate(article.date)}
+                            </div>
+
+                            <div className="col-span-3">
+                              <button
+                                type="button"
+                                disabled={!canEditNews || pendingNewsStatusId !== null}
+                                aria-pressed={isVisible}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleToggleNewsStatus(
+                                    article.id,
+                                    isVisible,
+                                    article.title
+                                  );
+                                }}
+                                className={`inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider ${
+                                  canEditNews
+                                    ? 'cursor-pointer'
+                                    : 'cursor-not-allowed opacity-60'
+                                }`}
+                                title={
+                                  isVisible
+                                    ? 'Hide this article from the website'
+                                    : 'Show this article on the website'
+                                }
+                              >
+                                <span className={isVisible ? 'text-green-700' : 'text-gray-400'}>
+                                  {isVisible ? 'Visible' : 'Hidden'}
+                                </span>
+
+                                <span
+                                  className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${
+                                    isVisible ? 'bg-green-500' : 'bg-gray-300'
+                                  } ${canEditNews ? 'hover:ring-4 hover:ring-brand-blue/5' : ''}`}
+                                  aria-hidden="true"
+                                >
+                                  <span
+                                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                                      isVisible ? 'translate-x-5' : 'translate-x-0.5'
+                                    }`}
+                                  />
+                                </span>
+                              </button>
+                            </div>
+
+                            <div className="col-span-1 flex justify-end">
+                              {checkPerm('edit_news', 'can_delete') && (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleArchiveClick(article.id, article.title);
+                                  }}
+                                  className="rounded-lg p-2 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500"
+                                  title={`Archive ${article.title}`}
+                                  aria-label={`Archive ${article.title}`}
+                                >
+                                  <Archive size={16} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              </div></div>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue/60">
+                  Visibility & archiving
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-gray-500">
+                  Hiding an article keeps it available in the CMS while removing it from the public website.
+                  Archiving removes it from the active News & Updates list.
+                </p>
+              </div>
             </div>
           )}
         </div>

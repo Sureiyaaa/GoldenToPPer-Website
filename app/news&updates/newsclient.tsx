@@ -157,14 +157,20 @@ export default function NewsClient({ initialNews }: { initialNews: any[] }) {
             <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1], delay: 0.4 }} className="w-full flex flex-col lg:flex-row bg-white rounded-sm shadow-2xl overflow-hidden border border-gray-100 relative z-30">
               <div className="relative w-full lg:w-[60%] h-[350px] md:h-[500px] lg:h-auto overflow-hidden group bg-black cursor-pointer">
                 <Link href={`/news&updates/${featuredArticle.slug}`} className="absolute inset-0 z-20"></Link>
-                <Image 
-                  src={featuredArticle.image} 
-                  alt={featuredArticle.title}
-                  fill
-                  priority
-                  sizes="(max-width: 1024px) 100vw, 60vw"
-                  className="object-cover group-hover:scale-105 transition-transform duration-[1.5s] ease-out opacity-90 group-hover:opacity-100"
-                />
+                {featuredArticle.image ? (
+                  <Image
+                    src={featuredArticle.image}
+                    alt={featuredArticle.title}
+                    fill
+                    priority
+                    sizes="(max-width: 1024px) 100vw, 60vw"
+                    className="object-cover group-hover:scale-105 transition-transform duration-[1.5s] ease-out opacity-90 group-hover:opacity-100"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-brand-blue to-[#0d1b3e] px-6 text-center font-serif text-3xl text-white/70">
+                    News &amp; Updates
+                  </div>
+                )}
               </div>
 
               <div className="w-full lg:w-[40%] flex flex-col justify-center p-8 md:p-12 lg:p-16">
@@ -213,13 +219,19 @@ export default function NewsClient({ initialNews }: { initialNews: any[] }) {
                       className="group flex flex-col bg-white rounded-sm overflow-hidden border border-gray-100 shadow-sm hover:shadow-2xl transition-all duration-500 outline-none"
                     >
                       <div className="relative w-full aspect-[4/3] overflow-hidden bg-gray-100">
-                        <Image 
-                          src={article.image} 
-                          alt={article.title}
-                          fill
-                          sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                          className="object-cover group-hover:scale-105 transition-transform duration-[1.5s] ease-out opacity-90 group-hover:opacity-100"
-                        />
+                        {article.image ? (
+                          <Image
+                            src={article.image}
+                            alt={article.title}
+                            fill
+                            sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                            className="object-cover group-hover:scale-105 transition-transform duration-[1.5s] ease-out opacity-90 group-hover:opacity-100"
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-brand-blue to-[#0d1b3e] px-6 text-center font-serif text-xl text-white/70">
+                            News &amp; Updates
+                          </div>
+                        )}
                         <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm text-brand-blue px-3 py-1 text-[9px] font-bold uppercase tracking-[0.2em] rounded-sm shadow-sm">
                           {article.category}
                         </div>
