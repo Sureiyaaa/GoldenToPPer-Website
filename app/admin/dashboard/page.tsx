@@ -14,8 +14,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { z } from 'zod';
 import {
   LogOut, Building2, Landmark, LayoutDashboard, Search, Filter,
-  Edit2, Archive, Plus, Loader2, Eye, EyeOff, History, Move3d, Newspaper,
-  Bell, CheckCircle2, X, Mail, MailOpen, CornerUpLeft, Menu, UserCircle2, Megaphone, Settings, ShieldAlert, AlertCircle, BookOpen, Upload, ChevronDown, GripVertical
+  Edit2, Archive, Plus, Loader2, Eye, EyeOff, History, Move3d, Newspaper, House,
+  Bell, CheckCircle2, X, Mail, MailOpen, CornerUpLeft, Menu, UserCircle2, Megaphone, Settings, ShieldAlert, AlertCircle, BookOpen, Upload, ChevronDown, GripVertical, ArrowUpRight
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { toggleActiveStatus, archiveRecord } from '@/app/actions/updates';
@@ -468,7 +468,7 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
       <div className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-gold">Projects · Content</p>
-          <h2 className="mt-1 text-2xl font-serif font-bold text-brand-blue">Project Website Content</h2>
+          <h2 className="mt-2 font-serif text-4xl leading-none text-brand-blue">Project Website Content</h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
             Select a project to manage its website content, visibility, layouts, amenities, and other project details.
           </p>
@@ -977,7 +977,7 @@ function ArchivedProjectsManager({ checkPerm }: ManagerProps) {
       <div className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-gold">Projects · Archive</p>
-          <h2 className="mt-1 text-2xl font-serif font-bold text-brand-blue">Archived Projects</h2>
+          <h2 className="mt-2 font-serif text-4xl leading-none text-brand-blue">Archived Projects</h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
             Archived projects are removed from the website and active admin lists. Restore them later with their content retained.
           </p>
@@ -3298,7 +3298,7 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
       <div className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-gold">Projects · Navigation</p>
-          <h2 className="mt-1 text-2xl font-serif font-bold text-brand-blue">Website Navigation Order</h2>
+          <h2 className="mt-2 font-serif text-4xl leading-none text-brand-blue">Website Navigation Order</h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
             Every project gets one navigation item automatically. Project visibility temporarily hides its navigation item without overwriting your navigation preference.
           </p>
@@ -3551,6 +3551,7 @@ function HomeDashboard({
   const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
   const [isSavingSections, setIsSavingSections] = useState(false);
   const [sectionSaveSuccess, setSectionSaveSuccess] = useState(false);
+  const [sectionSaveError, setSectionSaveError] = useState('');
 
   useEffect(() => {
     let isMounted = true;
@@ -3608,7 +3609,16 @@ function HomeDashboard({
 
       const sectionCards = [
       {
+        label: 'Homepage',
+        description: 'Hero, features, and featured content',
+        tab: 'Homepage',
+        moduleCode: 'homepage_manage',
+        moduleName: 'HOMEPAGE',
+        icon: House,
+      },
+      {
         label: 'Our Story',
+        description: 'Milestones and company history',
         tab: 'our story',
         moduleCode: 'our_story',
         moduleName: 'OUR STORY',
@@ -3616,6 +3626,7 @@ function HomeDashboard({
       },
       {
         label: 'Projects',
+        description: 'Project pages and developments',
         tab: 'Projects',
         moduleCode: 'edit_project',
         moduleName: 'PROJECTS',
@@ -3623,6 +3634,7 @@ function HomeDashboard({
       },
       {
         label: 'Virtual Tours',
+        description: 'Towers, units, and 360° views',
         tab: 'Virtual Tours',
         moduleCode: 'virtual_tours',
         moduleName: 'VIRTUAL TOURS',
@@ -3630,6 +3642,7 @@ function HomeDashboard({
       },
       {
         label: 'Partner Banks',
+        description: 'Financing partners and offers',
         tab: 'Partner Banks',
         moduleCode: 'edit_banks',
         moduleName: 'BANKS',
@@ -3637,6 +3650,7 @@ function HomeDashboard({
       },
       {
         label: 'News & Updates',
+        description: 'Articles and announcements',
         tab: 'News & Updates',
         moduleCode: 'edit_news',
         moduleName: 'NEWS AND UPDATES',
@@ -3644,19 +3658,13 @@ function HomeDashboard({
       },
       {
         label: 'Promotions',
+        description: 'Current offers and promotions',
         tab: 'Promotions',
         moduleCode: 'promotion_code',
         moduleName: 'PROMOTION',
         icon: Megaphone,
       },
 
-      {
-        label: 'Homepage Content',
-        tab: 'Homepage Content',
-        moduleCode: 'homepage_manage',
-        moduleName: 'HOMEPAGE',
-        icon: LayoutDashboard,
-      },
     ];
 
   const visibleCards = sectionCards.filter((card) =>
@@ -3713,6 +3721,7 @@ const handleSectionVisibilityToggle = (
   );
 
   setSectionSaveSuccess(false);
+  setSectionSaveError('');
 };
 
 
@@ -3722,6 +3731,7 @@ const handleResetSectionChanges = () => {
   );
 
   setSectionSaveSuccess(false);
+  setSectionSaveError('');
 };
 
 
@@ -3754,10 +3764,15 @@ const handleSaveSectionChanges = async () => {
 
       setShowSaveConfirmation(false);
       setSectionSaveSuccess(true);
+      setSectionSaveError('');
 
       if (checkPerm('audit_log', 'can_view')) {
-        const refreshedLogs = await fetchRecentAuditLogsAction(5);
-        setRecentLogs(refreshedLogs as AuditLog[]);
+        try {
+          const refreshedLogs = await fetchRecentAuditLogsAction(5);
+          setRecentLogs(refreshedLogs as AuditLog[]);
+        } catch (activityError) {
+          console.error('Visibility saved, but recent activity could not refresh:', activityError);
+        }
       }
 
       setTimeout(() => {
@@ -3765,11 +3780,7 @@ const handleSaveSectionChanges = async () => {
       }, 3000);
     } catch (error: any) {
       console.error('Failed to save website section visibility:', error);
-      alert(
-        `Failed to save changes: ${
-          error?.message || 'Unknown error'
-        }`
-      );
+      setSectionSaveError(error?.message || 'Could not save website visibility. Please try again.');
     } finally {
       setIsSavingSections(false);
     }
@@ -3792,7 +3803,7 @@ const handleSaveSectionChanges = async () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto animate-in fade-in duration-300">
+    <div className="mx-auto w-full max-w-[1280px]">
 
         {showSaveConfirmation && (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/55 backdrop-blur-sm p-4">
@@ -3816,7 +3827,7 @@ const handleSaveSectionChanges = async () => {
               className="flex items-center justify-between gap-4 py-2"
             >
               <span className="text-sm font-medium text-brand-blue">
-                {section.module_name}
+                {sectionCards.find((card) => card.moduleCode === section.module_code)?.label || section.module_name}
               </span>
 
               <span
@@ -3896,33 +3907,20 @@ const handleSaveSectionChanges = async () => {
       {/* PENDING WEBSITE CHANGES */}
       {hasPendingSectionChanges && (
         <div
-          className="
-            sticky top-0 z-30
-            mb-6
-            flex flex-col sm:flex-row
-            sm:items-center
-            justify-between
-            gap-4
-            bg-[#0f1d40]
-            text-white
-            px-5 py-4
-            rounded-2xl
-            shadow-xl
-            border border-white/10
-          "
+          role="alert"
+          className="fixed left-1/2 top-24 z-[90] flex w-[calc(100vw-2rem)] max-w-[680px] -translate-x-1/2 flex-col gap-3 rounded-2xl border border-brand-gold/70 bg-[#0f1d40] px-4 py-4 text-white shadow-2xl ring-4 ring-brand-gold/15 sm:flex-row sm:items-center sm:justify-between sm:gap-5 sm:px-5"
         >
-          <div>
+          <div className="min-w-0">
             <div className="text-sm font-bold">
               {pendingSectionChanges.length}{' '}
-              {pendingSectionChanges.length === 1 ? 'change' : 'changes'} not saved
+              {pendingSectionChanges.length === 1 ? 'website change' : 'website changes'} waiting for review
             </div>
-
-            <div className="text-xs text-white/60 mt-1">
-              The live website will not change until you save.
+            <div className="mt-1 text-xs leading-snug text-white/75">
+              Visibility affects the live website. Review and save, or reset your changes.
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
             <button
               type="button"
               onClick={handleResetSectionChanges}
@@ -3955,21 +3953,27 @@ const handleSaveSectionChanges = async () => {
                 disabled:opacity-50
               "
             >
-              Save changes
+              Review &amp; save
             </button>
           </div>
         </div>
       )}
 
-            {sectionSaveSuccess && (
-        <div className="mb-6 flex items-center gap-2 text-sm font-medium text-green-700 bg-green-50 border border-green-100 rounded-xl px-4 py-3">
-          <CheckCircle2 size={17} />
-          Website visibility updated successfully.
+      {sectionSaveSuccess && (
+        <div role="status" className="fixed right-5 top-5 z-[120] flex items-center gap-2 rounded-xl border border-green-100 bg-white px-4 py-3 text-xs font-semibold text-green-700 shadow-xl">
+          <CheckCircle2 size={17} /> Website visibility updated.
+        </div>
+      )}
+      {sectionSaveError && (
+        <div role="alert" className="fixed right-5 top-5 z-[120] flex max-w-sm items-start gap-2 rounded-xl border border-red-200 bg-white px-4 py-3 text-xs text-red-700 shadow-xl">
+          <AlertCircle size={17} className="shrink-0" />
+          <span>{sectionSaveError}</span>
+          <button type="button" aria-label="Dismiss error" onClick={() => setSectionSaveError('')} className="ml-1 rounded p-0.5 hover:bg-red-50"><X size={14} /></button>
         </div>
       )}
       {/* PAGE INTRO */}
-      <div className="mb-8">
-        <h2 className="text-2xl md:text-3xl font-serif text-brand-blue mb-2">
+      <div className="mb-5">
+        <h2 className="mb-1 font-serif text-2xl text-brand-blue md:text-[26px]">
           Manage Website Sections
         </h2>
 
@@ -3980,186 +3984,81 @@ const handleSaveSectionChanges = async () => {
 
       {/* WEBSITE SECTION CARDS */}
       {visibleCards.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 mb-12">
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {visibleCards.map((card) => {
-          const Icon = card.icon;
-          const module = getModuleForCard(card.moduleCode);
+            const Icon = card.icon;
+            const module = getModuleForCard(card.moduleCode);
+            const canEditVisibility = Boolean(module) && checkPerm(card.moduleCode, 'can_edit');
+            const isShown = module?.is_active !== false;
+            const statusReady = !isLoadingSections && Boolean(module);
+            const originalModule = module ? getOriginalModule(module.id) : null;
+            const hasUnsavedChange = Boolean(originalModule && originalModule.is_active !== module.is_active);
 
-          const isShown = module?.is_active !== false;
+            return (
+              <article
+                key={card.tab}
+                className={`group relative flex min-h-[156px] flex-col rounded-2xl border bg-white p-5 shadow-sm transition-[background-color,border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-brand-gold hover:bg-brand-blue hover:shadow-lg focus-within:border-brand-gold focus-within:ring-2 focus-within:ring-brand-gold/25 ${hasUnsavedChange ? 'border-brand-gold/70 ring-1 ring-brand-gold/20' : 'border-gray-200'}`}
+              >
+                <button
+                  type="button"
+                  onClick={() => onOpenSection(card.tab)}
+                  aria-label={`Open ${card.label}`}
+                  className="absolute inset-0 z-0 rounded-2xl focus-visible:outline-none"
+                />
 
-          return (
-            <div
-              key={card.tab}
-              role="button"
-              tabIndex={0}
-             onClick={() => {
-                if (card.tab === 'Homepage Content') {
-                  router.push('/admin/homepage');
-                } else {
-                  onOpenSection(card.tab);
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  onOpenSection(card.tab);
-                }
-              }}
-              className={`
-                group
-                relative
-                min-h-[160px]
-                bg-white
-                border
-                rounded-2xl
-                p-6
-                text-left
-                shadow-sm
-                hover:shadow-md
-                transition-all
-                duration-200
-                outline-none
-                focus-visible:ring-2
-                focus-visible:ring-brand-gold
-                cursor-pointer
-                ${
-                  isShown
-                    ? 'border-gray-200 hover:border-brand-gold/60'
-                    : 'border-gray-200 bg-gray-50/70'
-                }
-              `}
-            >
-              <div className="flex items-start justify-between gap-4">
-
-                <div
-                  className={`
-                    w-11 h-11
-                    rounded-xl
-                    flex items-center justify-center
-                    transition-colors
-                    ${
-                      isShown
-                        ? 'bg-brand-blue/5 text-brand-blue group-hover:bg-brand-blue group-hover:text-brand-gold'
-                        : 'bg-gray-100 text-gray-400'
-                    }
-                  `}
-                >
-                  <Icon size={21} />
+                <div className="pointer-events-none relative z-[1] flex items-start justify-between gap-2">
+                  <Icon size={25} strokeWidth={1.8} aria-hidden="true" className="shrink-0 text-brand-blue transition-colors group-hover:text-white" />
+                  <div className="pointer-events-auto relative z-10 shrink-0 text-right">
+                    {statusReady ? (
+                      canEditVisibility ? (
+                        <button
+                          type="button"
+                          onClick={(event) => handleSectionVisibilityToggle(event, module!.id)}
+                          disabled={isSavingSections}
+                          aria-pressed={isShown}
+                          aria-label={`${isShown ? 'Hide' : 'Show'} ${card.label} on the website`}
+                          title="Changes to website visibility take effect after you save"
+                          className="inline-flex min-h-9 items-center gap-2 rounded-lg px-1 text-[10px] font-semibold text-gray-600 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold group-hover:text-white group-hover:hover:bg-white/10 disabled:cursor-wait disabled:opacity-60"
+                        >
+                          <span className="whitespace-nowrap">{isShown ? 'Shown on website' : 'Hidden from website'}</span>
+                          <span aria-hidden="true" className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${isShown ? 'bg-green-500' : 'bg-gray-300'}`}>
+                            <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${isShown ? 'translate-x-4' : ''}`} />
+                          </span>
+                        </button>
+                      ) : (
+                        <span className="inline-block py-2 text-[10px] font-semibold text-gray-500 group-hover:text-white/80">{isShown ? 'Shown on website' : 'Hidden from website'}</span>
+                      )
+                    ) : (
+                      <span className="inline-block py-2 text-[10px] font-semibold text-gray-400 group-hover:text-white/70">{isLoadingSections ? 'Loading status...' : 'Status unavailable'}</span>
+                    )}
+                  </div>
                 </div>
 
-                {module && checkPerm(card.moduleCode, 'can_edit') && (
-                  <button
-                    type="button"
-                    onClick={(e) =>
-                      handleSectionVisibilityToggle(e, module.id)
-                    }
-                    className="
-                      flex items-center gap-2
-                      rounded-full
-                      px-3 py-1.5
-                      hover:bg-gray-50
-                      transition-colors
-                      outline-none
-                    "
-                    title={
-                      isShown
-                        ? 'Hide this section from the website'
-                        : 'Show this section on the website'
-                    }
-                  >
-                    <span
-                      className={`
-                        text-[10px]
-                        font-bold
-                        ${
-                          isShown
-                            ? 'text-green-700'
-                            : 'text-gray-500'
-                        }
-                      `}
-                    >
-                      {isShown
-                        ? 'Shown on website'
-                        : 'Hidden from website'}
-                    </span>
-
-                    <span
-                      className={`
-                        relative
-                        inline-flex
-                        h-5 w-9
-                        shrink-0
-                        rounded-full
-                        transition-colors
-                        ${
-                          isShown
-                            ? 'bg-green-500'
-                            : 'bg-gray-300'
-                        }
-                      `}
-                    >
-                      <span
-                        className={`
-                          absolute top-0.5
-                          h-4 w-4
-                          rounded-full
-                          bg-white
-                          shadow-sm
-                          transition-transform
-                          ${
-                            isShown
-                              ? 'translate-x-[18px]'
-                              : 'translate-x-0.5'
-                          }
-                        `}
-                      />
-                    </span>
-                  </button>
-                )}
-              </div>
-
-              <div className="absolute left-6 right-6 bottom-6 flex items-end justify-between gap-4">
-                <h3
-                  className={`
-                    text-lg font-bold
-                    ${
-                      isShown
-                        ? 'text-brand-blue'
-                        : 'text-gray-500'
-                    }
-                  `}
-                >
-                  {card.label}
-                </h3>
-
-                <span
-                  className="
-                    text-brand-blue/30
-                    group-hover:text-brand-gold
-                    group-hover:translate-x-1
-                    transition-all
-                    text-xl
-                  "
-                >
-                  →
-                </span>
-              </div>
-            </div>
-          );
-        })}
+                <div className="pointer-events-none relative z-[1] mt-2">
+                  <h3 className="text-lg font-semibold leading-tight tracking-tight text-brand-blue transition-colors group-hover:text-white">{card.label}</h3>
+                  <p className="mt-1 text-xs leading-snug text-gray-500 transition-colors group-hover:text-white/75">{card.description}</p>
+                </div>
+                <div className="pointer-events-none relative z-[1] mt-auto flex items-center justify-between gap-2 pt-2">
+                  <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-brand-blue transition-colors group-hover:text-white">
+                    Open section <ArrowUpRight size={14} aria-hidden="true" />
+                  </span>
+                  {hasUnsavedChange && <span className="rounded-full border border-brand-gold/40 bg-brand-gold/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-brand-blue group-hover:border-brand-gold/70 group-hover:text-white">Not saved</span>}
+                </div>
+              </article>
+            );
+          })}
         </div>
       ) : (
-        <div className="mb-12 bg-white border border-gray-200 rounded-2xl p-8 text-center">
-          <p className="text-sm text-gray-500">
-            No website sections have been assigned to your account.
-          </p>
+        <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-8 text-center">
+          <p className="text-sm text-gray-500">No website sections have been assigned to your account.</p>
         </div>
       )}
 
       {/* RECENT CHANGES */}
       <section>
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-3 flex items-center justify-between">
           <div>
-            <h3 className="text-xl font-serif text-brand-blue">
+            <h3 className="font-serif text-lg text-brand-blue">
               Recent Changes
             </h3>
 
@@ -4193,7 +4092,7 @@ const handleSaveSectionChanges = async () => {
               hidden md:grid
               grid-cols-12
               gap-4
-              px-6 py-3
+              px-4 py-2
               border-b border-gray-100
               bg-gray-50/70
               text-[10px]
@@ -4237,8 +4136,8 @@ const handleSaveSectionChanges = async () => {
                   className={`
                     w-full
                     grid grid-cols-1 md:grid-cols-12
-                    gap-2 md:gap-4
-                    px-6 py-4
+                    gap-1 md:gap-4
+                    px-4 py-2
                     border-b border-gray-100
                     last:border-b-0
                     text-left
@@ -4250,12 +4149,12 @@ const handleSaveSectionChanges = async () => {
                     }
                   `}
                 >
-                  <div className="md:col-span-3">
+                  <div className="min-w-0 md:col-span-3 lg:flex lg:items-center lg:gap-2">
                     <div className="font-bold text-sm text-brand-blue truncate">
                       {log.entity_type}
                     </div>
 
-                    <div className="text-xs text-gray-400 truncate mt-1">
+                    <div className="mt-0.5 min-w-0 truncate text-xs text-gray-400 lg:mt-0">
                       {log.entity_name}
                     </div>
                   </div>
@@ -4309,33 +4208,37 @@ const handleSaveSectionChanges = async () => {
 
 function HomepageManager({ checkPerm }: ManagerProps) {
   const router = useRouter();
+  const canEdit = checkPerm('homepage_manage', 'can_edit');
 
   return (
-    <div className="animate-in fade-in duration-300 max-w-4xl mx-auto py-12">
-      <div className="bg-white border border-gray-200 rounded-3xl p-10 shadow-sm text-center flex flex-col items-center">
-        <div className="w-16 h-16 rounded-2xl bg-brand-blue/5 text-brand-blue flex items-center justify-center mb-5">
-          <LayoutDashboard size={32} />
+    <section className="mx-auto w-full max-w-6xl animate-in fade-in duration-300">
+      <div className="flex flex-wrap items-end justify-between gap-5">
+        <div className="max-w-2xl">
+          <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-brand-gold">Homepage · Content</p>
+          <h2 className="mt-2 font-serif text-4xl text-brand-blue">Homepage</h2>
+          <p className="mt-3 text-sm leading-relaxed text-gray-500">
+            Manage the homepage hero, About Us, development areas, process, awards, video, and news.
+          </p>
         </div>
-        
-        <h2 className="text-2xl font-serif font-bold text-brand-blue mb-2">
-          Homepage Visual Canvas Editor
-        </h2>
-        
-        <p className="text-sm text-gray-500 max-w-md mx-auto mb-8 leading-relaxed">
-          Manage your hero carousel, About Us statistics, development areas, the process timeline, and video banner directly on a live interactive preview.
-        </p>
-
-        {checkPerm('homepage_manage', 'can_edit') && (
-          <button
-            type="button"
-            onClick={() => router.push('/admin/homepage')}
-            className="inline-flex items-center justify-center gap-3 px-8 py-4 bg-brand-blue text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-brand-gold hover:text-brand-blue transition-all shadow-md active:scale-95"
-          >
-            <LayoutDashboard size={16} /> Open Interactive Homepage Editor
-          </button>
-        )}
+        <span className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">1 Page</span>
       </div>
-    </div>
+      <p className="mb-5 mt-9 text-xs text-gray-400">Select the homepage to manage its website content.</p>
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center border-b border-gray-100 bg-gray-50/70 px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-400 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+          <span>Page</span><span className="hidden sm:block">Sections</span><span>Action</span>
+        </div>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-6 py-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-brand-gold/20 bg-brand-blue/5 text-brand-gold"><House size={21} /></div>
+            <div className="min-w-0"><h3 className="font-semibold text-brand-blue">Homepage</h3><p className="text-xs text-gray-400">Main website landing page</p></div>
+          </div>
+          <span className="hidden text-xs leading-relaxed text-gray-500 sm:block">Hero, About Us, developments, process, awards, video, news</span>
+          {canEdit ? (
+            <button type="button" onClick={() => router.push('/admin/homepage')} className="rounded-lg bg-brand-blue px-4 py-2.5 text-xs font-bold text-white transition-colors hover:bg-brand-gold hover:text-brand-blue">Open editor</button>
+          ) : <span className="text-xs text-gray-400">View only</span>}
+        </div>
+      </div>
+    </section>
   );
 }
 // ==========================================
@@ -4360,13 +4263,13 @@ function AdminMainDashboardContent() {
   }, []);
   const [newsList, setNewsList] = useState<NewsArticle[]>([]);
   const [activeTab, setActiveTab] = useState(
-    () => searchParams.get('section') || 'Home'
+    () => (searchParams.get('section') === 'Homepage Content' ? 'Homepage' : searchParams.get('section')) || 'Home'
   );
   useEffect(() => {
   const requestedSection = searchParams.get('section');
 
   if (requestedSection) {
-    setActiveTab(requestedSection);
+    setActiveTab(requestedSection === 'Homepage Content' ? 'Homepage' : requestedSection);
   }
 }, [searchParams]);
   const [searchQuery, setSearchQuery] = useState(() => {
@@ -4421,6 +4324,11 @@ function AdminMainDashboardContent() {
 
 const ALL_MENU_ITEMS = [
   {
+    name: 'Homepage',
+    icon: House,
+    moduleCode: 'homepage_manage'
+  },
+  {
     name: 'our story',
     icon: BookOpen,
     moduleCode: 'our_story'
@@ -4468,11 +4376,6 @@ const ALL_MENU_ITEMS = [
     moduleCode: 'admin_manage'
   },
 
-  {
-    name: 'Homepage Content',
-    icon: LayoutDashboard,
-    moduleCode: 'homepage_manage'
-  },
 ];
 
   const allowedMenuItems = ALL_MENU_ITEMS.filter(item => checkPerm(item.moduleCode, 'can_view'));
@@ -5197,7 +5100,7 @@ const contentMenuItems = allowedMenuItems.filter(
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col overflow-hidden relative md:ml-20">
+      <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden md:ml-20">
         {articleToArchive && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 p-4 backdrop-blur-sm">
             <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-3xl bg-white p-8 shadow-2xl">
@@ -5309,7 +5212,7 @@ const contentMenuItems = allowedMenuItems.filter(
           </div>
         </header>
 
-                <div className="flex-1 p-8 overflow-y-auto [scrollbar-gutter:stable]">
+                <div className={`min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] ${activeTab === 'Home' ? 'px-4 py-4 sm:px-6 sm:py-5 xl:px-8' : 'p-8'}`}>
           {contentArchiveSection && (
             <div className="mx-auto w-full max-w-6xl">
               <ContentArchiveTabs
@@ -5331,7 +5234,7 @@ const contentMenuItems = allowedMenuItems.filter(
           ) : allowedMenuItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-32 text-center"><div className="w-20 h-20 bg-brand-blue/5 rounded-full flex justify-center items-center mb-6"><ShieldAlert size={32} className="text-brand-blue/40" /></div><h2 className="text-2xl font-serif text-brand-blue mb-3">No Access</h2><p className="text-gray-500 text-sm">Please contact your Super Admin to request access.</p></div>
         ): activeTab === 'Modules' ? <SystemModulesManager />
-          : activeTab === 'Homepage Content' ? <HomepageManager checkPerm={checkPerm} />
+          : activeTab === 'Homepage' ? <HomepageManager checkPerm={checkPerm} />
           : activeTab === 'Projects' ? <ProjectsManager checkPerm={checkPerm} />
           : activeTab === 'Virtual Tours' ? <VirtualToursManager checkPerm={checkPerm} />
           : activeTab === 'Navbar Setup' ? <NavbarProjectsManager checkPerm={checkPerm} />
