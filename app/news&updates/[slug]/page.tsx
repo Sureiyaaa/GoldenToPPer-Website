@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { data: article } = await supabase
     .from('news_updates')
     .select('title, excerpt, image')
-    .ilike('slug', `%${decodedSlug}%`)
+    .eq('slug', decodedSlug)
     .is('is_archived', null)
     .eq('is_active', true)
     .single();
@@ -75,7 +75,7 @@ export default async function DynamicNewsPage({ params }: { params: Promise<{ sl
   const { data: article, error } = await supabase
     .from('news_updates')
     .select('*')
-    .ilike('slug', `%${decodedSlug}%`)
+    .eq('slug', decodedSlug)
     .is('is_archived', null)
     .eq('is_active', true)
     .single();

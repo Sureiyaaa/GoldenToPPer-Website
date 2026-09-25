@@ -28,12 +28,32 @@ export const metadata: Metadata = {
 
 export const revalidate = 60;
 
-export default async function ProjectsPage() {
-  // Utilizing the raw supabase-js client to ensure build stability on the server
-  const supabase = createClient(
+function createPublicSupabase() {
+  return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
+}
+
+function createTowerSupabase() {
+  // project_towers is admin-managed and may be protected by RLS. This page is
+  // a server component, so the service-role key can safely be used here when
+  // available without exposing it to the browser bundle.
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    }
+  );
+}
+
+export default async function ProjectsPage() {
+  const supabase = createPublicSupabase();
 
   const { data, error } = await supabase
     .from('project_table')
@@ -60,7 +80,43 @@ export default async function ProjectsPage() {
     console.error('Error fetching projects on server:', error);
   }
 
-  const serializedProjects = (data || []).map((item: any) => ({
+  const projects = data || [];
+  const projectIds = projects
+    .map((project: any) => Number(project.id))
+    .filter((id: number) => Number.isFinite(id));
+
+  const towerOrderByProject = new Map<number, string[]>();
+
+  if (projectIds.length > 0) {
+    const towerSupabase = createTowerSupabase();
+    const { data: towerRows, error: towerError } = await towerSupabase
+      .from('project_towers')
+      .select('id, project_id, name, sort_order')
+      .in('project_id', projectIds)
+      .order('sort_order', { ascending: true })
+      .order('id', { ascending: true });
+
+    if (towerError) {
+      // Keep the public page usable if the tower registry cannot be read. The
+      // client has a deterministic legacy fallback based on tour tower names.
+      console.warn(
+        '[ProjectsPage] Unable to load project tower ordering:',
+        towerError.message
+      );
+    } else {
+      for (const row of towerRows || []) {
+        const projectId = Number(row.project_id);
+        const name = String(row.name || '').trim();
+        if (!Number.isFinite(projectId) || !name) continue;
+
+        const current = towerOrderByProject.get(projectId) || [];
+        current.push(name);
+        towerOrderByProject.set(projectId, current);
+      }
+    }
+  }
+
+  const serializedProjects = projects.map((item: any) => ({
     id: item.id,
     name: item.title,
     address: item.address,
@@ -69,12 +125,10 @@ export default async function ProjectsPage() {
     image: item.image || '/images/placeholder.webp',
     proximity: item.proximity,
     statusText: item.status || 'Pre-Selling',
-
     tags:
       item.project_tag
         ?.map((pt: any) => pt.tags?.tag_name)
         .filter(Boolean) || [],
-
     units: [
       ...new Set(
         (item.unit_layout || [])
@@ -88,12 +142,19 @@ export default async function ProjectsPage() {
       ),
     ] as string[],
 
-    // Pass the 360 tour data and the old fallback url
+    // Public Virtual Tours only receive units explicitly marked Active.
+    // Sort by database id so the unit dropdown remains deterministic.
     virtual_tours:
-      item.virtual_tours?.filter(
-        (tour: any) => tour.status === 'Active'
-      ) || [],
+      (item.virtual_tours || [])
+        .filter((tour: any) => tour.status === 'Active')
+        .sort((a: any, b: any) => Number(a.id) - Number(b.id)),
 
+    // Canonical tower order comes from the same project_towers registry used
+    // by the Project CMS and Virtual Tour admin editor.
+    virtual_tour_tower_order:
+      towerOrderByProject.get(Number(item.id)) || [],
+
+    // Legacy one-panorama fallback remains supported.
     virtual_tour_url: item.virtual_tour_url || null,
   }));
 

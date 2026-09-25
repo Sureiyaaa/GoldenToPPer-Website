@@ -2,7 +2,7 @@
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
-import { getCustomSession } from './auth';
+import { getCustomSession, getCurrentUser } from './auth';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,6 +27,186 @@ export async function fetchAdminProjectsList() {
   if (error) throw error;
 
   return data;
+}
+
+export async function fetchArchivedProjectsList() {
+  const session = await getCustomSession();
+
+  if (!session) {
+    throw new Error('Unauthorized');
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('project_table')
+    .select('id, title, slug, city, status, is_active, image, deleted_at')
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return data || [];
+}
+
+export async function archiveProjectAction(projectId: number | string) {
+  const session = await getCustomSession();
+
+  if (!session) {
+    throw new Error('Unauthorized');
+  }
+
+  const normalizedProjectId = Number(projectId);
+  if (!Number.isFinite(normalizedProjectId)) {
+    throw new Error('Invalid project ID.');
+  }
+
+  const { data: project, error: projectReadError } = await supabaseAdmin
+    .from('project_table')
+    .select('id, title, deleted_at')
+    .eq('id', normalizedProjectId)
+    .maybeSingle();
+
+  if (projectReadError) {
+    throw projectReadError;
+  }
+
+  if (!project) {
+    throw new Error('Project not found.');
+  }
+
+  if (project.deleted_at) {
+    return { success: true, alreadyArchived: true };
+  }
+
+  const { data: navRows, error: navReadError } = await supabaseAdmin
+    .from('navbar_projects')
+    .select('id, is_active')
+    .eq('project_id', normalizedProjectId);
+
+  if (navReadError) {
+    throw navReadError;
+  }
+
+  const previousNavigationState = (navRows || []).map((row: any) => ({
+    id: row.id,
+    is_active: Boolean(row.is_active),
+  }));
+
+  if (previousNavigationState.length > 0) {
+    const { error: navHideError } = await supabaseAdmin
+      .from('navbar_projects')
+      .update({ is_active: false })
+      .eq('project_id', normalizedProjectId);
+
+    if (navHideError) {
+      throw navHideError;
+    }
+  }
+
+  const { error: archiveError } = await supabaseAdmin
+    .from('project_table')
+    .update({
+      deleted_at: new Date().toISOString(),
+      is_active: false,
+    })
+    .eq('id', normalizedProjectId);
+
+  if (archiveError) {
+    for (const navRow of previousNavigationState) {
+      await supabaseAdmin
+        .from('navbar_projects')
+        .update({ is_active: navRow.is_active })
+        .eq('id', navRow.id);
+    }
+
+    throw archiveError;
+  }
+
+  return { success: true };
+}
+
+export async function restoreArchivedProjectAction(projectId: number | string) {
+  const session = await getCustomSession();
+
+  if (!session) {
+    throw new Error('Unauthorized');
+  }
+
+  const normalizedProjectId = Number(projectId);
+  if (!Number.isFinite(normalizedProjectId)) {
+    throw new Error('Invalid project ID.');
+  }
+
+  const { data: project, error: projectReadError } = await supabaseAdmin
+    .from('project_table')
+    .select('id, title, slug, deleted_at')
+    .eq('id', normalizedProjectId)
+    .maybeSingle();
+
+  if (projectReadError) {
+    throw projectReadError;
+  }
+
+  if (!project) {
+    throw new Error('Project not found.');
+  }
+
+  if (!project.deleted_at) {
+    return { success: true, alreadyRestored: true };
+  }
+
+  if (project.slug) {
+    const { data: conflictingProject, error: slugCheckError } =
+      await supabaseAdmin
+        .from('project_table')
+        .select('id, title')
+        .eq('slug', project.slug)
+        .is('deleted_at', null)
+        .neq('id', normalizedProjectId)
+        .maybeSingle();
+
+    if (slugCheckError) {
+      throw slugCheckError;
+    }
+
+    if (conflictingProject) {
+      throw new Error(
+        `This project cannot be restored because the URL slug "${project.slug}" is already used by ${conflictingProject.title || 'another active project'}.`
+      );
+    }
+  }
+
+  const { error: restoreError } = await supabaseAdmin
+    .from('project_table')
+    .update({
+      deleted_at: null,
+      // Restored content returns safely as Hidden until an admin republishes it.
+      is_active: false,
+    })
+    .eq('id', normalizedProjectId);
+
+  if (restoreError) {
+    throw restoreError;
+  }
+
+  // Keep or recreate the linked navigation item, but never republish it
+  // automatically as part of a restore.
+  await ensureProjectNavigationEntriesAction();
+  await hideProjectNavigationEntryAction(normalizedProjectId);
+
+  return { success: true };
+}
+
+// Kept as a disabled server action for older callers. Projects can only be archived
+// and restored; no request may permanently delete an archived project.
+export async function permanentlyDeleteArchivedProjectAction(
+  _projectId: number | string,
+  _confirmationTitle: string
+) {
+  const session = await getCustomSession();
+  if (!session) throw new Error('Unauthorized');
+  throw new Error('Permanent project deletion is disabled. Use archive and restore instead.');
 }
 
 async function getNextNavigationDisplayOrder() {
@@ -199,12 +379,151 @@ export async function createBasicProjectAction(input: {
   }
 }
 
+function getNavigationRowRichness(row: any) {
+  let score = 0;
+
+  if (String(row?.nav_title || '').trim()) score += 1;
+  if (String(row?.tagline || '').trim()) score += 3;
+  if (String(row?.nav_image_url || '').trim()) score += 4;
+
+  return score;
+}
+
+async function repairDuplicateProjectNavigationRows() {
+  const { data: navigationRows, error } = await supabaseAdmin
+    .from('navbar_projects')
+    .select(
+      'id, project_id, nav_title, tagline, nav_image_url, display_order, is_active'
+    )
+    .order('display_order', { ascending: true })
+    .order('id', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  const rowsByProject = new Map<number, any[]>();
+
+  for (const row of navigationRows || []) {
+    const projectId = Number(row.project_id);
+    if (!Number.isFinite(projectId)) continue;
+
+    const currentRows = rowsByProject.get(projectId) || [];
+    currentRows.push(row);
+    rowsByProject.set(projectId, currentRows);
+  }
+
+  let removedCount = 0;
+
+  for (const rows of rowsByProject.values()) {
+    if (rows.length <= 1) continue;
+
+    const sortedRows = [...rows].sort((a, b) => {
+      const richnessDifference =
+        getNavigationRowRichness(b) - getNavigationRowRichness(a);
+
+      if (richnessDifference !== 0) {
+        return richnessDifference;
+      }
+
+      const aOrder = Number(a.display_order);
+      const bOrder = Number(b.display_order);
+      const normalizedAOrder = Number.isFinite(aOrder)
+        ? aOrder
+        : Number.MAX_SAFE_INTEGER;
+      const normalizedBOrder = Number.isFinite(bOrder)
+        ? bOrder
+        : Number.MAX_SAFE_INTEGER;
+
+      if (normalizedAOrder !== normalizedBOrder) {
+        return normalizedAOrder - normalizedBOrder;
+      }
+
+      return Number(a.id) - Number(b.id);
+    });
+
+    const primary = sortedRows[0];
+    const duplicates = sortedRows.slice(1);
+
+    // Preserve the richest/customized navigation content before removing
+    // duplicates. This favors an existing logo/tagline over a newly generated
+    // blank fallback row.
+    const firstTitleRow = sortedRows.find((row) =>
+      String(row.nav_title || '').trim()
+    );
+    const firstTaglineRow = sortedRows.find((row) =>
+      String(row.tagline || '').trim()
+    );
+    const firstImageRow = sortedRows.find((row) =>
+      String(row.nav_image_url || '').trim()
+    );
+
+    const validOrders = sortedRows
+      .map((row) => Number(row.display_order))
+      .filter((value) => Number.isFinite(value));
+
+    const mergedDisplayOrder =
+      validOrders.length > 0
+        ? Math.min(...validOrders)
+        : primary.display_order;
+
+    const { error: updateError } = await supabaseAdmin
+      .from('navbar_projects')
+      .update({
+        nav_title:
+          firstTitleRow?.nav_title ||
+          primary.nav_title ||
+          'Untitled Project',
+        tagline:
+          firstTaglineRow?.tagline ||
+          primary.tagline ||
+          '',
+        nav_image_url:
+          firstImageRow?.nav_image_url ||
+          primary.nav_image_url ||
+          null,
+        display_order: mergedDisplayOrder,
+        // Preserve the selected canonical row's saved visibility preference.
+        is_active: Boolean(primary.is_active),
+      })
+      .eq('id', primary.id);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    const duplicateIds = duplicates
+      .map((row) => Number(row.id))
+      .filter((id) => Number.isFinite(id));
+
+    if (duplicateIds.length > 0) {
+      const { error: deleteError } = await supabaseAdmin
+        .from('navbar_projects')
+        .delete()
+        .in('id', duplicateIds);
+
+      if (deleteError) {
+        throw deleteError;
+      }
+
+      removedCount += duplicateIds.length;
+    }
+  }
+
+  return removedCount;
+}
+
 export async function ensureProjectNavigationEntriesAction() {
   const session = await getCustomSession();
 
   if (!session) {
     throw new Error('Unauthorized');
   }
+
+  // Repair any legacy or race-created duplicates before checking which
+  // projects are missing a navigation row.
+  const duplicatesRemovedBeforeInsert =
+    await repairDuplicateProjectNavigationRows();
 
   const [projectResult, navigationResult] = await Promise.all([
     supabaseAdmin
@@ -252,8 +571,8 @@ export async function ensureProjectNavigationEntriesAction() {
         tagline: '',
         nav_image_url: null,
         display_order: nextOrder,
-        // Default preference is ON. Effective visibility still depends on
-        // project_table.is_active on the public site/admin display.
+        // New/repaired entries keep their saved navigation preference on,
+        // while effective visibility still depends on project.is_active.
         is_active: true,
       };
     });
@@ -261,16 +580,26 @@ export async function ensureProjectNavigationEntriesAction() {
   if (missingRows.length > 0) {
     const { error: insertError } = await supabaseAdmin
       .from('navbar_projects')
-      .insert(missingRows);
+      .upsert(missingRows, {
+        onConflict: 'project_id',
+        ignoreDuplicates: true,
+      });
 
     if (insertError) {
       throw insertError;
     }
   }
 
+  // A second repair closes the small race window where two concurrent sync
+  // calls could both decide the same project was missing and insert a row.
+  const duplicatesRemovedAfterInsert =
+    await repairDuplicateProjectNavigationRows();
+
   return {
     success: true,
     createdCount: missingRows.length,
+    duplicateRowsRemoved:
+      duplicatesRemovedBeforeInsert + duplicatesRemovedAfterInsert,
   };
 }
 
@@ -354,6 +683,124 @@ export async function setProjectWebsiteVisibilityAction(
   };
 }
 
+// Write audit entries from the server after reading the stored state on both sides of a save.
+// Field keys use database IDs so a renamed tower still points to the same tower.
+type ProjectAuditRow = {
+  user_email: string;
+  actor_id: string | null;
+  action_type: string;
+  entity_type: string;
+  entity_name: string;
+  entity_id: string;
+  parent_entity_id: string | null;
+  field_key: string;
+  old_value: unknown;
+  new_value: unknown;
+  target_url: string;
+  details: string;
+};
+
+type ProjectSnapshot = Awaited<ReturnType<typeof fetchProjectForEdit>>;
+
+function buildProjectAuditRows(before: ProjectSnapshot, after: ProjectSnapshot, actor: { id?: number | string; username?: string } | null): ProjectAuditRow[] {
+  const projectId = String(after.projData.id);
+  const title = String(after.projData.title || 'Untitled project');
+  const rows: ProjectAuditRow[] = [];
+  const same = (a: unknown, b: unknown) => {
+    if ((a === null || a === undefined || a === '') && (b === null || b === undefined || b === '')) return true;
+    if (typeof a !== 'object' && typeof b !== 'object') return String(a) === String(b);
+    return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  };
+  const display = (value: unknown) => {
+    const text = typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value ?? '').trim();
+    return text.length > 90 ? `${text.slice(0, 87)}...` : text || '(empty)';
+  };
+  const record = (action: string, field: string, label: string, oldValue: unknown, newValue: unknown, parentId: string | null = null) => {
+    if (same(oldValue, newValue)) return;
+    rows.push({
+      user_email: actor?.username || 'Unknown Admin', actor_id: actor?.id != null ? String(actor.id) : null,
+      action_type: action, entity_type: 'Projects', entity_name: title, entity_id: projectId,
+      parent_entity_id: parentId, field_key: field, old_value: oldValue ?? null, new_value: newValue ?? null,
+      target_url: `/admin/projects?edit=${encodeURIComponent(projectId)}&focus=${encodeURIComponent(field)}`,
+      details: `Projects › ${title} › ${label}: ${action === 'CHANGED' ? `${display(oldValue)} → ${display(newValue)}` : action === 'REORDERED' ? `${display(Array.isArray(oldValue) ? oldValue.join(', ') : oldValue)} → ${display(Array.isArray(newValue) ? newValue.join(', ') : newValue)}` : action.toLowerCase()}.`,
+    });
+  };
+
+  const projectFields: Record<string, string> = {
+    title: 'Project title', slug: 'URL slug', status: 'Project status', address: 'Address',
+    city: 'City', country: 'Country', sqm: 'Site area', unit_total: 'Total units',
+    image: 'Featured image', img_awards: 'Award image', map_icon: 'Map icon',
+  };
+  for (const [field, label] of Object.entries(projectFields)) {
+    record('CHANGED', field, label, before.projData?.[field], after.projData?.[field]);
+  }
+  const editorialFields: Record<string, string> = {
+    editorial_title: 'Editorial title', editorial_long: 'Editorial description', editorial_img: 'Editorial image',
+    editorial_title_color: 'Title color', editorial_desc_color: 'Description color', editorial_bg_color: 'Background color',
+    amenities_title: 'Amenities heading', amenities_title_gold: 'Amenities accent heading', map_subtitle: 'Map subtitle',
+  };
+  for (const [field, label] of Object.entries(editorialFields)) {
+    record('CHANGED', field, label, before.extData?.[field], after.extData?.[field]);
+  }
+  for (const [field, label] of Object.entries({ latitude: 'Map latitude', longitude: 'Map longitude' })) {
+    record('CHANGED', `map_${field}`, label, before.parentData?.[field], after.parentData?.[field]);
+  }
+  const tags = (snapshot: ProjectSnapshot) => (snapshot.tagData || []).map((item: any) => String(item.tags?.tag_name || '')).sort();
+  record('CHANGED', 'tags', 'Tags', tags(before), tags(after));
+
+  function compareItems(label: string, key: string, oldItems: any[], newItems: any[], fields: Record<string, string>) {
+    const oldById = new Map(oldItems.map(item => [String(item.id), item]));
+    const newById = new Map(newItems.map(item => [String(item.id), item]));
+    for (const [id, item] of newById) {
+      const old = oldById.get(id);
+      const name = String(item.name || item.title || old?.name || old?.title || id);
+      const itemLabel = name.toLowerCase().startsWith(label.toLowerCase()) ? name : `${label} ${name}`;
+      if (!old) {
+        record('ADDED', `${key}:${id}`, itemLabel, null, item, id);
+        continue;
+      }
+      for (const [field, fieldLabel] of Object.entries(fields)) {
+        record('CHANGED', `${key}:${id}.${field}`, `${itemLabel} › ${fieldLabel}`, old[field], item[field], id);
+      }
+    }
+    for (const [id, item] of oldById) {
+      if (!newById.has(id)) record('REMOVED', key === 'tower' ? 'tower-order' : key === 'amenity' ? 'amenities' : 'unit-layouts', `${label} ${item.name || item.title || id}`, item, null, id);
+    }
+  }
+
+  compareItems('Tower', 'tower', before.towerData || [], after.towerData || [], { name: 'Name' });
+  const order = (items: any[]) => [...items].sort((a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0) || Number(a.id) - Number(b.id));
+  const oldTowers = order(before.towerData || []);
+  const newTowers = order(after.towerData || []);
+  if (oldTowers.length === newTowers.length && oldTowers.every(tower => newTowers.some(next => next.id === tower.id)) &&
+      oldTowers.some((tower, i) => tower.id !== newTowers[i].id)) {
+    record('REORDERED', 'tower-order', 'Tower order rearranged', oldTowers.map(t => t.name), newTowers.map(t => t.name));
+  }
+  compareItems('Amenity', 'amenity', before.amenityData || [], after.amenityData || [],
+    { title: 'Name', description: 'Description', thumbnail: 'Image', tower: 'Tower' });
+  compareItems('Unit layout', 'unit-layout', before.layoutData || [], after.layoutData || [],
+    { title: 'Name', tower_name: 'Tower', description: 'Description', thumbnail: 'Image', min_sqm: 'Minimum area', max_sqm: 'Maximum area',
+      bg_color: 'Background color', sort_order: 'Order', map_card_order: 'Map card order', project_page_order: 'Project page order',
+      show_on_map_card: 'Map card visibility', show_on_project_page: 'Project page visibility' });
+
+  // The current project save recreates point-of-interest rows. Compare their content as a section,
+  // since their row IDs change on every save and would make an item-level link misleading.
+  const markers = (snapshot: ProjectSnapshot) => (snapshot.markerData || []).map((marker: any) => ({
+    name: marker.interest_name, address: marker.address, phrase: marker.phrase,
+    distance_km: marker.distance_km, distance_drive: marker.distance_drive, distance_walk: marker.distance_walk,
+    latitude: marker.latitude, longitude: marker.longitude, thumbnail: marker.thumbnail,
+    icon: marker.marker_type_table?.[0]?.icon, type: marker.marker_type_table?.[0]?.name,
+  })).sort((a: any, b: any) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  record('CHANGED', 'points-of-interest', 'Points of interest', markers(before), markers(after));
+  return rows;
+}
+
+async function recordProjectAuditRows(rows: ProjectAuditRow[]) {
+  if (rows.length === 0) return;
+  const { error } = await supabaseAdmin.from('audit_logs').insert(rows);
+  if (error) throw error;
+}
+
 export async function saveProjectAction(payload: any) {
   try {
     // 1. Verify custom session
@@ -364,6 +811,9 @@ export async function saveProjectAction(payload: any) {
     }
 
     let { targetProjectId, cleanProjectData, finalData } = payload;
+    const beforeAudit: ProjectSnapshot | null = targetProjectId
+      ? await fetchProjectForEdit(targetProjectId)
+      : null;
 
     console.log('[saveProjectAction] payload insights', {
       hasTargetProjectId: Boolean(targetProjectId),
@@ -455,15 +905,6 @@ export async function saveProjectAction(payload: any) {
           });
         }
       }
-    }
-
-    const { data: savedMarkerData, error: savedMarkerFetchError } = await supabaseAdmin
-      .from('child_marker_table')
-      .select('*, marker_type_table(*)')
-      .eq('project_id', targetProjectId);
-
-    if (savedMarkerFetchError) {
-      throw new Error(`Marker refresh error: ${savedMarkerFetchError.message}`);
     }
 
     // 5. Unit Layouts
@@ -1230,15 +1671,51 @@ if (savedLayoutFetchError) {
   );
 }
 
+const {
+  data: savedMarkerData,
+  error: savedMarkerFetchError,
+} = await supabaseAdmin
+  .from('child_marker_table')
+  .select('*, marker_type_table(*)')
+  .eq(
+    'project_id',
+    targetProjectId
+  )
+  .order(
+    'id',
+    {
+      ascending: true,
+    }
+  );
+
+if (savedMarkerFetchError) {
+  throw new Error(
+    `Marker refresh error: ${savedMarkerFetchError.message}`
+  );
+}
+
+    let auditWarning: string | null = null;
+    if (beforeAudit) {
+      try {
+        const afterAudit = await fetchProjectForEdit(targetProjectId);
+        const actor = await getCurrentUser();
+        await recordProjectAuditRows(buildProjectAuditRows(beforeAudit, afterAudit, actor));
+      } catch (auditError) {
+        console.error('Project saved, but detailed audit logging failed:', auditError);
+        auditWarning = 'Project saved, but its audit history could not be recorded.';
+      }
+    }
+
     return {
   success: true,
+  auditWarning,
   towerData:
     savedTowerData || [],
   amenityData:
     savedAmenityData || [],
   layoutData:
     savedLayoutData || [],
-  markerData: 
+  markerData:
     savedMarkerData || [],
 };
   } catch (error: any) {
@@ -1778,8 +2255,29 @@ for (
 }
 
 
+let auditWarning: string | null = null;
+try {
+  const { data: parent, error: parentError } = await supabaseAdmin.from('project_table')
+    .select('title').eq('id', projectId).single();
+  if (parentError) throw parentError;
+  const actor = await getCurrentUser();
+  const projectName = parent?.title || `Project #${projectId}`;
+  await recordProjectAuditRows([{
+    user_email: actor?.username || 'Unknown Admin', actor_id: actor?.id != null ? String(actor.id) : null,
+    action_type: 'REMOVED', entity_type: 'Projects', entity_name: projectName,
+    entity_id: String(projectId), parent_entity_id: String(towerId),
+    field_key: 'tower-order', old_value: tower.name, new_value: null,
+    target_url: `/admin/projects?edit=${encodeURIComponent(projectId)}&focus=tower-order`,
+    details: `Projects › ${projectName} › ${tower.name}: removed and reassigned linked content.`,
+  }]);
+} catch (auditError) {
+  console.error('Tower removed, but audit logging failed:', auditError);
+  auditWarning = 'Tower removed, but its audit history could not be recorded.';
+}
+
 return {
   success: true,
+  auditWarning,
 
   deletedTower:
     tower.name,
@@ -1853,7 +2351,6 @@ export async function fetchProjectForEdit(editId: string | number) {
       .from('project_tag')
       .select('tags(tag_name)')
       .eq('project_id', editId),
-      
   ]);
 
   if (projRes.error) throw projRes.error;

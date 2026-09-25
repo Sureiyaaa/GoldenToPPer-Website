@@ -2,7 +2,7 @@
 'use client';
 
 import { getCurrentUser } from '@/app/actions/auth';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import {
   saveProjectAction,
   fetchProjectForEdit,
@@ -17,7 +17,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { ArrowLeft, Save, Loader2, PlusCircle, Trash2, CheckCircle2, AlertCircle, GripVertical } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, PlusCircle, Trash2, CheckCircle2, AlertCircle, GripVertical, RotateCcw } from 'lucide-react';
 import PreviewSkeleton, {
   ProjectEditorRegion
 } from './PreviewSkeleton';
@@ -265,11 +265,7 @@ function ProjectManager() {
   
   const [isFetching, setIsFetching] = useState(!!editId); 
   const [isSaving, setIsSaving] = useState(false);
-  const [editorFeedback, setEditorFeedback] = useState<{
-    type: 'success' | 'error' | 'info';
-    message: string;
-  } | null>(null);
-  const [resetConfirmationOpen, setResetConfirmationOpen] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
   const [createError, setCreateError] = useState('');
 
   const [newTowerName, setNewTowerName] =
@@ -665,6 +661,77 @@ const [
   }, [editId, reset]);
 
   const formData = watch();
+  const auditFocus = searchParams.get('focus');
+  const appliedAuditFocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (!editId || isFetching || !auditFocus || appliedAuditFocus.current === `${editId}:${auditFocus}`) return;
+    let region: EditorSelection = 'page-settings';
+    let fieldName = auditFocus;
+    let towerId: string | null = null;
+    const item = auditFocus.match(/^(tower|amenity|unit-layout):(\d+)(?:\.([a-z_]+))?$/);
+    if (item?.[1] === 'tower') {
+      towerId = item[2];
+      region = 'page-settings';
+      const index = (formData.towers || []).findIndex(tower => String(tower.id) === towerId);
+      if (index >= 0 && item[3] === 'name') {
+        setEditingTowerIndex(index);
+        setEditingTowerName(formData.towers[index].name);
+      }
+    } else if (item?.[1] === 'amenity') {
+      const index = (formData.amenities || []).findIndex(amenity => String(amenity.id) === item[2]);
+      region = index >= 0 ? `amenity:${index}` : 'amenities';
+      fieldName = index >= 0 ? `amenities.${index}.${item[3] || 'title'}` : '';
+    } else if (item?.[1] === 'unit-layout') {
+      const index = (formData.unit_layouts || []).findIndex(layout => String(layout.id) === item[2]);
+      region = index >= 0 ? `unit-layout:${index}` : 'unit-layouts';
+      fieldName = index >= 0 ? `unit_layouts.${index}.${item[3] || 'title'}` : '';
+    } else if (auditFocus === 'tower-order' || auditFocus === 'slug' || auditFocus === 'status' || auditFocus === 'sqm' || auditFocus === 'unit_total') {
+      region = 'page-settings';
+    } else if (auditFocus === 'unit-layouts') {
+      region = 'unit-layouts';
+    } else if (auditFocus === 'amenities') {
+      region = 'amenities';
+    } else if (auditFocus === 'title') {
+      region = 'project-title';
+    } else if (['city', 'address', 'country'].includes(auditFocus)) {
+      region = 'location';
+    } else if (['image'].includes(auditFocus)) {
+      region = 'hero-image';
+    } else if (auditFocus === 'img_awards') {
+      region = 'awards';
+    } else if (auditFocus === 'tags') {
+      region = 'tags';
+    } else if (auditFocus === 'editorial_title') {
+      region = 'editorial-title';
+    } else if (auditFocus === 'editorial_long') {
+      region = 'editorial-description';
+    } else if (auditFocus.startsWith('editorial_')) {
+      region = 'editorial-visuals';
+    } else if (auditFocus.startsWith('amenities_')) {
+      region = 'amenities';
+    } else if (auditFocus.startsWith('map_') || auditFocus === 'points-of-interest') {
+      region = 'points-of-interest';
+    }
+    appliedAuditFocus.current = `${editId}:${auditFocus}`;
+    setSelectedEditorRegion(region);
+    const timer = window.setTimeout(() => {
+      const scope = document.querySelector('[data-audit-inspector]');
+      const target = auditFocus === 'tower-order'
+        ? scope?.querySelector('[data-audit-tower-order]')
+        : towerId
+          ? Array.from(scope?.querySelectorAll('[data-audit-tower-id]') || []).find(el => el.getAttribute('data-audit-tower-id') === towerId)
+          : Array.from(scope?.querySelectorAll('[name]') || []).find(el => el.getAttribute('name') === fieldName);
+      const element = (target || scope) as HTMLElement | null;
+      element?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      element?.classList.add('ring-2', 'ring-brand-gold', 'ring-offset-2');
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
+        target.focus({ preventScroll: true });
+      }
+      window.setTimeout(() => element?.classList.remove('ring-2', 'ring-brand-gold', 'ring-offset-2'), 5000);
+    }, 160);
+    return () => window.clearTimeout(timer);
+  }, [auditFocus, editId, isFetching, formData.towers, formData.amenities, formData.unit_layouts]);
+
 
   const hasUnsavedChanges = editId
     ? isDirty ||
@@ -696,19 +763,6 @@ const [
       );
     };
   }, [hasUnsavedChanges]);
-
-  useEffect(() => {
-    if (!editorFeedback) return;
-
-    const timeout = window.setTimeout(
-      () => setEditorFeedback(null),
-      editorFeedback.type === 'error'
-        ? 5000
-        : 3000
-    );
-
-    return () => window.clearTimeout(timeout);
-  }, [editorFeedback]);
 
   const availableTowerOptions =
     (formData.towers || [])
@@ -745,12 +799,6 @@ const [
   const projectPageLayoutCount =
     formData.unit_layouts?.filter((layout) => layout.show_on_project_page).length || 0;
 
-const handleBasicValidationError = () => {
-  setCreateError(
-    'Please complete the highlighted required fields before continuing.'
-  );
-};
-
 const onCreateBasicProject = async (
   data: BasicProjectFormData
 ) => {
@@ -777,7 +825,8 @@ const onCreateBasicProject = async (
         'CREATE',
         'Projects',
         data.title,
-        'Created new project. Hidden from website until enabled.'
+        'Created new project. Hidden from website until enabled.',
+        { entityId: result.projectId }
       );
     } catch (auditError) {
       console.warn(
@@ -938,16 +987,8 @@ const normalizeTowerAssignments = (
   };
 };
 
-  const handleProjectValidationError = () => {
-    setEditorFeedback({
-      type: 'error',
-      message: 'Some fields need attention. Review the highlighted fields before saving.',
-    });
-  };
-
   const onSubmit = async (data: ProjectFormData) => {
     setIsSaving(true);
-    setEditorFeedback(null);
     try {
       let finalData =
       normalizeTowerAssignments(
@@ -1220,12 +1261,11 @@ const normalizeTowerAssignments = (
       setPendingMarkerRemovalIds([]);
       setMarkerToRemove(null);
 
-      setEditorFeedback({
-        type: 'success',
-        message: editId
-          ? 'Changes saved.'
-          : 'Project created successfully.',
-      });
+      setSuccessMsg(result.auditWarning || (editId
+        ? 'Changes saved successfully.'
+        : 'Project created successfully.'));
+
+      setIsSaving(false);
 
       const destination =
         leaveAfterSaveTarget;
@@ -1237,16 +1277,13 @@ const normalizeTowerAssignments = (
         return;
       }
 
+      setTimeout(() => {
+        setSuccessMsg('');
+      }, 2000);
+
     } catch (error: any) {
-      setEditorFeedback({
-        type: 'error',
-        message:
-          error?.message
-            ? `Could not save changes: ${error.message}`
-            : 'Could not save changes. Please try again.',
-      });
+      alert(`Action Failed: ${error.message}`);
       setLeaveAfterSaveTarget(null);
-    } finally {
       setIsSaving(false);
     }
   };
@@ -1290,7 +1327,6 @@ const normalizeTowerAssignments = (
       onSubmit,
       () => {
         setLeaveAfterSaveTarget(null);
-        handleProjectValidationError();
       }
     )();
   };
@@ -1401,7 +1437,7 @@ const normalizeTowerAssignments = (
         : [],
   };
 
-    const applyResetEditorChanges = () => {
+    const handleResetEditorChanges = () => {
     Object.values(previews).forEach((url) => {
       if (
         typeof url === 'string' &&
@@ -1415,31 +1451,8 @@ const normalizeTowerAssignments = (
     setPendingFiles({});
     setPendingMarkerRemovalIds([]);
     setMarkerToRemove(null);
-    setAmenityToRemove(null);
-    setLayoutToRemove(null);
-    setLayoutEditorError('');
-    setTowerError('');
-    setTowerRenameError('');
-    setTowerDeleteError('');
 
     reset();
-    setResetConfirmationOpen(false);
-    setEditorFeedback({
-      type: 'info',
-      message: 'Changes reset to the last saved version.',
-    });
-  };
-
-  const handleRequestResetEditorChanges = () => {
-    if (
-      !hasUnsavedChanges ||
-      isSaving ||
-      isSubmitting
-    ) {
-      return;
-    }
-
-    setResetConfirmationOpen(true);
   };
 
       const handleAddTower = () => {
@@ -1821,6 +1834,8 @@ const handleApplyRenameTower =
 
       setDeleteAmenityTarget('');
       setDeleteLayoutTarget('');
+      setSuccessMsg(result.auditWarning || `Tower "${deletedName}" removed.`);
+      window.setTimeout(() => setSuccessMsg(''), 3000);
 
     } catch (error: any) {
 
@@ -3068,101 +3083,6 @@ const amenityRemoveModal =
       </div>
     ) : null;
 
-  const resetConfirmationModal =
-    resetConfirmationOpen ? (
-      <div
-        className="
-          fixed inset-0 z-[290]
-          flex items-center justify-center
-          bg-brand-blue/55
-          backdrop-blur-sm
-          p-4
-        "
-        onMouseDown={() =>
-          setResetConfirmationOpen(false)
-        }
-      >
-        <div
-          className="
-            w-full max-w-md
-            overflow-hidden
-            rounded-2xl
-            bg-white
-            shadow-2xl
-          "
-          onMouseDown={(event) =>
-            event.stopPropagation()
-          }
-        >
-          <div className="border-b border-gray-100 px-6 py-5">
-            <div
-              className="
-                flex items-center gap-2
-                text-[10px]
-                font-bold uppercase
-                tracking-widest
-                text-amber-600
-              "
-            >
-              <AlertCircle size={14} />
-              Unsaved Changes
-            </div>
-
-            <h3 className="mt-2 text-xl font-semibold text-brand-blue">
-              Reset your changes?
-            </h3>
-          </div>
-
-          <div className="px-6 py-5">
-            <p className="text-sm leading-relaxed text-gray-500">
-              This will discard the changes made since your last save and restore the saved project.
-            </p>
-          </div>
-
-          <div
-            className="
-              flex justify-end gap-2
-              border-t border-gray-100
-              bg-gray-50
-              px-6 py-4
-            "
-          >
-            <button
-              type="button"
-              onClick={() =>
-                setResetConfirmationOpen(false)
-              }
-              className="
-                rounded-lg
-                px-4 py-2.5
-                text-xs font-bold
-                text-gray-500
-                hover:bg-gray-100
-              "
-            >
-              Keep Editing
-            </button>
-
-            <button
-              type="button"
-              onClick={applyResetEditorChanges}
-              className="
-                rounded-lg
-                border border-red-200
-                bg-white
-                px-4 py-2.5
-                text-xs font-bold
-                text-red-600
-                hover:bg-red-50
-              "
-            >
-              Reset Changes
-            </button>
-          </div>
-        </div>
-      </div>
-    ) : null;
-
   const unsavedNavigationModal =
     pendingNavigationTarget ? (
       <div
@@ -3331,12 +3251,13 @@ if (!editId) {
         bg-[#F7F8FA]
         text-gray-900
         font-sans
+        overflow-y-auto
       "
     >
-      {/* PERSISTENT TOP ACTION BAR */}
+      {/* STICKY TOP ACTION BAR */}
       <header
         className="
-          fixed inset-x-0 top-0
+          sticky top-0
           z-50
           h-20
           bg-white/95
@@ -3430,8 +3351,7 @@ if (!editId) {
           max-w-4xl
           mx-auto
           px-6
-          pt-28 md:pt-32
-          pb-10 md:pb-14
+          py-10 md:py-14
         "
       >
         {/* PAGE INTRO */}
@@ -3527,8 +3447,7 @@ if (!editId) {
           id="new-project-form"
           onSubmit={
             handleBasicSubmit(
-              onCreateBasicProject,
-              handleBasicValidationError
+              onCreateBasicProject
             )
           }
           className="
@@ -4107,106 +4026,48 @@ if (editId) {
       {amenityRemoveModal}
       {layoutRemoveModal}
       {markerRemoveModal}
-      {resetConfirmationModal}
       {unsavedNavigationModal}
 
-      {/* NON-BLOCKING EDITOR FEEDBACK */}
-      {editorFeedback && (
+      {/* SUCCESS TOAST */}
+      {successMsg && (
         <div
-          role={
-            editorFeedback.type === 'error'
-              ? 'alert'
-              : 'status'
-          }
-          aria-live="polite"
-          className={`
+          className="
             fixed
             top-24
-            left-4 right-4
-            sm:left-auto sm:right-6
-            sm:max-w-md
+            right-6
             z-[100]
             flex
-            items-start
-            gap-2.5
+            items-center
+            gap-2
             rounded-xl
             border
+            border-green-200
             bg-white
             px-4 py-3
             shadow-xl
-            ${
-              editorFeedback.type === 'error'
-                ? 'border-red-200'
-                : editorFeedback.type === 'success'
-                ? 'border-emerald-200'
-                : 'border-blue-200'
-            }
-          `}
+          "
         >
-          {editorFeedback.type === 'error' ? (
-            <AlertCircle
-              size={17}
-              className="mt-0.5 shrink-0 text-red-500"
-            />
-          ) : (
-            <CheckCircle2
-              size={17}
-              className={`
-                mt-0.5 shrink-0
-                ${
-                  editorFeedback.type === 'success'
-                    ? 'text-emerald-500'
-                    : 'text-brand-blue'
-                }
-              `}
-            />
-          )}
+          <CheckCircle2
+            size={17}
+            className="text-green-500"
+          />
 
           <span
-            className={`
+            className="
               text-xs
               font-bold
-              leading-relaxed
-              ${
-                editorFeedback.type === 'error'
-                  ? 'text-red-700'
-                  : 'text-brand-blue'
-              }
-            `}
+              text-brand-blue
+            "
           >
-            {editorFeedback.message}
+            {successMsg}
           </span>
         </div>
       )}
 
 
       {/* EDITOR TOP BAR */}
-      <header
-        className="
-          sticky top-0
-          h-20
-          shrink-0
-          bg-white
-          border-b
-          border-gray-200
-          flex
-          items-center
-          justify-between
-          gap-6
-          px-6
-          z-40
-        "
-      >
-
-        {/* LEFT */}
-        <div
-          className="
-            flex
-            items-center
-            gap-4
-            min-w-0
-          "
-        >
+      <header className="sticky top-0 z-40 flex h-[68px] shrink-0 items-center justify-between gap-6 border-b border-gray-200 bg-white px-6 shadow-sm">
+        <div className="flex min-w-0 items-center gap-4">
           <button
             type="button"
             onClick={() =>
@@ -4214,237 +4075,91 @@ if (editId) {
                 '/admin/dashboard?section=Projects'
               )
             }
-            className="
-              p-2
-              rounded-lg
-              text-gray-400
-              hover:text-brand-blue
-              hover:bg-gray-100
-              transition-colors
-              shrink-0
-            "
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 transition-colors hover:border-brand-blue hover:text-brand-blue"
+            aria-label="Back to Projects"
             title="Back to Projects"
           >
             <ArrowLeft size={18} />
           </button>
 
-          <div
-            className="
-              min-w-0
-            "
-          >
-            <div
-              className="
-                flex
-                items-center
-                gap-2
-                text-[10px]
-                font-bold
-                uppercase
-                tracking-widest
-                text-gray-400
-                mb-1
-              "
-            >
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-brand-gold">
               <span>Projects</span>
-              <span>/</span>
-              <span
-                className="
-                  text-brand-blue
-                  truncate
-                "
-              >
-                {formData.title ||
-                  'Project'}
+              <span className="text-gray-300">/</span>
+              <span className="truncate text-gray-400">
+                {formData.title || 'Project'}
               </span>
             </div>
 
-            <h1
-              className="
-                text-lg
-                font-bold
-                text-brand-blue
-                truncate
-              "
-            >
-              Edit Project
-            </h1>
+            <div className="mt-0.5 flex items-center gap-3">
+              <h1 className="truncate text-2xl font-serif text-brand-blue">
+                Edit Project
+              </h1>
+
+              {hasUnsavedChanges && (
+                <span className="hidden rounded-full bg-amber-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-amber-700 sm:inline-flex">
+                  Unsaved Changes
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
-
-        {/* RIGHT */}
-        <div
-          className="
-            flex
-            items-center
-            gap-3
-            shrink-0
-          "
-        >
-
-          {/* DESKTOP PREVIEW */}
-          <span
-            className="
-              hidden xl:inline-flex
-              items-center
-              rounded-full
-              bg-gray-100
-              px-3 py-1.5
-              text-[10px]
-              font-bold
-              uppercase
-              tracking-wider
-              text-gray-500
-            "
-          >
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="hidden xl:inline-flex items-center rounded-full bg-gray-100 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
             Desktop Preview
           </span>
 
-          {/* PAGE SETTINGS */}
           <button
             type="button"
             onClick={() =>
               setSelectedEditorRegion('page-settings')
             }
-            className={`
-              px-3 py-2.5
-              rounded-lg
-              border
-              text-xs
-              font-bold
-              transition-colors
-
-              ${
-                selectedEditorRegion === 'page-settings'
-                  ? 'border-brand-blue bg-brand-blue/5 text-brand-blue'
-                  : 'border-gray-200 text-gray-500 hover:text-brand-blue'
-              }
-            `}
+            className={`rounded-xl border px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest transition-colors ${
+              selectedEditorRegion === 'page-settings'
+                ? 'border-brand-blue bg-brand-blue/5 text-brand-blue'
+                : 'border-gray-200 bg-white text-gray-500 hover:border-brand-blue hover:text-brand-blue'
+            }`}
           >
             Page Settings
           </button>
 
-          {/* DIVIDER */}
-          <div className="hidden lg:block h-6 w-px bg-gray-200 mx-1" />
+          <div className="mx-1 hidden h-6 w-px bg-gray-200 lg:block" />
 
-          {/* SAVE STATUS */}
-          {(isSaving || isSubmitting) ? (
-            <span
-              className="
-                hidden lg:inline-flex
-                items-center gap-1.5
-                text-xs font-medium
-                text-brand-blue
-                whitespace-nowrap
-              "
-            >
-              <Loader2
-                size={13}
-                className="animate-spin"
-              />
-              Saving...
-            </span>
-          ) : editorFeedback?.type === 'success' &&
-            !hasUnsavedChanges ? (
-            <span
-              className="
-                hidden lg:inline-flex
-                items-center gap-1.5
-                text-xs font-medium
-                text-emerald-600
-                whitespace-nowrap
-              "
-            >
-              <CheckCircle2 size={13} />
-              Saved
-            </span>
-          ) : hasUnsavedChanges ? (
-            <span
-              className="
-                hidden lg:inline-flex
-                items-center
-                gap-1.5
-                text-xs
-                font-medium
-                text-amber-600
-                whitespace-nowrap
-              "
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-              Unsaved changes
-            </span>
-          ) : null}
-          
-          {/* RESET */}
           <button
             type="button"
-            onClick={handleRequestResetEditorChanges}
-            title="Restore the last saved version"
+            onClick={handleResetEditorChanges}
             disabled={
               !hasUnsavedChanges ||
               isSaving ||
               isSubmitting
             }
-            className="
-              px-3 py-2.5
-              rounded-lg
-              text-xs
-              font-bold
-              text-gray-500
-              hover:bg-gray-100
-              disabled:opacity-30
-              disabled:cursor-not-allowed
-              transition-colors
-            "
+            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 transition-colors hover:border-brand-blue hover:text-brand-blue disabled:cursor-not-allowed disabled:opacity-40"
           >
+            <RotateCcw size={14} />
             Reset
           </button>
 
-          {/* SAVE */}
           <button
             type="button"
-            onClick={handleSubmit(
-              onSubmit,
-              handleProjectValidationError
-            )}
+            onClick={handleSubmit(onSubmit)}
             disabled={
               !hasUnsavedChanges ||
               isSaving ||
               isSubmitting
             }
-            className="
-              min-w-[130px]
-              inline-flex
-              items-center
-              justify-center
-              gap-2
-              rounded-lg
-              bg-brand-blue
-              px-4 py-2.5
-              text-xs
-              font-bold
-              text-white
-              hover:bg-brand-blue/90
-              disabled:opacity-40
-              disabled:cursor-not-allowed
-              transition-colors
-            "
+            className="inline-flex min-w-[150px] items-center justify-center gap-2 rounded-xl bg-brand-blue px-5 py-2.5 text-[10px] font-bold uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-brand-gold disabled:cursor-not-allowed disabled:opacity-40"
           >
             {(isSaving || isSubmitting) ? (
-              <Loader2
-                size={15}
-                className="animate-spin"
-              />
+              <Loader2 size={14} className="animate-spin" />
             ) : (
-              <Save size={15} />
+              <Save size={14} />
             )}
 
             {(isSaving || isSubmitting)
               ? 'Saving...'
               : 'Save Changes'}
           </button>
-
         </div>
       </header>
 
@@ -4604,7 +4319,7 @@ if (editId) {
 
 
           {/* INSPECTOR CONTENT */}
-          <div
+          <div data-audit-inspector
             className="
               flex-1
               overflow-y-auto
@@ -7339,6 +7054,7 @@ if (editId) {
 
                 {/* PROJECT TOWERS */}
                 <div
+                  data-audit-tower-order
                   className="
                     rounded-xl
                     border
@@ -7431,6 +7147,7 @@ if (editId) {
                     (tower, index) => (
                       <div
                         key={tower.fieldKey}
+                        data-audit-tower-id={tower.id ?? undefined}
                         className="
                           flex
                           items-center
