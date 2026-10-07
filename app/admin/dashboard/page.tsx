@@ -1409,8 +1409,8 @@ function PromotionsManager({ checkPerm }: ManagerProps) {
                         }
                       }}
                       className={`group grid grid-cols-1 items-center gap-4 px-6 py-4 transition-colors md:grid-cols-12 ${canEdit
-                          ? 'cursor-pointer hover:bg-gray-50/80 focus:bg-gray-50/80 focus:outline-none'
-                          : ''
+                        ? 'cursor-pointer hover:bg-gray-50/80 focus:bg-gray-50/80 focus:outline-none'
+                        : ''
                         }`}
                     >
                       <div className="flex min-w-0 items-center gap-4 md:col-span-4">
@@ -1463,8 +1463,8 @@ function PromotionsManager({ checkPerm }: ManagerProps) {
                             );
                           }}
                           className={`inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider transition-all ${canEdit
-                              ? 'cursor-pointer'
-                              : 'cursor-not-allowed opacity-60'
+                            ? 'cursor-pointer'
+                            : 'cursor-not-allowed opacity-60'
                             }`}
                           title={
                             promo.is_active
@@ -1483,8 +1483,8 @@ function PromotionsManager({ checkPerm }: ManagerProps) {
                           >
                             <span
                               className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${promo.is_active
-                                  ? 'translate-x-5'
-                                  : 'translate-x-0.5'
+                                ? 'translate-x-5'
+                                : 'translate-x-0.5'
                                 }`}
                             />
                           </span>
@@ -1803,8 +1803,8 @@ function PartnerBanksManager({ checkPerm }: ManagerProps) {
                         }
                       }}
                       className={`group grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-4 items-center transition-colors ${canEdit
-                          ? 'cursor-pointer hover:bg-gray-50/80 focus:outline-none focus:bg-gray-50/80'
-                          : ''
+                        ? 'cursor-pointer hover:bg-gray-50/80 focus:outline-none focus:bg-gray-50/80'
+                        : ''
                         }`}
                     >
                       <div className="md:col-span-4 flex items-center gap-4 min-w-0">
@@ -2858,8 +2858,8 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                 <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-gray-500">Navigation Logo</label>
                 <div
                   className={`relative flex min-h-52 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed text-center transition-all duration-200 ${isDragging
-                      ? 'border-brand-gold bg-brand-gold/5'
-                      : 'border-gray-200 hover:border-brand-blue/40 hover:bg-gray-50'
+                    ? 'border-brand-gold bg-brand-gold/5'
+                    : 'border-gray-200 hover:border-brand-blue/40 hover:bg-gray-50'
                     }`}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -2962,8 +2962,8 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                         }}
                         disabled={!projectIsVisible}
                         className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${projectIsVisible
-                            ? 'cursor-pointer'
-                            : 'cursor-not-allowed'
+                          ? 'cursor-pointer'
+                          : 'cursor-not-allowed'
                           } ${effectiveVisible
                             ? 'bg-green-500 hover:bg-green-600'
                             : 'bg-gray-300 hover:bg-gray-400'
@@ -3157,10 +3157,10 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                     handleDropOnItem(item.id);
                   }}
                   className={`group grid grid-cols-[auto_1fr] gap-3 rounded-2xl border px-3 py-3 transition-all sm:grid-cols-[auto_80px_1fr_auto] sm:items-center sm:gap-4 sm:px-4 ${isBeingDragged
-                      ? 'border-brand-gold bg-brand-gold/5 opacity-60'
-                      : canEdit
-                        ? 'cursor-pointer border-gray-100 bg-[#fbfbfc] hover:border-brand-blue/20 hover:bg-white hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-gold/20'
-                        : 'border-gray-100 bg-[#fbfbfc]'
+                    ? 'border-brand-gold bg-brand-gold/5 opacity-60'
+                    : canEdit
+                      ? 'cursor-pointer border-gray-100 bg-[#fbfbfc] hover:border-brand-blue/20 hover:bg-white hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-gold/20'
+                      : 'border-gray-100 bg-[#fbfbfc]'
                     }`}
                 >
                   <div className="row-span-2 flex items-center gap-2 sm:row-span-1">
@@ -3200,8 +3200,8 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                       </h3>
                       {!effectiveVisible && (
                         <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${!projectIsVisible && item.is_active
-                            ? 'bg-brand-gold/10 text-brand-gold'
-                            : 'bg-gray-200 text-gray-500'
+                          ? 'bg-brand-gold/10 text-brand-gold'
+                          : 'bg-gray-200 text-gray-500'
                           }`}>
                           {!projectIsVisible && item.is_active
                             ? 'Hidden with project'
@@ -3220,10 +3220,10 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                   <div className="col-start-2 flex items-center justify-between gap-3 sm:col-start-auto sm:justify-end">
                     <div className="flex items-center gap-2">
                       <span className={`hidden text-[10px] font-bold uppercase tracking-wider md:inline ${effectiveVisible
-                          ? 'text-green-600'
-                          : !projectIsVisible && item.is_active
-                            ? 'text-brand-gold'
-                            : 'text-gray-400'
+                        ? 'text-green-600'
+                        : !projectIsVisible && item.is_active
+                          ? 'text-brand-gold'
+                          : 'text-gray-400'
                         }`}>
                         {effectiveVisible
                           ? 'Visible'
@@ -3244,8 +3244,8 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                         }}
                         disabled={!canEdit || !projectIsVisible}
                         className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${canEdit && projectIsVisible
-                            ? 'cursor-pointer'
-                            : 'cursor-not-allowed'
+                          ? 'cursor-pointer'
+                          : 'cursor-not-allowed'
                           } ${effectiveVisible
                             ? 'bg-green-500 hover:bg-green-600'
                             : 'bg-gray-300 hover:bg-gray-400'
@@ -5118,8 +5118,8 @@ function AdminMainDashboardContent() {
                                                       }
                                                     }}
                                                     className={`group grid grid-cols-12 items-center gap-4 px-6 py-4 transition-colors ${canEditNews
-                                                        ? 'cursor-pointer hover:bg-gray-50/80 focus:bg-gray-50/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-gold/60'
-                                                        : ''
+                                                      ? 'cursor-pointer hover:bg-gray-50/80 focus:bg-gray-50/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-gold/60'
+                                                      : ''
                                                       }`}
                                                   >
                                                     <div className="col-span-4 flex min-w-0 items-center gap-4">
@@ -5172,8 +5172,8 @@ function AdminMainDashboardContent() {
                                                           );
                                                         }}
                                                         className={`inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider ${canEditNews
-                                                            ? 'cursor-pointer'
-                                                            : 'cursor-not-allowed opacity-60'
+                                                          ? 'cursor-pointer'
+                                                          : 'cursor-not-allowed opacity-60'
                                                           }`}
                                                         title={
                                                           isVisible

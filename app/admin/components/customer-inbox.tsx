@@ -231,7 +231,6 @@ export function NotificationCenter() {
                           <span className={`block truncate text-xs text-brand-blue ${item.is_read ? 'font-medium' : 'font-bold'}`}>{item.title}</span>
                           <span className="mt-1 block truncate text-xs text-gray-600">{item.name}</span>
                           <span className="mt-1 block text-[10px] text-gray-400">{customerInboxTypeLabels[item.type]} · {formatCustomerInboxDate(item.created_at)}</span>
-                          {!item.can_mark_read && <span className="mt-1 block text-[10px] text-gray-500">Read status unavailable</span>}
                         </span>
                       </button>
                       <ReadButton item={item} compact />
@@ -260,14 +259,13 @@ export function CustomerInboxManager() {
   const searchId = useId();
   const typeId = useId();
   const readId = useId();
-  const hasLoans = items.some(item => !item.can_mark_read);
   const openButton = (item: CustomerInboxItem) => (
     <button type="button" onClick={() => openItem(item)} aria-label={`Open ${customerInboxTypeLabels[item.type]} from ${item.name}`}
       className={`rounded-lg bg-brand-blue px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-brand-blue/80 ${focusStyle}`}>Open</button>
   );
   return (
-    <section className="mx-auto w-full max-w-6xl animate-in fade-in duration-300" aria-labelledby="customer-inbox-title">
-      <div className="mb-7 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+    <section className="mx-auto flex w-full max-w-6xl flex-col animate-in fade-in duration-300" style={{ minHeight: 0 }} aria-labelledby="customer-inbox-title">
+      <div className="mb-7 shrink-0 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-2xl">
           <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-brand-gold">Customer · Communications</p>
           <h2 id="customer-inbox-title" className="mt-2 font-serif text-4xl leading-none text-brand-blue">Customer Inbox</h2>
@@ -278,7 +276,7 @@ export function CustomerInboxManager() {
           <span className="rounded-full border border-brand-gold/30 bg-brand-gold/10 px-3 py-2 text-brand-blue">{unreadCount} Unread</span>
         </div>
       </div>
-      <div className="mb-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="mb-5 shrink-0 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
           <div className="min-w-0 flex-1 sm:min-w-52">
             <label htmlFor={searchId} className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-gray-500">Search messages</label>
@@ -308,27 +306,28 @@ export function CustomerInboxManager() {
           </button>
         </div>
       </div>
-      <div className="mb-4 space-y-3">
+      <div className="mb-4 shrink-0 space-y-3">
         {error && <InboxError message={error} onRetry={() => void refresh()} />}
         {readError && <InboxError message={readError} />}
-        {hasLoans && <p className="text-xs leading-relaxed text-gray-500">Read status is unavailable for loan applications. Opening one leaves it unread.</p>}
         {liveUnavailable && <p role="status" className="text-xs text-gray-500">Live updates are unavailable. Use Refresh to check for new messages.</p>}
       </div>
-      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm" aria-busy={isLoading}>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm" aria-busy={isLoading}>
         {isLoading && items.length === 0 ? (
           <div role="status" className="flex items-center justify-center gap-3 p-12 text-sm text-brand-blue"><Loader2 size={22} className="animate-spin" /> Loading customer messages...</div>
         ) : filtered.length === 0 ? (
-          <div role="status" className="px-6 py-16 text-center">
-            <Mail size={32} className="mx-auto mb-4 text-brand-blue/30" />
-            <h3 className="font-serif text-xl text-brand-blue">{error && items.length === 0 ? 'Customer messages unavailable' : items.length === 0 ? 'No customer messages yet' : 'No matching messages'}</h3>
-            {items.length > 0 && <p className="mt-2 text-sm text-gray-500">Try another search or change your filters.</p>}
+          <div role="status" className="flex flex-1 items-center justify-center px-6 py-16 text-center">
+            <div>
+              <Mail size={32} className="mx-auto mb-4 text-brand-blue/30" />
+              <h3 className="font-serif text-xl text-brand-blue">{error && items.length === 0 ? 'Customer messages unavailable' : items.length === 0 ? 'No customer messages yet' : 'No matching messages'}</h3>
+              {items.length > 0 && <p className="mt-2 text-sm text-gray-500">Try another search or change your filters.</p>}
+            </div>
           </div>
         ) : (
-          <>
+          <div className="overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
             <table className="hidden w-full table-fixed text-left lg:table">
               <caption className="sr-only">Customer messages, newest first</caption>
               <colgroup><col className="w-[23%]" /><col className="w-[15%]" /><col className="w-[23%]" /><col className="w-[17%]" /><col className="w-[14%]" /><col className="w-[8%]" /></colgroup>
-              <thead className="border-b border-gray-100 bg-gray-50/70 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              <thead className="sticky top-0 border-b border-gray-100 bg-gray-50/70 text-[10px] font-bold uppercase tracking-widest text-gray-400">
                 <tr>{['Sender', 'Type', 'Subject / Context', 'Received', 'Status', 'Action'].map(label => <th key={label} scope="col" className="px-4 py-4">{label}</th>)}</tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -353,10 +352,10 @@ export function CustomerInboxManager() {
                 </li>
               ))}
             </ul>
-          </>
+          </div>
         )}
       </div>
-      <p role="status" className="mt-3 text-xs text-gray-400">Showing {filtered.length} of {items.length} records · Newest first · Times in Manila</p>
+      <p role="status" className="mt-3 shrink-0 text-xs text-gray-400">Showing {filtered.length} of {items.length} records · Newest first · Times in Manila</p>
     </section>
   );
 }
@@ -397,22 +396,38 @@ function CustomerMessageDialog({ item, onClose }: { item: CustomerInboxItem; onC
             <button type="button" onClick={onClose} aria-label="Close message details" className={`rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 ${focusStyle}`}><X size={20} /></button>
           </div>
         </div>
-        <div className="space-y-5 p-4 sm:p-8">
-          <h2 id={titleId} className="break-words font-serif text-2xl text-brand-blue">{item.title}</h2>
+        <div className="space-y-6 p-4 sm:p-8">
+          <div>
+            <h2 id={titleId} className="break-words font-serif text-2xl leading-tight text-brand-blue">{item.title}</h2>
+          </div>
           {readError && <InboxError message={readError} />}
-          <dl className="grid gap-5 rounded-2xl bg-gray-50 p-5 sm:grid-cols-2">
-            {detail('Client Name', item.name)}{detail('Email', item.client_email)}{detail('Phone', item.client_phone)}{detail('Date Received (Manila)', formatCustomerInboxDate(item.created_at))}
-          </dl>
+          <div className="space-y-4">
+            <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Sender Details</h3>
+            <dl className="grid gap-5 rounded-xl bg-gray-50/60 p-5 sm:grid-cols-2">
+              {detail('Name', item.name)}{detail('Email', item.client_email)}{detail('Phone', item.client_phone)}{detail('Received (Manila)', formatCustomerInboxDate(item.created_at))}
+            </dl>
+          </div>
           {item.type === 'customer_support' ? (
-            <div className="space-y-3"><dl>{detail('Type of Inquiry', item.title)}</dl><p className="whitespace-pre-wrap break-words rounded-xl border border-gray-100 p-5 text-sm leading-relaxed text-gray-800">{item.message || 'No message provided.'}</p></div>
+            <div className="space-y-4">
+              <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Inquiry Details</h3>
+              <dl className="space-y-4"><div>{detail('Category', item.title)}</div></dl>
+              <div className="space-y-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Message</p>
+                <p className="whitespace-pre-wrap break-words rounded-lg border border-gray-200 bg-gray-50/60 p-4 text-sm leading-relaxed text-gray-700">{item.message || 'No message provided.'}</p>
+              </div>
+            </div>
           ) : item.type === 'inquiry' ? (
-            <div className="space-y-3"><dl>{detail('Project', item.project_name)}</dl><p className="rounded-xl border border-gray-100 p-5 text-sm leading-relaxed text-gray-800">This customer requested more information about <strong>{item.project_name}</strong>. Contact them using the details above.</p></div>
+            <div className="space-y-4">
+              <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Inquiry Details</h3>
+              <dl className="space-y-4"><div>{detail('Project', item.project_name)}</div></dl>
+              <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-4 text-sm leading-relaxed text-gray-700">This customer requested more information about <strong>{item.project_name}</strong>.</div>
+            </div>
           ) : (
             <div className="space-y-4">
-              <dl className="grid gap-5 rounded-xl border border-gray-100 p-5 sm:grid-cols-2">
-                {detail('Project', item.project_name)}{detail('Preferred Bank', item.bank_name)}{detail('Tower', item.tower)}{detail('Unit', item.unit_no)}{detail('Floor', item.floor_no)}{detail('Co-buyer', item.co_buyer_name)}{detail('Terms Agreement', item.is_agreed === null ? 'Not provided' : item.is_agreed ? 'Agreed' : 'Not agreed')}
+              <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Application Details</h3>
+              <dl className="grid gap-5 rounded-lg border border-gray-200 bg-gray-50/60 p-5 sm:grid-cols-2">
+                {detail('Project', item.project_name)}{detail('Bank', item.bank_name)}{detail('Tower', item.tower)}{detail('Unit', item.unit_no)}{detail('Floor', item.floor_no)}{detail('Co-buyer', item.co_buyer_name)}{detail('Terms', item.is_agreed === null ? 'Not provided' : item.is_agreed ? 'Agreed' : 'Not agreed')}
               </dl>
-              <p className="text-xs text-gray-500">Read status is unavailable for loan applications. Opening this record leaves it unread.</p>
             </div>
           )}
         </div>

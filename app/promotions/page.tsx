@@ -85,7 +85,7 @@ export default async function PromotionsPage() {
     .map((project) => project.image)
     .filter((image): image is string => Boolean(image));
 
-  return <PromotionsClient 
-  initialPromotions={formattedPromotions} 
-  projectImages={projectImages} />;
+  return <PromotionsClient
+    initialPromotions={formattedPromotions}
+    projectImages={projectImages} />;
 }

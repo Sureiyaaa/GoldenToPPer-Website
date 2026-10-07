@@ -157,24 +157,24 @@ export default function PromotionsClient({ initialPromotions, projectImages = []
 
                   <div className="overflow-hidden pb-2">
                     <motion.div
-                    initial={{ backgroundPosition: '200% center' }}
-                    animate={{ backgroundPosition: '-200% center' }}
-                    transition={{ repeat: Infinity, duration: 20, ease: 'linear' }}
-                    className="hero-word text-transparent bg-clip-text bg-[linear-gradient(115deg,#142f72_0%,#142f72_38%,#D6B65E_48%,#FFF2CD_52%,#142f72_62%,#142f72_100%)] bg-[length:250%_100%]"
-                  >
-                    Golden
-                  </motion.div>
+                      initial={{ backgroundPosition: '200% center' }}
+                      animate={{ backgroundPosition: '-200% center' }}
+                      transition={{ repeat: Infinity, duration: 20, ease: 'linear' }}
+                      className="hero-word text-transparent bg-clip-text bg-[linear-gradient(115deg,#142f72_0%,#142f72_38%,#D6B65E_48%,#FFF2CD_52%,#142f72_62%,#142f72_100%)] bg-[length:250%_100%]"
+                    >
+                      Golden
+                    </motion.div>
                   </div>
 
                   <div className="overflow-hidden pb-4">
                     <motion.div
-                    initial={{ backgroundPosition: '200% center' }}
-                    animate={{ backgroundPosition: '-200% center' }}
-                    transition={{ repeat: Infinity, duration: 20, ease: 'linear' }}
-                    className="hero-word text-transparent bg-clip-text bg-[linear-gradient(115deg,#d0b370_0%,#d0b370_38%,#F4E8C9_49%,#FFF9E8_52%,#DFC996_62%,#d0b370_100%)] bg-[length:250%_100%] drop-shadow-[0_0_20px_rgba(208,179,112,0.25)]"
-                  >
-                    Opportunities
-                  </motion.div>
+                      initial={{ backgroundPosition: '200% center' }}
+                      animate={{ backgroundPosition: '-200% center' }}
+                      transition={{ repeat: Infinity, duration: 20, ease: 'linear' }}
+                      className="hero-word text-transparent bg-clip-text bg-[linear-gradient(115deg,#d0b370_0%,#d0b370_38%,#F4E8C9_49%,#FFF9E8_52%,#DFC996_62%,#d0b370_100%)] bg-[length:250%_100%] drop-shadow-[0_0_20px_rgba(208,179,112,0.25)]"
+                    >
+                      Opportunities
+                    </motion.div>
                   </div>
 
                 </h1>
@@ -230,7 +230,7 @@ export default function PromotionsClient({ initialPromotions, projectImages = []
                     className="group relative border-b border-brand-blue/10 hover:border-brand-blue/40 transition-colors duration-500"
                   >
                     <Link href={`/inquire?project=${promo.project_id}`} className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between py-12 md:py-16 px-4 gap-8 outline-none">
-                      
+
                       {/* Mobile Image */}
                       <div className="block lg:hidden relative w-full aspect-video rounded-md overflow-hidden mb-4">
                         <img src={promo.image} alt={promo.title} className="absolute inset-0 w-full h-full object-cover" />

@@ -30,12 +30,12 @@ const projectSchema = z.object({
   status: z.string().min(1, "Status is required"),
   address: z.string().min(1, "Address is required"),
   city: z.string().min(1, "City is required"),
-  country: z.string().min(1, "Country is required"), 
+  country: z.string().min(1, "Country is required"),
   sqm: z.string().min(1, "Total SQM is required"),
   unit_total: z.string().min(1, "Total Units is required"),
- 
-  image: z.string(), 
-  img_awards: z.string(), 
+
+  image: z.string(),
+  img_awards: z.string(),
   editorial_title: z.string(),
   editorial_long: z.string(),
   editorial_img: z.string(),
@@ -45,41 +45,41 @@ const projectSchema = z.object({
   amenities_title: z.string().optional(),
   amenities_title_gold: z.string().optional(),
   tags: z.array(z.object({ tag_name: z.string().min(1, "Tag cannot be empty") })),
-      towers: z.array(
-      z.object({
-        id: z
-          .union([
-            z.number(),
-            z.string()
-          ])
-          .optional()
-          .nullable(),
+  towers: z.array(
+    z.object({
+      id: z
+        .union([
+          z.number(),
+          z.string()
+        ])
+        .optional()
+        .nullable(),
 
-        name: z
-          .string()
-          .trim()
-          .min(
-            1,
-            'Tower name is required'
-          ),
+      name: z
+        .string()
+        .trim()
+        .min(
+          1,
+          'Tower name is required'
+        ),
 
-        sort_order: z
-          .union([
-            z.number(),
-            z.string()
-          ])
-          .optional()
-          .nullable(),
-      })
-    ),
+      sort_order: z
+        .union([
+          z.number(),
+          z.string()
+        ])
+        .optional()
+        .nullable(),
+    })
+  ),
   unit_layouts: z.array(z.object({
     id: z.union([z.number(), z.string()]).optional().nullable(),
-    title: z.string().min(1, "Title required"), 
+    title: z.string().min(1, "Title required"),
     tower_name: z.string().min(1, "Tower required"),
     bg_color: z.string().optional(), // Add this
-    description: z.string(), 
-    min_sqm: z.string().min(1, "Required"), 
-    max_sqm: z.string().min(1, "Required"), 
+    description: z.string(),
+    min_sqm: z.string().min(1, "Required"),
+    max_sqm: z.string().min(1, "Required"),
     thumbnail: z.string(),
     show_on_map_card: z.boolean().optional(),
     map_card_order: z.string().optional(),
@@ -100,16 +100,16 @@ const projectSchema = z.object({
   map_latitude: z.string(),
   map_longitude: z.string(),
   map_icon: z.string().optional(), // NEW: Main project map pin
-   map_subtitle: z.string().optional(),
+  map_subtitle: z.string().optional(),
   child_markers: z.array(z.object({
     id: z.union([z.number(), z.string()]).optional().nullable(),
-    interest_name: z.string().min(1, "Name required"), address: z.string(), phrase: z.string(), 
-    distance_km: z.string().min(1, "Required"), 
-    distance_drive: z.string().min(1, "Required"), 
-    distance_walk: z.string().min(1, "Required"), 
-    latitude: z.string().min(1, "Required"), 
-    longitude: z.string().min(1, "Required"), 
-   
+    interest_name: z.string().min(1, "Name required"), address: z.string(), phrase: z.string(),
+    distance_km: z.string().min(1, "Required"),
+    distance_drive: z.string().min(1, "Required"),
+    distance_walk: z.string().min(1, "Required"),
+    latitude: z.string().min(1, "Required"),
+    longitude: z.string().min(1, "Required"),
+
     thumbnail: z.string(), marker_icon: z.string(), marker_type: z.string() // marker_icon is now a string URL
   })),
 });
@@ -155,14 +155,14 @@ type BasicProjectFormData =
 
 const BLANK_IMAGE = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
 
-const ColorInputSync = ({ 
-  label, 
-  fieldName, 
-  register, 
-  watch, 
-  setValue, 
-  inputStyles, 
-  labelStyles 
+const ColorInputSync = ({
+  label,
+  fieldName,
+  register,
+  watch,
+  setValue,
+  inputStyles,
+  labelStyles
 }: any) => {
   const currentColor = watch(fieldName);
   const [textValue, setTextValue] = useState(currentColor || '#000000');
@@ -259,76 +259,76 @@ function formatTowerToLetter(raw?: string | null): string {
 function ProjectManager() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const editId = searchParams.get('edit'); 
+  const editId = searchParams.get('edit');
   const supabase = createClient();
   const [projectTours, setProjectTours] = useState<any[]>([]);
-  
-  const [isFetching, setIsFetching] = useState(!!editId); 
+
+  const [isFetching, setIsFetching] = useState(!!editId);
   const [isSaving, setIsSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [createError, setCreateError] = useState('');
 
   const [newTowerName, setNewTowerName] =
-  useState('');
+    useState('');
 
   const [towerError, setTowerError] =
     useState('');
 
-    const [
-  towerToDelete,
-  setTowerToDelete
-] = useState<{
-  index: number;
-  id: number;
-  name: string;
-} | null>(null);
-
-
-const [
-  towerUsage,
-  setTowerUsage
-] = useState<{
-  amenityCount: number;
-  layoutCount: number;
-
-  otherTowers: Array<{
+  const [
+    towerToDelete,
+    setTowerToDelete
+  ] = useState<{
+    index: number;
     id: number;
     name: string;
-    sort_order:
+  } | null>(null);
+
+
+  const [
+    towerUsage,
+    setTowerUsage
+  ] = useState<{
+    amenityCount: number;
+    layoutCount: number;
+
+    otherTowers: Array<{
+      id: number;
+      name: string;
+      sort_order:
       | number
       | null;
-  }>;
-} | null>(null);
+    }>;
+  } | null>(null);
 
 
-const [
-  deleteAmenityTarget,
-  setDeleteAmenityTarget
-] = useState('');
+  const [
+    deleteAmenityTarget,
+    setDeleteAmenityTarget
+  ] = useState('');
 
 
-const [
-  deleteLayoutTarget,
-  setDeleteLayoutTarget
-] = useState('');
+  const [
+    deleteLayoutTarget,
+    setDeleteLayoutTarget
+  ] = useState('');
 
 
-const [
-  isCheckingTowerUsage,
-  setIsCheckingTowerUsage
-] = useState(false);
+  const [
+    isCheckingTowerUsage,
+    setIsCheckingTowerUsage
+  ] = useState(false);
 
 
-const [
-  isDeletingTower,
-  setIsDeletingTower
-] = useState(false);
+  const [
+    isDeletingTower,
+    setIsDeletingTower
+  ] = useState(false);
 
 
-const [
-  towerDeleteError,
-  setTowerDeleteError
-] = useState('');
+  const [
+    towerDeleteError,
+    setTowerDeleteError
+  ] = useState('');
 
   const [
     editingTowerIndex,
@@ -348,7 +348,7 @@ const [
     towerRenameError,
     setTowerRenameError
   ] =
-    useState('');  
+    useState('');
 
   const [
     amenityToRemove,
@@ -403,24 +403,24 @@ const [
     setDragState
   ] = useState<{
     type:
-      | 'tower'
-      | 'tower-layout'
-      | 'map-card'
-      | 'projects-page';
+    | 'tower'
+    | 'tower-layout'
+    | 'map-card'
+    | 'projects-page';
     index: number;
   } | null>(null);
 
   type EditorSelection =
-  | ProjectEditorRegion
-  | 'page-settings'
-  | null;
+    | ProjectEditorRegion
+    | 'page-settings'
+    | null;
 
-const [
-  selectedEditorRegion,
-  setSelectedEditorRegion
-] = useState<EditorSelection>(
-  'project-title'
-);
+  const [
+    selectedEditorRegion,
+    setSelectedEditorRegion
+  ] = useState<EditorSelection>(
+    'project-title'
+  );
 
   const [pendingFiles, setPendingFiles] = useState<Record<string, File>>({});
   const [previews, setPreviews] = useState<Record<string, string>>({});
@@ -470,44 +470,44 @@ const [
   }, [previews]);
 
   const { register, control, watch, handleSubmit, setValue, reset, getValues, formState: {
-      errors,
-      isSubmitting,
-      isDirty
-    } } = useForm<ProjectFormData>({
+    errors,
+    isSubmitting,
+    isDirty
+  } } = useForm<ProjectFormData>({
     resolver: zodResolver(projectSchema),
     defaultValues: {
       title: "", slug: "", status: "", address: "", city: "", country: "Philippines",
-      sqm: "", unit_total: "", image: "", img_awards: "", 
+      sqm: "", unit_total: "", image: "", img_awards: "",
       editorial_title: "", editorial_long: "", editorial_img: "",
       editorial_title_color: "#132243", editorial_desc_color: "#4B5563", editorial_bg_color: "transparent",
       amenities_title: "Experience A Fresh", amenities_title_gold: "Way Of Living in this project.",
-      tags: [], towers: [], unit_layouts: [], amenities: [], map_latitude: "", map_longitude: "", map_icon: "", child_markers: [], map_subtitle: "Everything you need, strategically positioned right around your sanctuary.", 
-     
+      tags: [], towers: [], unit_layouts: [], amenities: [], map_latitude: "", map_longitude: "", map_icon: "", child_markers: [], map_subtitle: "Everything you need, strategically positioned right around your sanctuary.",
+
     }
   });
 
   const {
-  register: registerBasic,
-  handleSubmit: handleBasicSubmit,
-  formState: {
-    errors: basicErrors,
-    isSubmitting: isCreatingBasic,
-    isDirty: isBasicDirty,
-  },
-} = useForm<BasicProjectFormData>({
-  resolver: zodResolver(basicProjectSchema),
+    register: registerBasic,
+    handleSubmit: handleBasicSubmit,
+    formState: {
+      errors: basicErrors,
+      isSubmitting: isCreatingBasic,
+      isDirty: isBasicDirty,
+    },
+  } = useForm<BasicProjectFormData>({
+    resolver: zodResolver(basicProjectSchema),
 
-  defaultValues: {
-    title: '',
-    slug: '',
-    status: '',
-    address: '',
-    city: '',
-    country: 'Philippines',
-    sqm: '',
-    unit_total: '',
-  },
-});
+    defaultValues: {
+      title: '',
+      slug: '',
+      status: '',
+      address: '',
+      city: '',
+      country: 'Philippines',
+      sqm: '',
+      unit_total: '',
+    },
+  });
 
   const { fields: tagFields, append: appendTag, remove: removeTag } = useFieldArray({ control, name: "tags" });
   const {
@@ -520,16 +520,16 @@ const [
     keyName: "fieldKey"
   });
   const {
-      fields: towerFields,
-      append: appendTower,
-      remove: removeTower,
-      move: moveTower,
-      update: updateTower,
-    } = useFieldArray({
-      control,
-      name: 'towers',
-      keyName: 'fieldKey',
-    });
+    fields: towerFields,
+    append: appendTower,
+    remove: removeTower,
+    move: moveTower,
+    update: updateTower,
+  } = useFieldArray({
+    control,
+    name: 'towers',
+    keyName: 'fieldKey',
+  });
   const {
     fields: layoutFields,
     append: appendLayout,
@@ -551,7 +551,7 @@ const [
 
   useEffect(() => {
     const loadData = async () => {
-      if (!editId) return; 
+      if (!editId) return;
 
       try {
         setIsFetching(true);
@@ -571,7 +571,7 @@ const [
           map_latitude: data.parentData?.latitude ? String(data.parentData.latitude) : "",
           map_longitude: data.parentData?.longitude ? String(data.parentData.longitude) : "",
           map_icon: data.projData.map_icon || "", map_subtitle: data.extData?.map_subtitle || "Everything you need, strategically positioned right around your sanctuary.",
-          
+
           // ✅ PREVENTS "EXPECTED STRING, RECEIVED NULL" ERRORS
           image: data.projData.image || "",
           img_awards: data.projData.img_awards || "",
@@ -585,22 +585,22 @@ const [
           amenities_title: data.extData?.amenities_title || "Experience A Fresh",
           amenities_title_gold: data.extData?.amenities_title_gold || `Way Of Living in ${data.projData.title || ''}.`,
           tags: currentTags,
-                  towers: (data.towerData || []).map(
-          (tower: any) => ({
-            id: tower.id,
-            name: tower.name,
-            sort_order:
-              tower.sort_order ?? null,
-          })
-        ),
-          unit_layouts: data.layoutData.map((l: any) => ({ 
-            ...l, 
+          towers: (data.towerData || []).map(
+            (tower: any) => ({
+              id: tower.id,
+              name: tower.name,
+              sort_order:
+                tower.sort_order ?? null,
+            })
+          ),
+          unit_layouts: data.layoutData.map((l: any) => ({
+            ...l,
             tower_name:
-            typeof l.tower_name === 'string'
-              ? l.tower_name.trim()
-              : '',
+              typeof l.tower_name === 'string'
+                ? l.tower_name.trim()
+                : '',
             bg_color: l.bg_color || "#051431",
-            min_sqm: l.min_sqm ? String(l.min_sqm) : "", 
+            min_sqm: l.min_sqm ? String(l.min_sqm) : "",
             max_sqm: l.max_sqm ? String(l.max_sqm) : "",
             show_on_map_card: Boolean(l.show_on_map_card),
             map_card_order: l.map_card_order != null ? String(l.map_card_order) : "",
@@ -612,24 +612,24 @@ const [
           amenities: data.amenityData.map((a: any) => ({
             ...a,
             tower:
-        a.tower
-          ? formatTowerToLetter(
-              a.tower.trim()
-            )
-          : null
+              a.tower
+                ? formatTowerToLetter(
+                  a.tower.trim()
+                )
+                : null
           })),
-          
+
           child_markers: data.markerData.map((m: any) => ({
             ...m,
-            
+
             distance_km: m.distance_km ? String(m.distance_km) : "",
             distance_drive: m.distance_drive ? String(m.distance_drive) : "",
             distance_walk: m.distance_walk ? String(m.distance_walk) : "",
             latitude: m.latitude ? String(m.latitude) : "",
             longitude: m.longitude ? String(m.longitude) : "",
-            marker_icon: m.marker_type_table?.[0]?.icon || "", 
+            marker_icon: m.marker_type_table?.[0]?.icon || "",
             marker_type: m.marker_type_table?.[0]?.name || "general",
-            
+
           }))
         });
 
@@ -638,16 +638,16 @@ const [
         if (data.projData.img_awards) existingPreviews['img_awards'] = data.projData.img_awards;
         if (data.projData.map_icon) existingPreviews['map_icon'] = data.projData.map_icon;
         if (data.extData?.editorial_img) existingPreviews['editorial_img'] = data.extData.editorial_img;
-        
+
         data.amenityData.forEach((a: any, i: number) => { if (a.thumbnail) existingPreviews[`amenities.${i}.thumbnail`] = a.thumbnail; });
         data.layoutData.forEach((l: any, i: number) => { if (l.thumbnail) existingPreviews[`unit_layouts.${i}.thumbnail`] = l.thumbnail; });
-        data.markerData.forEach((m: any, i: number) => { 
-          if (m.thumbnail) existingPreviews[`child_markers.${i}.thumbnail`] = m.thumbnail; 
+        data.markerData.forEach((m: any, i: number) => {
+          if (m.thumbnail) existingPreviews[`child_markers.${i}.thumbnail`] = m.thumbnail;
           if (m.marker_type_table?.[0]?.icon) {
-             existingPreviews[`child_markers.${i}.marker_icon`] = m.marker_type_table[0].icon;
+            existingPreviews[`child_markers.${i}.marker_icon`] = m.marker_type_table[0].icon;
           }
         });
-        
+
         setPreviews(existingPreviews);
 
       } catch (error: any) {
@@ -735,7 +735,7 @@ const [
 
   const hasUnsavedChanges = editId
     ? isDirty ||
-      pendingMarkerRemovalIds.length > 0
+    pendingMarkerRemovalIds.length > 0
     : isBasicDirty;
 
   useEffect(() => {
@@ -772,228 +772,228 @@ const [
           Boolean(name)
       );
 
-      const validTowerNames =
-      new Set(
-        availableTowerOptions.map(
-          (tower) =>
-            tower.toLowerCase()
-        )
-      );
+  const validTowerNames =
+    new Set(
+      availableTowerOptions.map(
+        (tower) =>
+          tower.toLowerCase()
+      )
+    );
 
-      const isValidTowerAssignment = (
-      tower?: string | null
-    ) => {
-      if (!tower) return true;
+  const isValidTowerAssignment = (
+    tower?: string | null
+  ) => {
+    if (!tower) return true;
 
-      return availableTowerOptions.some(
-        (option) =>
-          option.toLowerCase() ===
-          tower.trim().toLowerCase()
-      );
-    };
-  
-  
+    return availableTowerOptions.some(
+      (option) =>
+        option.toLowerCase() ===
+        tower.trim().toLowerCase()
+    );
+  };
+
+
   const mapCardLayoutCount =
     formData.unit_layouts?.filter((layout) => layout.show_on_map_card).length || 0;
 
   const projectPageLayoutCount =
     formData.unit_layouts?.filter((layout) => layout.show_on_project_page).length || 0;
 
-const onCreateBasicProject = async (
-  data: BasicProjectFormData
-) => {
-  setCreateError('');
+  const onCreateBasicProject = async (
+    data: BasicProjectFormData
+  ) => {
+    setCreateError('');
 
-  try {
-    const result =
-      await createBasicProjectAction(data);
+    try {
+      const result =
+        await createBasicProjectAction(data);
 
-    if (
-      !result.success ||
-      !result.projectId
-    ) {
-      throw new Error(
-        result.error ||
+      if (
+        !result.success ||
+        !result.projectId
+      ) {
+        throw new Error(
+          result.error ||
+          'Failed to create project.'
+        );
+      }
+
+      // Log the creation without blocking the project
+      // if the audit log itself encounters a problem.
+      try {
+        await createAuditLogAction(
+          'CREATE',
+          'Projects',
+          data.title,
+          'Created new project. Hidden from website until enabled.',
+          { entityId: result.projectId }
+        );
+      } catch (auditError) {
+        console.warn(
+          'Project created, but audit log failed:',
+          auditError
+        );
+      }
+
+      // Continue directly into the editor.
+      router.replace(
+        `/admin/projects?edit=${result.projectId}`
+      );
+    } catch (error: any) {
+      setCreateError(
+        error?.message ||
         'Failed to create project.'
       );
     }
-
-    // Log the creation without blocking the project
-    // if the audit log itself encounters a problem.
-    try {
-      await createAuditLogAction(
-        'CREATE',
-        'Projects',
-        data.title,
-        'Created new project. Hidden from website until enabled.',
-        { entityId: result.projectId }
-      );
-    } catch (auditError) {
-      console.warn(
-        'Project created, but audit log failed:',
-        auditError
-      );
-    }
-
-    // Continue directly into the editor.
-    router.replace(
-      `/admin/projects?edit=${result.projectId}`
-    );
-  } catch (error: any) {
-    setCreateError(
-      error?.message ||
-      'Failed to create project.'
-    );
-  }
-};
-
-const normalizeTowerAssignments = (
-  data: ProjectFormData
-): ProjectFormData => {
-  const invalidAmenity =
-    (data.amenities || []).find((amenity) => {
-      const tower = amenity.tower?.trim();
-      return (
-        Boolean(tower) &&
-        !validTowerNames.has(
-          String(tower).toLowerCase()
-        )
-      );
-    });
-
-  if (invalidAmenity?.tower) {
-    throw new Error(
-      `Amenity "${invalidAmenity.title || 'Untitled amenity'}" is assigned to "${invalidAmenity.tower}", which is no longer a valid project tower. Choose a valid tower or All Towers / Shared before saving.`
-    );
-  }
-
-  const invalidLayout =
-    (data.unit_layouts || []).find((layout) => {
-      const tower = layout.tower_name?.trim();
-      return (
-        !tower ||
-        !validTowerNames.has(
-          tower.toLowerCase()
-        )
-      );
-    });
-
-  if (invalidLayout) {
-    throw new Error(
-      `Unit layout "${invalidLayout.title || 'Untitled layout'}" must be assigned to a valid project tower before saving.`
-    );
-  }
-
-  const normalizedLayouts =
-    (data.unit_layouts || []).map(
-      (layout) => ({
-        ...layout,
-        tower_name:
-          layout.tower_name.trim(),
-      })
-    );
-
-  const parseOrder = (
-    value: unknown
-  ) => {
-    const parsed = Number(value);
-
-    return Number.isFinite(parsed) &&
-      parsed > 0
-      ? parsed
-      : Number.MAX_SAFE_INTEGER;
   };
 
-  (data.towers || []).forEach(
-    (tower) => {
-      const indices =
-        normalizedLayouts
-          .map(
-            (
-              layout,
-              index
-            ) => ({
-              layout,
-              index,
-            })
-          )
-          .filter(
-            ({ layout }) =>
-              layout.tower_name
-                .trim()
-                .toLowerCase() ===
-              tower.name
-                .trim()
-                .toLowerCase()
-          )
-          .sort((a, b) => {
-            const orderDiff =
-              parseOrder(
-                a.layout.sort_order
-              ) -
-              parseOrder(
-                b.layout.sort_order
-              );
-
-            if (
-              orderDiff !== 0
-            ) {
-              return orderDiff;
-            }
-
-            return (
-              a.index - b.index
-            );
-          })
-          .map(
-            ({ index }) =>
-              index
-          );
-
-      indices.forEach(
-        (
-          layoutIndex,
-          position
-        ) => {
-          normalizedLayouts[
-            layoutIndex
-          ] = {
-            ...normalizedLayouts[
-              layoutIndex
-            ],
-            sort_order:
-              position + 1,
-          };
-        }
-      );
-    }
-  );
-
-  return {
-    ...data,
-
-    amenities:
-      (data.amenities || []).map((amenity) => {
+  const normalizeTowerAssignments = (
+    data: ProjectFormData
+  ): ProjectFormData => {
+    const invalidAmenity =
+      (data.amenities || []).find((amenity) => {
         const tower = amenity.tower?.trim();
+        return (
+          Boolean(tower) &&
+          !validTowerNames.has(
+            String(tower).toLowerCase()
+          )
+        );
+      });
 
-        return {
-          ...amenity,
-          tower: tower || null,
-        };
-      }),
+    if (invalidAmenity?.tower) {
+      throw new Error(
+        `Amenity "${invalidAmenity.title || 'Untitled amenity'}" is assigned to "${invalidAmenity.tower}", which is no longer a valid project tower. Choose a valid tower or All Towers / Shared before saving.`
+      );
+    }
 
-    unit_layouts:
-      normalizedLayouts,
+    const invalidLayout =
+      (data.unit_layouts || []).find((layout) => {
+        const tower = layout.tower_name?.trim();
+        return (
+          !tower ||
+          !validTowerNames.has(
+            tower.toLowerCase()
+          )
+        );
+      });
+
+    if (invalidLayout) {
+      throw new Error(
+        `Unit layout "${invalidLayout.title || 'Untitled layout'}" must be assigned to a valid project tower before saving.`
+      );
+    }
+
+    const normalizedLayouts =
+      (data.unit_layouts || []).map(
+        (layout) => ({
+          ...layout,
+          tower_name:
+            layout.tower_name.trim(),
+        })
+      );
+
+    const parseOrder = (
+      value: unknown
+    ) => {
+      const parsed = Number(value);
+
+      return Number.isFinite(parsed) &&
+        parsed > 0
+        ? parsed
+        : Number.MAX_SAFE_INTEGER;
+    };
+
+    (data.towers || []).forEach(
+      (tower) => {
+        const indices =
+          normalizedLayouts
+            .map(
+              (
+                layout,
+                index
+              ) => ({
+                layout,
+                index,
+              })
+            )
+            .filter(
+              ({ layout }) =>
+                layout.tower_name
+                  .trim()
+                  .toLowerCase() ===
+                tower.name
+                  .trim()
+                  .toLowerCase()
+            )
+            .sort((a, b) => {
+              const orderDiff =
+                parseOrder(
+                  a.layout.sort_order
+                ) -
+                parseOrder(
+                  b.layout.sort_order
+                );
+
+              if (
+                orderDiff !== 0
+              ) {
+                return orderDiff;
+              }
+
+              return (
+                a.index - b.index
+              );
+            })
+            .map(
+              ({ index }) =>
+                index
+            );
+
+        indices.forEach(
+          (
+            layoutIndex,
+            position
+          ) => {
+            normalizedLayouts[
+              layoutIndex
+            ] = {
+              ...normalizedLayouts[
+              layoutIndex
+              ],
+              sort_order:
+                position + 1,
+            };
+          }
+        );
+      }
+    );
+
+    return {
+      ...data,
+
+      amenities:
+        (data.amenities || []).map((amenity) => {
+          const tower = amenity.tower?.trim();
+
+          return {
+            ...amenity,
+            tower: tower || null,
+          };
+        }),
+
+      unit_layouts:
+        normalizedLayouts,
+    };
   };
-};
 
   const onSubmit = async (data: ProjectFormData) => {
     setIsSaving(true);
     try {
       let finalData =
-      normalizeTowerAssignments(
-        data
-      );
+        normalizeTowerAssignments(
+          data
+        );
 
       const pendingMarkerIdSet =
         new Set(
@@ -1008,8 +1008,8 @@ const normalizeTowerAssignments = (
             .map((marker, index) => {
               const parsedId =
                 marker.id !== undefined &&
-                marker.id !== null &&
-                marker.id !== ''
+                  marker.id !== null &&
+                  marker.id !== ''
                   ? Number(marker.id)
                   : null;
 
@@ -1041,11 +1041,11 @@ const normalizeTowerAssignments = (
         const fileExt = file.name.split('.').pop();
         const uniqueFileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
         const filePath = `projects/${uniqueFileName}`;
-        
+
         const { error: uploadError } = await supabase.storage.from('images').upload(filePath, file);
         if (uploadError) throw uploadError;
         const { data: publicUrlData } = supabase.storage.from('images').getPublicUrl(filePath);
-        
+
         const keys = path.split('.');
         let current: any = finalData;
         for (let i = 0; i < keys.length - 1; i++) { current = current[keys[i]]; }
@@ -1072,8 +1072,8 @@ const normalizeTowerAssignments = (
             (marker) => {
               const parsedId =
                 marker.id !== undefined &&
-                marker.id !== null &&
-                marker.id !== ''
+                  marker.id !== null &&
+                  marker.id !== ''
                   ? Number(marker.id)
                   : null;
 
@@ -1089,9 +1089,9 @@ const normalizeTowerAssignments = (
 
       // 2. PREPARE THE CLEAN DATA
       const cleanProjectData = {
-        title: finalData.title, slug: finalData.slug, status: finalData.status, 
+        title: finalData.title, slug: finalData.slug, status: finalData.status,
         address: finalData.address, city: finalData.city, country: finalData.country || "Philippines",
-        sqm: finalData.sqm || null, unit_total: finalData.unit_total || null, 
+        sqm: finalData.sqm || null, unit_total: finalData.unit_total || null,
         image: finalData.image, img_awards: finalData.img_awards || null,
         map_icon: finalData.map_icon || null
       };
@@ -1150,7 +1150,7 @@ const normalizeTowerAssignments = (
                 layout.title || '',
               tower_name:
                 typeof layout.tower_name ===
-                'string'
+                  'string'
                   ? layout.tower_name.trim()
                   : '',
               bg_color:
@@ -1161,14 +1161,14 @@ const normalizeTowerAssignments = (
               min_sqm:
                 layout.min_sqm != null
                   ? String(
-                      layout.min_sqm
-                    )
+                    layout.min_sqm
+                  )
                   : '',
               max_sqm:
                 layout.max_sqm != null
                   ? String(
-                      layout.max_sqm
-                    )
+                    layout.max_sqm
+                  )
                   : '',
               thumbnail:
                 layout.thumbnail || '',
@@ -1179,8 +1179,8 @@ const normalizeTowerAssignments = (
               map_card_order:
                 layout.map_card_order != null
                   ? String(
-                      layout.map_card_order
-                    )
+                    layout.map_card_order
+                  )
                   : '',
               show_on_project_page:
                 Boolean(
@@ -1189,8 +1189,8 @@ const normalizeTowerAssignments = (
               project_page_order:
                 layout.project_page_order != null
                   ? String(
-                      layout.project_page_order
-                    )
+                    layout.project_page_order
+                  )
                   : '',
               sort_order:
                 layout.sort_order ??
@@ -1213,32 +1213,32 @@ const normalizeTowerAssignments = (
               distance_km:
                 marker.distance_km != null
                   ? String(
-                      marker.distance_km
-                    )
+                    marker.distance_km
+                  )
                   : '',
               distance_drive:
                 marker.distance_drive != null
                   ? String(
-                      marker.distance_drive
-                    )
+                    marker.distance_drive
+                  )
                   : '',
               distance_walk:
                 marker.distance_walk != null
                   ? String(
-                      marker.distance_walk
-                    )
+                    marker.distance_walk
+                  )
                   : '',
               latitude:
                 marker.latitude != null
                   ? String(
-                      marker.latitude
-                    )
+                    marker.latitude
+                  )
                   : '',
               longitude:
                 marker.longitude != null
                   ? String(
-                      marker.longitude
-                    )
+                    marker.longitude
+                  )
                   : '',
               thumbnail:
                 marker.thumbnail || '',
@@ -1336,8 +1336,8 @@ const normalizeTowerAssignments = (
     city: formData.city || 'City',
     country: formData.country || 'Country',
     virtual_tours: projectTours,
-    sqm: formData.sqm || '0-0 SQM', 
-    unit_total: formData.unit_total || '0 Units', 
+    sqm: formData.sqm || '0-0 SQM',
+    unit_total: formData.unit_total || '0 Units',
     image: previews['image'] || formData.image || BLANK_IMAGE,
     img_awards: previews['img_awards'] || formData.img_awards || '',
     project_tag: formData.tags?.map((t) => ({ tags: { tag_name: t.tag_name } })) || [],
@@ -1362,24 +1362,24 @@ const normalizeTowerAssignments = (
       thumbnail: previews[`amenities.${i}.thumbnail`] || a.thumbnail || BLANK_IMAGE
     })) : [],
     unit_layout: formData.unit_layouts?.length > 0 ? formData.unit_layouts.map((l, i) => ({
-    id: l.id ?? i + 1,
-    editorIndex: i,
-    title: l.title || `Layout ${i + 1}`, 
-    tower_name:
-    typeof l.tower_name === 'string'
-      ? l.tower_name.trim()
-      : '',
-    bg_color: l.bg_color || "#051431",
-    description: l.description || 'Description...', 
-    min_sqm: l.min_sqm || '0', 
-    max_sqm: l.max_sqm || '0', 
-    thumbnail: previews[`unit_layouts.${i}.thumbnail`] || l.thumbnail || BLANK_IMAGE,
-    show_on_map_card: l.show_on_map_card || false,
-    map_card_order: l.map_card_order || "",
-    show_on_project_page: l.show_on_project_page || false,
-    project_page_order: l.project_page_order || "",
-    sort_order: l.sort_order ?? null
-  })) : [],
+      id: l.id ?? i + 1,
+      editorIndex: i,
+      title: l.title || `Layout ${i + 1}`,
+      tower_name:
+        typeof l.tower_name === 'string'
+          ? l.tower_name.trim()
+          : '',
+      bg_color: l.bg_color || "#051431",
+      description: l.description || 'Description...',
+      min_sqm: l.min_sqm || '0',
+      max_sqm: l.max_sqm || '0',
+      thumbnail: previews[`unit_layouts.${i}.thumbnail`] || l.thumbnail || BLANK_IMAGE,
+      show_on_map_card: l.show_on_map_card || false,
+      map_card_order: l.map_card_order || "",
+      show_on_project_page: l.show_on_project_page || false,
+      project_page_order: l.project_page_order || "",
+      sort_order: l.sort_order ?? null
+    })) : [],
     map_subtitle:
       formData.map_subtitle ||
       'Everything you need, strategically positioned right around your sanctuary.',
@@ -1394,50 +1394,50 @@ const normalizeTowerAssignments = (
     child_markers:
       formData.child_markers?.length > 0
         ? formData.child_markers.map(
-            (marker, index) => ({
-              id:
-                marker.id ??
-                index + 1,
-              editorIndex:
-                index,
-              interest_name:
-                marker.interest_name ||
-                `Landmark ${index + 1}`,
-              address:
-                marker.address || '',
-              phrase:
-                marker.phrase || '',
-              distance_km:
-                marker.distance_km || '',
-              distance_drive:
-                marker.distance_drive || '',
-              distance_walk:
-                marker.distance_walk || '',
-              latitude:
-                marker.latitude || '',
-              longitude:
-                marker.longitude || '',
-              thumbnail:
-                previews[
-                  `child_markers.${index}.thumbnail`
-                ] ||
-                marker.thumbnail ||
-                '',
-              marker_icon:
-                previews[
-                  `child_markers.${index}.marker_icon`
-                ] ||
-                marker.marker_icon ||
-                '',
-              marker_type:
-                marker.marker_type ||
-                'general',
-            })
-          )
+          (marker, index) => ({
+            id:
+              marker.id ??
+              index + 1,
+            editorIndex:
+              index,
+            interest_name:
+              marker.interest_name ||
+              `Landmark ${index + 1}`,
+            address:
+              marker.address || '',
+            phrase:
+              marker.phrase || '',
+            distance_km:
+              marker.distance_km || '',
+            distance_drive:
+              marker.distance_drive || '',
+            distance_walk:
+              marker.distance_walk || '',
+            latitude:
+              marker.latitude || '',
+            longitude:
+              marker.longitude || '',
+            thumbnail:
+              previews[
+              `child_markers.${index}.thumbnail`
+              ] ||
+              marker.thumbnail ||
+              '',
+            marker_icon:
+              previews[
+              `child_markers.${index}.marker_icon`
+              ] ||
+              marker.marker_icon ||
+              '',
+            marker_type:
+              marker.marker_type ||
+              'general',
+          })
+        )
         : [],
   };
 
-    const handleResetEditorChanges = () => {
+  const handleResetEditorChanges = () => {
     Object.values(previews).forEach((url) => {
       if (
         typeof url === 'string' &&
@@ -1455,400 +1455,400 @@ const normalizeTowerAssignments = (
     reset();
   };
 
-      const handleAddTower = () => {
-      const name = newTowerName.trim();
-
-      if (!name) {
-        setTowerError(
-          'Enter a tower name first.'
-        );
-        return;
-      }
-
-      
-      const alreadyExists =
-        (formData.towers || []).some(
-          (tower) =>
-            tower.name
-              .trim()
-              .toLowerCase() ===
-            name.toLowerCase()
-        );
-
-      if (alreadyExists) {
-        setTowerError(
-          'That tower already exists in this project.'
-        );
-        return;
-      }
-
-      appendTower({
-        id: null,
-        name,
-        sort_order:
-          towerFields.length + 1,
-      });
-
-      setNewTowerName('');
-      setTowerError('');
-    };
-
-    const handleStartRenameTower = (
-  index: number
-) => {
-  const currentTower =
-    formData.towers?.[index];
-
-  if (!currentTower) return;
-
-  setEditingTowerIndex(index);
-
-  setEditingTowerName(
-    currentTower.name
-  );
-
-  setTowerRenameError('');
-};
-
-const handleCancelRenameTower =
-  () => {
-    setEditingTowerIndex(null);
-    setEditingTowerName('');
-    setTowerRenameError('');
-  };
-
-
-const handleApplyRenameTower =
-  () => {
-    if (editingTowerIndex === null) {
-      return;
-    }
-
-    const name = editingTowerName.trim();
-    const currentTower =
-      formData.towers?.[editingTowerIndex];
-    const oldName = currentTower?.name?.trim();
+  const handleAddTower = () => {
+    const name = newTowerName.trim();
 
     if (!name) {
-      setTowerRenameError(
-        'Tower name cannot be empty.'
+      setTowerError(
+        'Enter a tower name first.'
       );
       return;
     }
 
-    const duplicate =
+
+    const alreadyExists =
       (formData.towers || []).some(
-        (tower, index) =>
-          index !== editingTowerIndex &&
-          tower.name.trim().toLowerCase() ===
-            name.toLowerCase()
+        (tower) =>
+          tower.name
+            .trim()
+            .toLowerCase() ===
+          name.toLowerCase()
       );
 
-    if (duplicate) {
-      setTowerRenameError(
+    if (alreadyExists) {
+      setTowerError(
         'That tower already exists in this project.'
       );
       return;
     }
 
-    setValue(
-      `towers.${editingTowerIndex}.name`,
+    appendTower({
+      id: null,
       name,
-      {
-        shouldDirty: true,
-        shouldValidate: true,
-      }
+      sort_order:
+        towerFields.length + 1,
+    });
+
+    setNewTowerName('');
+    setTowerError('');
+  };
+
+  const handleStartRenameTower = (
+    index: number
+  ) => {
+    const currentTower =
+      formData.towers?.[index];
+
+    if (!currentTower) return;
+
+    setEditingTowerIndex(index);
+
+    setEditingTowerName(
+      currentTower.name
     );
 
-    // Keep local Amenity and Unit Layout assignments in sync
-    // with the tower rename before the project is saved.
-    if (
-      oldName &&
-      oldName.toLowerCase() !== name.toLowerCase()
-    ) {
-      (formData.amenities || []).forEach(
-        (amenity, index) => {
-          if (
-            amenity.tower?.trim().toLowerCase() ===
-            oldName.toLowerCase()
-          ) {
-            setValue(
-              `amenities.${index}.tower`,
-              name,
-              {
-                shouldDirty: true,
-                shouldValidate: true,
-              }
-            );
-          }
-        }
-      );
-
-      (formData.unit_layouts || []).forEach(
-        (layout, index) => {
-          if (
-            layout.tower_name?.trim().toLowerCase() ===
-            oldName.toLowerCase()
-          ) {
-            setValue(
-              `unit_layouts.${index}.tower_name`,
-              name,
-              {
-                shouldDirty: true,
-                shouldValidate: true,
-              }
-            );
-          }
-        }
-      );
-    }
-
-    setEditingTowerIndex(null);
-    setEditingTowerName('');
     setTowerRenameError('');
   };
 
-    const handleConfirmDeleteTower =
-  async () => {
-
-    if (
-      !towerToDelete ||
-      !towerUsage ||
-      !editId
-    ) {
-      return;
-    }
+  const handleCancelRenameTower =
+    () => {
+      setEditingTowerIndex(null);
+      setEditingTowerName('');
+      setTowerRenameError('');
+    };
 
 
-    if (
-      towerUsage.layoutCount > 0 &&
-      !deleteLayoutTarget
-    ) {
-      setTowerDeleteError(
-        'Choose where the unit layouts should move before deleting this tower.'
-      );
+  const handleApplyRenameTower =
+    () => {
+      if (editingTowerIndex === null) {
+        return;
+      }
 
-      return;
-    }
+      const name = editingTowerName.trim();
+      const currentTower =
+        formData.towers?.[editingTowerIndex];
+      const oldName = currentTower?.name?.trim();
 
+      if (!name) {
+        setTowerRenameError(
+          'Tower name cannot be empty.'
+        );
+        return;
+      }
 
-    const amenityTarget =
-      towerUsage.amenityCount > 0
-        ? deleteAmenityTarget ===
-          '__shared__'
-          ? null
-          : deleteAmenityTarget ||
-            null
-        : null;
-
-
-    const layoutTarget =
-      towerUsage.layoutCount > 0
-        ? deleteLayoutTarget
-        : null;
-
-
-    setIsDeletingTower(true);
-    setTowerDeleteError('');
-
-
-    try {
-      const result =
-        await deleteProjectTowerAction({
-          projectId:
-            Number(editId),
-
-          towerId:
-            towerToDelete.id,
-
-          amenityTarget,
-
-          layoutTarget,
-        });
-
-
-      /*
-       * Update the local editor state
-       * so a future Project Save cannot
-       * accidentally restore the old
-       * tower assignment.
-       */
-
-      const current =
-        getValues();
-
-
-      const deletedName =
-        towerToDelete.name;
-
-
-      const nextAmenities =
-        current.amenities.map(
-          (amenity) => {
-
-            const matches =
-              amenity.tower
-                ?.trim() ===
-              deletedName.trim();
-
-            if (!matches) {
-              return amenity;
-            }
-
-            return {
-              ...amenity,
-
-              tower:
-                amenityTarget,
-            };
-          }
+      const duplicate =
+        (formData.towers || []).some(
+          (tower, index) =>
+            index !== editingTowerIndex &&
+            tower.name.trim().toLowerCase() ===
+            name.toLowerCase()
         );
 
-
-      const nextLayouts =
-        current.unit_layouts.map(
-          (layout) => {
-
-            const matches =
-              layout.tower_name
-                ?.trim() ===
-              deletedName.trim();
-
-            if (!matches) {
-              return layout;
-            }
-
-            return {
-              ...layout,
-
-              tower_name:
-                layoutTarget ||
-                layout.tower_name,
-            };
-          }
+      if (duplicate) {
+        setTowerRenameError(
+          'That tower already exists in this project.'
         );
+        return;
+      }
 
-
-      const nextTowers =
-        (result.towerData || [])
-          .map(
-            (tower: any) => ({
-              id: tower.id,
-
-              name:
-                tower.name,
-
-              sort_order:
-                tower.sort_order,
-            })
-          );
-
-      nextTowers.forEach(
-        (tower: any) => {
-          const matchingIndices =
-            nextLayouts
-              .map(
-                (
-                  layout,
-                  index
-                ) => ({
-                  layout,
-                  index,
-                })
-              )
-              .filter(
-                ({ layout }) =>
-                  normalizeTowerName(
-                    layout.tower_name
-                  ) ===
-                  normalizeTowerName(
-                    tower.name
-                  )
-              )
-              .sort((a, b) => {
-                const orderDiff =
-                  numericOrder(
-                    a.layout.sort_order
-                  ) -
-                  numericOrder(
-                    b.layout.sort_order
-                  );
-
-                if (
-                  orderDiff !== 0
-                ) {
-                  return orderDiff;
-                }
-
-                return (
-                  a.index -
-                  b.index
-                );
-              });
-
-          matchingIndices.forEach(
-            (
-              item,
-              position
-            ) => {
-              nextLayouts[
-                item.index
-              ] = {
-                ...nextLayouts[
-                  item.index
-                ],
-                sort_order:
-                  position + 1,
-              };
-            }
-          );
+      setValue(
+        `towers.${editingTowerIndex}.name`,
+        name,
+        {
+          shouldDirty: true,
+          shouldValidate: true,
         }
       );
 
+      // Keep local Amenity and Unit Layout assignments in sync
+      // with the tower rename before the project is saved.
+      if (
+        oldName &&
+        oldName.toLowerCase() !== name.toLowerCase()
+      ) {
+        (formData.amenities || []).forEach(
+          (amenity, index) => {
+            if (
+              amenity.tower?.trim().toLowerCase() ===
+              oldName.toLowerCase()
+            ) {
+              setValue(
+                `amenities.${index}.tower`,
+                name,
+                {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                }
+              );
+            }
+          }
+        );
 
-      /*
-       * We only allow persisted tower
-       * deletion when there are no
-       * unrelated unsaved changes,
-       * therefore reset() is safe here.
-       *
-       * It establishes the updated DB
-       * state as the new editor baseline.
-       */
-      reset({
-        ...current,
+        (formData.unit_layouts || []).forEach(
+          (layout, index) => {
+            if (
+              layout.tower_name?.trim().toLowerCase() ===
+              oldName.toLowerCase()
+            ) {
+              setValue(
+                `unit_layouts.${index}.tower_name`,
+                name,
+                {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                }
+              );
+            }
+          }
+        );
+      }
 
-        towers:
-          nextTowers,
+      setEditingTowerIndex(null);
+      setEditingTowerName('');
+      setTowerRenameError('');
+    };
 
-        amenities:
-          nextAmenities,
+  const handleConfirmDeleteTower =
+    async () => {
 
-        unit_layouts:
-          nextLayouts,
-      });
+      if (
+        !towerToDelete ||
+        !towerUsage ||
+        !editId
+      ) {
+        return;
+      }
 
 
-      setTowerToDelete(null);
-      setTowerUsage(null);
+      if (
+        towerUsage.layoutCount > 0 &&
+        !deleteLayoutTarget
+      ) {
+        setTowerDeleteError(
+          'Choose where the unit layouts should move before deleting this tower.'
+        );
 
-      setDeleteAmenityTarget('');
-      setDeleteLayoutTarget('');
-      setSuccessMsg(result.auditWarning || `Tower "${deletedName}" removed.`);
-      window.setTimeout(() => setSuccessMsg(''), 3000);
+        return;
+      }
 
-    } catch (error: any) {
 
-      setTowerDeleteError(
-        error.message ||
-        'Unable to delete tower.'
-      );
+      const amenityTarget =
+        towerUsage.amenityCount > 0
+          ? deleteAmenityTarget ===
+            '__shared__'
+            ? null
+            : deleteAmenityTarget ||
+            null
+          : null;
 
-    } finally {
 
-      setIsDeletingTower(false);
-    }
-  };
+      const layoutTarget =
+        towerUsage.layoutCount > 0
+          ? deleteLayoutTarget
+          : null;
+
+
+      setIsDeletingTower(true);
+      setTowerDeleteError('');
+
+
+      try {
+        const result =
+          await deleteProjectTowerAction({
+            projectId:
+              Number(editId),
+
+            towerId:
+              towerToDelete.id,
+
+            amenityTarget,
+
+            layoutTarget,
+          });
+
+
+        /*
+         * Update the local editor state
+         * so a future Project Save cannot
+         * accidentally restore the old
+         * tower assignment.
+         */
+
+        const current =
+          getValues();
+
+
+        const deletedName =
+          towerToDelete.name;
+
+
+        const nextAmenities =
+          current.amenities.map(
+            (amenity) => {
+
+              const matches =
+                amenity.tower
+                  ?.trim() ===
+                deletedName.trim();
+
+              if (!matches) {
+                return amenity;
+              }
+
+              return {
+                ...amenity,
+
+                tower:
+                  amenityTarget,
+              };
+            }
+          );
+
+
+        const nextLayouts =
+          current.unit_layouts.map(
+            (layout) => {
+
+              const matches =
+                layout.tower_name
+                  ?.trim() ===
+                deletedName.trim();
+
+              if (!matches) {
+                return layout;
+              }
+
+              return {
+                ...layout,
+
+                tower_name:
+                  layoutTarget ||
+                  layout.tower_name,
+              };
+            }
+          );
+
+
+        const nextTowers =
+          (result.towerData || [])
+            .map(
+              (tower: any) => ({
+                id: tower.id,
+
+                name:
+                  tower.name,
+
+                sort_order:
+                  tower.sort_order,
+              })
+            );
+
+        nextTowers.forEach(
+          (tower: any) => {
+            const matchingIndices =
+              nextLayouts
+                .map(
+                  (
+                    layout,
+                    index
+                  ) => ({
+                    layout,
+                    index,
+                  })
+                )
+                .filter(
+                  ({ layout }) =>
+                    normalizeTowerName(
+                      layout.tower_name
+                    ) ===
+                    normalizeTowerName(
+                      tower.name
+                    )
+                )
+                .sort((a, b) => {
+                  const orderDiff =
+                    numericOrder(
+                      a.layout.sort_order
+                    ) -
+                    numericOrder(
+                      b.layout.sort_order
+                    );
+
+                  if (
+                    orderDiff !== 0
+                  ) {
+                    return orderDiff;
+                  }
+
+                  return (
+                    a.index -
+                    b.index
+                  );
+                });
+
+            matchingIndices.forEach(
+              (
+                item,
+                position
+              ) => {
+                nextLayouts[
+                  item.index
+                ] = {
+                  ...nextLayouts[
+                  item.index
+                  ],
+                  sort_order:
+                    position + 1,
+                };
+              }
+            );
+          }
+        );
+
+
+        /*
+         * We only allow persisted tower
+         * deletion when there are no
+         * unrelated unsaved changes,
+         * therefore reset() is safe here.
+         *
+         * It establishes the updated DB
+         * state as the new editor baseline.
+         */
+        reset({
+          ...current,
+
+          towers:
+            nextTowers,
+
+          amenities:
+            nextAmenities,
+
+          unit_layouts:
+            nextLayouts,
+        });
+
+
+        setTowerToDelete(null);
+        setTowerUsage(null);
+
+        setDeleteAmenityTarget('');
+        setDeleteLayoutTarget('');
+        setSuccessMsg(result.auditWarning || `Tower "${deletedName}" removed.`);
+        window.setTimeout(() => setSuccessMsg(''), 3000);
+
+      } catch (error: any) {
+
+        setTowerDeleteError(
+          error.message ||
+          'Unable to delete tower.'
+        );
+
+      } finally {
+
+        setIsDeletingTower(false);
+      }
+    };
 
   const handleRequestDeleteTower =
     async (index: number) => {
@@ -1868,287 +1868,287 @@ const handleApplyRenameTower =
       }
 
 
-    /*
-     * Existing towers are already
-     * persisted database entities.
-     *
-     * Don't combine an immediate
-     * destructive action with other
-     * unsaved editor changes.
-     */
-    if (isDirty) {
-      setTowerDeleteError(
-        'Save or reset your current changes before deleting an existing tower.'
+      /*
+       * Existing towers are already
+       * persisted database entities.
+       *
+       * Don't combine an immediate
+       * destructive action with other
+       * unsaved editor changes.
+       */
+      if (isDirty) {
+        setTowerDeleteError(
+          'Save or reset your current changes before deleting an existing tower.'
+        );
+        return;
+      }
+
+
+      if (!editId) return;
+
+
+      setTowerDeleteError('');
+      setIsCheckingTowerUsage(
+        true
       );
-      return;
-    }
 
 
-    if (!editId) return;
+      try {
+        const usage =
+          await getProjectTowerUsageAction(
+            Number(editId),
+            Number(tower.id)
+          );
 
 
-    setTowerDeleteError('');
-    setIsCheckingTowerUsage(
-      true
-    );
+        setTowerToDelete({
+          index,
+          id: Number(tower.id),
+          name: tower.name,
+        });
 
 
-    try {
-      const usage =
-        await getProjectTowerUsageAction(
-          Number(editId),
-          Number(tower.id)
+        setTowerUsage({
+          amenityCount:
+            usage.amenityCount,
+
+          layoutCount:
+            usage.layoutCount,
+
+          otherTowers:
+            usage.otherTowers || [],
+        });
+
+
+        /*
+         * Amenities may safely become
+         * shared.
+         */
+        setDeleteAmenityTarget(
+          usage.amenityCount > 0
+            ? '__shared__'
+            : ''
         );
 
 
-      setTowerToDelete({
-        index,
-        id: Number(tower.id),
-        name: tower.name,
-      });
+        /*
+         * Unit layouts require an
+         * actual replacement tower.
+         */
+        setDeleteLayoutTarget(
+          ''
+        );
 
+      } catch (error: any) {
 
-      setTowerUsage({
-        amenityCount:
-          usage.amenityCount,
+        setTowerDeleteError(
+          error.message ||
+          'Unable to check tower usage.'
+        );
 
-        layoutCount:
-          usage.layoutCount,
+      } finally {
 
-        otherTowers:
-          usage.otherTowers || [],
-      });
+        setIsCheckingTowerUsage(
+          false
+        );
+      }
+    };
 
+  const handleCloseTowerDelete =
+    () => {
+      if (isDeletingTower) {
+        return;
+      }
 
-      /*
-       * Amenities may safely become
-       * shared.
-       */
-      setDeleteAmenityTarget(
-        usage.amenityCount > 0
-          ? '__shared__'
-          : ''
-      );
+      setTowerToDelete(null);
+      setTowerUsage(null);
 
+      setDeleteAmenityTarget('');
+      setDeleteLayoutTarget('');
 
-      /*
-       * Unit layouts require an
-       * actual replacement tower.
-       */
-      setDeleteLayoutTarget(
-        ''
-      );
-
-    } catch (error: any) {
-
-      setTowerDeleteError(
-        error.message ||
-        'Unable to check tower usage.'
-      );
-
-    } finally {
-
-      setIsCheckingTowerUsage(
-        false
-      );
-    }
-  };
-
-    const handleCloseTowerDelete =
-  () => {
-    if (isDeletingTower) {
-      return;
-    }
-
-    setTowerToDelete(null);
-    setTowerUsage(null);
-
-    setDeleteAmenityTarget('');
-    setDeleteLayoutTarget('');
-
-    setTowerDeleteError('');
-  };
+      setTowerDeleteError('');
+    };
 
   const selectedAmenityIndex =
-  typeof selectedEditorRegion ===
-    'string' &&
-  selectedEditorRegion.startsWith(
-    'amenity:'
-  )
-    ? Number(
+    typeof selectedEditorRegion ===
+      'string' &&
+      selectedEditorRegion.startsWith(
+        'amenity:'
+      )
+      ? Number(
         selectedEditorRegion.split(
           ':'
         )[1]
       )
-    : null;
+      : null;
 
 
-const selectedAmenity =
-  selectedAmenityIndex !== null &&
-  Number.isInteger(
-    selectedAmenityIndex
-  )
-    ? formData.amenities?.[
+  const selectedAmenity =
+    selectedAmenityIndex !== null &&
+      Number.isInteger(
         selectedAmenityIndex
+      )
+      ? formData.amenities?.[
+      selectedAmenityIndex
       ]
-    : null;
+      : null;
 
 
-const handleAddAmenity = () => {
-  const newIndex = amenityFields.length;
+  const handleAddAmenity = () => {
+    const newIndex = amenityFields.length;
 
-  appendAmenity({
-    id: null,
-    title: '',
-    description: '',
-    thumbnail: '',
-    tower: null,
-  });
+    appendAmenity({
+      id: null,
+      title: '',
+      description: '',
+      thumbnail: '',
+      tower: null,
+    });
 
-  setSelectedEditorRegion(
-    `amenity:${newIndex}`
-  );
-};
+    setSelectedEditorRegion(
+      `amenity:${newIndex}`
+    );
+  };
 
-const handleRequestRemoveAmenity = (
-  index: number
-) => {
-  const amenity =
-    formData.amenities?.[index];
+  const handleRequestRemoveAmenity = (
+    index: number
+  ) => {
+    const amenity =
+      formData.amenities?.[index];
 
-  if (!amenity) return;
+    if (!amenity) return;
 
-  setAmenityToRemove({
-    index,
-    title:
-      amenity.title?.trim() ||
-      `Amenity ${index + 1}`,
-  });
-};
+    setAmenityToRemove({
+      index,
+      title:
+        amenity.title?.trim() ||
+        `Amenity ${index + 1}`,
+    });
+  };
 
-const handleCancelRemoveAmenity = () => {
-  setAmenityToRemove(null);
-};
+  const handleCancelRemoveAmenity = () => {
+    setAmenityToRemove(null);
+  };
 
-const handleConfirmRemoveAmenity = () => {
-  if (!amenityToRemove) return;
+  const handleConfirmRemoveAmenity = () => {
+    if (!amenityToRemove) return;
 
-  removeNestedFieldFiles(
-    'amenities',
-    amenityToRemove.index
-  );
+    removeNestedFieldFiles(
+      'amenities',
+      amenityToRemove.index
+    );
 
-  removeAmenity(
-    amenityToRemove.index
-  );
+    removeAmenity(
+      amenityToRemove.index
+    );
 
-  setAmenityToRemove(null);
-  setSelectedEditorRegion(
-    'amenities'
-  );
-};
+    setAmenityToRemove(null);
+    setSelectedEditorRegion(
+      'amenities'
+    );
+  };
 
 
-const amenityRemoveModal =
-  amenityToRemove ? (
-    <div
-      className="
+  const amenityRemoveModal =
+    amenityToRemove ? (
+      <div
+        className="
         fixed inset-0 z-[260]
         flex items-center justify-center
         bg-brand-blue/55
         backdrop-blur-sm
         p-4
       "
-      onMouseDown={
-        handleCancelRemoveAmenity
-      }
-    >
-      <div
-        className="
+        onMouseDown={
+          handleCancelRemoveAmenity
+        }
+      >
+        <div
+          className="
           w-full max-w-md
           overflow-hidden
           rounded-2xl
           bg-white
           shadow-2xl
         "
-        onMouseDown={(e) =>
-          e.stopPropagation()
-        }
-      >
-        <div
-          className="
+          onMouseDown={(e) =>
+            e.stopPropagation()
+          }
+        >
+          <div
+            className="
             border-b border-gray-100
             px-6 py-5
           "
-        >
-          <p
-            className="
+          >
+            <p
+              className="
               text-[10px]
               font-bold uppercase
               tracking-widest
               text-red-500
             "
-          >
-            Remove Amenity
-          </p>
+            >
+              Remove Amenity
+            </p>
 
-          <h3
-            className="
+            <h3
+              className="
               mt-1
               text-xl
               font-semibold
               text-brand-blue
             "
-          >
-            Remove {amenityToRemove.title}?
-          </h3>
-        </div>
+            >
+              Remove {amenityToRemove.title}?
+            </h3>
+          </div>
 
-        <div className="px-6 py-5">
-          <p
-            className="
+          <div className="px-6 py-5">
+            <p
+              className="
               text-sm
               leading-relaxed
               text-gray-500
             "
-          >
-            This amenity will be removed from
-            the project when you save your
-            changes. You can still use Reset
-            before saving to restore it.
-          </p>
-        </div>
+            >
+              This amenity will be removed from
+              the project when you save your
+              changes. You can still use Reset
+              before saving to restore it.
+            </p>
+          </div>
 
-        <div
-          className="
+          <div
+            className="
             flex justify-end gap-3
             border-t border-gray-100
             bg-gray-50
             px-6 py-4
           "
-        >
-          <button
-            type="button"
-            onClick={
-              handleCancelRemoveAmenity
-            }
-            className="
+          >
+            <button
+              type="button"
+              onClick={
+                handleCancelRemoveAmenity
+              }
+              className="
               rounded-lg
               px-4 py-2.5
               text-xs font-bold
               text-gray-500
               hover:bg-gray-100
             "
-          >
-            Cancel
-          </button>
+            >
+              Cancel
+            </button>
 
-          <button
-            type="button"
-            onClick={
-              handleConfirmRemoveAmenity
-            }
-            className="
+            <button
+              type="button"
+              onClick={
+                handleConfirmRemoveAmenity
+              }
+              className="
               inline-flex
               items-center
               justify-center
@@ -2160,30 +2160,30 @@ const amenityRemoveModal =
               text-white
               hover:bg-red-700
             "
-          >
-            <Trash2 size={14} />
-            Remove Amenity
-          </button>
+            >
+              <Trash2 size={14} />
+              Remove Amenity
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  ) : null;
+    ) : null;
 
 
   const selectedLayoutIndex =
     typeof selectedEditorRegion === 'string' &&
-    selectedEditorRegion.startsWith('unit-layout:')
+      selectedEditorRegion.startsWith('unit-layout:')
       ? Number(
-          selectedEditorRegion.split(':')[1]
-        )
+        selectedEditorRegion.split(':')[1]
+      )
       : null;
 
   const selectedLayout =
     selectedLayoutIndex !== null &&
-    Number.isInteger(selectedLayoutIndex)
+      Number.isInteger(selectedLayoutIndex)
       ? formData.unit_layouts?.[
-          selectedLayoutIndex
-        ]
+      selectedLayoutIndex
+      ]
       : null;
 
   const normalizeTowerName = (
@@ -2262,7 +2262,7 @@ const amenityRemoveModal =
         ({ layout }) =>
           Boolean(
             layout[
-              enabledField
+            enabledField
             ]
           )
       )
@@ -2339,7 +2339,7 @@ const amenityRemoveModal =
   ) => {
     const layout =
       formData.unit_layouts?.[
-        index
+      index
       ];
 
     if (!layout) return;
@@ -2417,12 +2417,12 @@ const amenityRemoveModal =
 
     const source =
       formData.unit_layouts?.[
-        sourceIndex
+      sourceIndex
       ];
 
     const target =
       formData.unit_layouts?.[
-        targetIndex
+      targetIndex
       ];
 
     if (
@@ -2431,9 +2431,9 @@ const amenityRemoveModal =
       normalizeTowerName(
         source.tower_name
       ) !==
-        normalizeTowerName(
-          target.tower_name
-        )
+      normalizeTowerName(
+        target.tower_name
+      )
     ) {
       setDragState(null);
       return;
@@ -2579,7 +2579,7 @@ const amenityRemoveModal =
   ) => {
     const currentLayout =
       formData.unit_layouts?.[
-        index
+      index
       ];
 
     if (!currentLayout) {
@@ -2620,7 +2620,7 @@ const amenityRemoveModal =
   ) => {
     const layout =
       formData.unit_layouts?.[
-        index
+      index
       ];
 
     if (!layout) return;
@@ -2638,7 +2638,7 @@ const amenityRemoveModal =
     const isEnabled =
       Boolean(
         layout[
-          enabledField
+        enabledField
         ]
       );
 
@@ -2800,30 +2800,30 @@ const amenityRemoveModal =
   const selectedMarkerIndex =
     typeof selectedEditorRegion ===
       'string' &&
-    selectedEditorRegion.startsWith(
-      'landmark:'
-    )
+      selectedEditorRegion.startsWith(
+        'landmark:'
+      )
       ? Number(
-          selectedEditorRegion.split(
-            ':'
-          )[1]
-        )
+        selectedEditorRegion.split(
+          ':'
+        )[1]
+      )
       : null;
 
   const selectedMarker =
     selectedMarkerIndex !== null &&
-    Number.isInteger(
-      selectedMarkerIndex
-    )
+      Number.isInteger(
+        selectedMarkerIndex
+      )
       ? formData.child_markers?.[
-          selectedMarkerIndex
-        ]
+      selectedMarkerIndex
+      ]
       : null;
 
   const selectedMarkerId =
     selectedMarker?.id !== undefined &&
-    selectedMarker?.id !== null &&
-    selectedMarker?.id !== ''
+      selectedMarker?.id !== null &&
+      selectedMarker?.id !== ''
       ? Number(selectedMarker.id)
       : null;
 
@@ -2900,7 +2900,7 @@ const amenityRemoveModal =
 
     const marker =
       formData.child_markers?.[
-        markerToRemove.index
+      markerToRemove.index
       ];
 
     if (!marker) {
@@ -2910,8 +2910,8 @@ const amenityRemoveModal =
 
     const parsedId =
       marker.id !== undefined &&
-      marker.id !== null &&
-      marker.id !== ''
+        marker.id !== null &&
+        marker.id !== ''
         ? Number(marker.id)
         : null;
 
@@ -3238,25 +3238,25 @@ const amenityRemoveModal =
   }
 
   // ==========================================
-// NEW PROJECT: BASIC SETUP ONLY
-// ==========================================
+  // NEW PROJECT: BASIC SETUP ONLY
+  // ==========================================
 
-if (!editId) {
-  return ( 
-    <>
-      {unsavedNavigationModal}
-      <div
-      className="
+  if (!editId) {
+    return (
+      <>
+        {unsavedNavigationModal}
+        <div
+          className="
         min-h-screen
         bg-[#F7F8FA]
         text-gray-900
         font-sans
         overflow-y-auto
       "
-    >
-      {/* STICKY TOP ACTION BAR */}
-      <header
-        className="
+        >
+          {/* STICKY TOP ACTION BAR */}
+          <header
+            className="
           sticky top-0
           z-50
           h-20
@@ -3269,16 +3269,16 @@ if (!editId) {
           gap-4
           px-6 md:px-10
         "
-      >
-        <div className="flex items-center gap-4 min-w-0">
-          <button
-            type="button"
-            onClick={() =>
-              requestNavigation(
-                '/admin/dashboard?section=Projects'
-              )
-            }
-            className="
+          >
+            <div className="flex items-center gap-4 min-w-0">
+              <button
+                type="button"
+                onClick={() =>
+                  requestNavigation(
+                    '/admin/dashboard?section=Projects'
+                  )
+                }
+                className="
               inline-flex items-center gap-2
               rounded-lg
               px-2.5 py-2
@@ -3290,28 +3290,28 @@ if (!editId) {
               transition-colors
               shrink-0
             "
-          >
-            <ArrowLeft size={16} />
-            <span className="hidden sm:inline">Back to Projects</span>
-          </button>
+              >
+                <ArrowLeft size={16} />
+                <span className="hidden sm:inline">Back to Projects</span>
+              </button>
 
-          <div className="hidden md:block h-6 w-px bg-gray-200" />
+              <div className="hidden md:block h-6 w-px bg-gray-200" />
 
-          <div className="min-w-0 hidden md:block">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-              Projects / New Project
-            </p>
-            <p className="text-sm font-bold text-brand-blue truncate">
-              Add New Project
-            </p>
-          </div>
-        </div>
+              <div className="min-w-0 hidden md:block">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                  Projects / New Project
+                </p>
+                <p className="text-sm font-bold text-brand-blue truncate">
+                  Add New Project
+                </p>
+              </div>
+            </div>
 
-        <button
-          type="submit"
-          form="new-project-form"
-          disabled={isCreatingBasic}
-          className="
+            <button
+              type="submit"
+              form="new-project-form"
+              disabled={isCreatingBasic}
+              className="
             inline-flex
             items-center
             justify-center
@@ -3330,34 +3330,34 @@ if (!editId) {
             disabled:cursor-not-allowed
             shrink-0
           "
-        >
-          {isCreatingBasic ? (
-            <>
-              <Loader2 size={15} className="animate-spin" />
-              Creating...
-            </>
-          ) : (
-            <>
-              <PlusCircle size={15} />
-              Create &amp; Continue
-            </>
-          )}
-        </button>
-      </header>
+            >
+              {isCreatingBasic ? (
+                <>
+                  <Loader2 size={15} className="animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <PlusCircle size={15} />
+                  Create &amp; Continue
+                </>
+              )}
+            </button>
+          </header>
 
 
-      <main
-        className="
+          <main
+            className="
           max-w-4xl
           mx-auto
           px-6
           py-10 md:py-14
         "
-      >
-        {/* PAGE INTRO */}
-        <div className="mb-8">
-          <p
-            className="
+          >
+            {/* PAGE INTRO */}
+            <div className="mb-8">
+              <p
+                className="
               text-[10px]
               font-bold
               uppercase
@@ -3365,40 +3365,40 @@ if (!editId) {
               text-brand-gold
               mb-3
             "
-          >
-            Projects / New Project
-          </p>
+              >
+                Projects / New Project
+              </p>
 
-          <h1
-            className="
+              <h1
+                className="
               text-3xl md:text-4xl
               font-serif
               text-brand-blue
               mb-3
             "
-          >
-            Create a New Project
-          </h1>
+              >
+                Create a New Project
+              </h1>
 
-          <p
-            className="
+              <p
+                className="
               text-sm
               text-gray-500
               max-w-xl
               leading-relaxed
             "
-          >
-            Enter the project basics first.
-            Website content, images, amenities,
-            layouts, and map information can be
-            added after the project is created.
-          </p>
-        </div>
+              >
+                Enter the project basics first.
+                Website content, images, amenities,
+                layouts, and map information can be
+                added after the project is created.
+              </p>
+            </div>
 
 
-        {/* SAFETY MESSAGE */}
-        <div
-          className="
+            {/* SAFETY MESSAGE */}
+            <div
+              className="
             mb-6
             flex items-start gap-3
             rounded-xl
@@ -3406,88 +3406,88 @@ if (!editId) {
             bg-blue-50/60
             px-4 py-3
           "
-        >
-          <AlertCircle
-            size={17}
-            className="
+            >
+              <AlertCircle
+                size={17}
+                className="
               text-brand-blue
               shrink-0
               mt-0.5
             "
-          />
+              />
 
-          <div>
-            <p
-              className="
+              <div>
+                <p
+                  className="
                 text-xs
                 font-bold
                 text-brand-blue
               "
-            >
-              New projects start hidden from the website
-            </p>
+                >
+                  New projects start hidden from the website
+                </p>
 
-            <p
-              className="
+                <p
+                  className="
                 text-xs
                 text-gray-500
                 mt-1
                 leading-relaxed
               "
-            >
-              You can complete the project content
-              before making it visible to website visitors.
-            </p>
-          </div>
-        </div>
+                >
+                  You can complete the project content
+                  before making it visible to website visitors.
+                </p>
+              </div>
+            </div>
 
 
-        {/* FORM */}
-        <form
-          id="new-project-form"
-          onSubmit={
-            handleBasicSubmit(
-              onCreateBasicProject
-            )
-          }
-          className="
+            {/* FORM */}
+            <form
+              id="new-project-form"
+              onSubmit={
+                handleBasicSubmit(
+                  onCreateBasicProject
+                )
+              }
+              className="
             bg-white
             border border-gray-200
             rounded-2xl
             shadow-sm
             overflow-hidden
           "
-        >
+            >
 
-          {/* PROJECT IDENTITY */}
-          <section className="p-6 md:p-8">
-            <div className="mb-6">
-              <h2
-                className="
+              {/* PROJECT IDENTITY */}
+              <section className="p-6 md:p-8">
+                <div className="mb-6">
+                  <h2
+                    className="
                   text-lg
                   font-bold
                   text-brand-blue
                 "
-              >
-                Project Information
-              </h2>
+                  >
+                    Project Information
+                  </h2>
 
-              <p
-                className="
+                  <p
+                    className="
                   text-xs
                   text-gray-400
                   mt-1
                 "
-              >
-                Basic information used to identify the project.
-              </p>
-            </div>
+                  >
+                    Basic information used to identify the project.
+                  </p>
+                </div>
 
 
-            {/* TITLE */}
-            <div className="mb-5">
-              <label
-                className="
+                {/* TITLE */}
+                <div className="mb-5">
+                  <label
+                    className="
                   block
                   text-[10px]
                   font-bold
@@ -3496,15 +3496,15 @@ if (!editId) {
                   text-gray-500
                   mb-2
                 "
-              >
-                Project Title
-              </label>
+                  >
+                    Project Title
+                  </label>
 
-              <input
-                {...registerBasic('title')}
-                placeholder="e.g. City Clou"
-                autoFocus
-                className="
+                  <input
+                    {...registerBasic('title')}
+                    placeholder="e.g. City Clou"
+                    autoFocus
+                    className="
                   w-full
                   rounded-xl
                   border border-gray-200
@@ -3518,27 +3518,27 @@ if (!editId) {
                   focus:ring-2
                   focus:ring-brand-gold/10
                 "
-              />
+                  />
 
-              {basicErrors.title && (
-                <p className="text-red-500 text-xs mt-1.5">
-                  {basicErrors.title.message}
-                </p>
-              )}
-            </div>
+                  {basicErrors.title && (
+                    <p className="text-red-500 text-xs mt-1.5">
+                      {basicErrors.title.message}
+                    </p>
+                  )}
+                </div>
 
 
-            <div
-              className="
+                <div
+                  className="
                 grid
                 grid-cols-1 md:grid-cols-2
                 gap-5
               "
-            >
-              {/* SLUG */}
-              <div>
-                <label
-                  className="
+                >
+                  {/* SLUG */}
+                  <div>
+                    <label
+                      className="
                     block
                     text-[10px]
                     font-bold
@@ -3547,14 +3547,14 @@ if (!editId) {
                     text-gray-500
                     mb-2
                   "
-                >
-                  URL Slug
-                </label>
+                    >
+                      URL Slug
+                    </label>
 
-                <input
-                  {...registerBasic('slug')}
-                  placeholder="/cityclou"
-                  className="
+                    <input
+                      {...registerBasic('slug')}
+                      placeholder="/cityclou"
+                      className="
                     w-full
                     rounded-xl
                     border border-gray-200
@@ -3568,24 +3568,24 @@ if (!editId) {
                     focus:ring-2
                     focus:ring-brand-gold/10
                   "
-                />
+                    />
 
-                <p className="text-[10px] text-gray-400 mt-1.5">
-                  The page address on the public website.
-                </p>
+                    <p className="text-[10px] text-gray-400 mt-1.5">
+                      The page address on the public website.
+                    </p>
 
-                {basicErrors.slug && (
-                  <p className="text-red-500 text-xs mt-1">
-                    {basicErrors.slug.message}
-                  </p>
-                )}
-              </div>
+                    {basicErrors.slug && (
+                      <p className="text-red-500 text-xs mt-1">
+                        {basicErrors.slug.message}
+                      </p>
+                    )}
+                  </div>
 
 
-              {/* STATUS */}
-              <div>
-                <label
-                  className="
+                  {/* STATUS */}
+                  <div>
+                    <label
+                      className="
                     block
                     text-[10px]
                     font-bold
@@ -3594,13 +3594,13 @@ if (!editId) {
                     text-gray-500
                     mb-2
                   "
-                >
-                  Project Status
-                </label>
+                    >
+                      Project Status
+                    </label>
 
-                <select
-                  {...registerBasic('status')}
-                  className="
+                    <select
+                      {...registerBasic('status')}
+                      className="
                     w-full
                     rounded-xl
                     border border-gray-200
@@ -3615,62 +3615,62 @@ if (!editId) {
                     focus:ring-2
                     focus:ring-brand-gold/10
                   "
-                >
-                  <option value="">
-                    Select project status
-                  </option>
+                    >
+                      <option value="">
+                        Select project status
+                      </option>
 
-                  <option value="Pre-Selling">
-                    Pre-Selling
-                  </option>
+                      <option value="Pre-Selling">
+                        Pre-Selling
+                      </option>
 
-                  <option value="Ready for Occupancy">
-                    Ready for Occupancy
-                  </option>
-                </select>
+                      <option value="Ready for Occupancy">
+                        Ready for Occupancy
+                      </option>
+                    </select>
 
-                {basicErrors.status && (
-                  <p className="text-red-500 text-xs mt-1.5">
-                    {basicErrors.status.message}
-                  </p>
-                )}
-              </div>
-            </div>
-          </section>
-
-
-          <div className="border-t border-gray-100" />
+                    {basicErrors.status && (
+                      <p className="text-red-500 text-xs mt-1.5">
+                        {basicErrors.status.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </section>
 
 
-          {/* LOCATION */}
-          <section className="p-6 md:p-8">
-            <div className="mb-6">
-              <h2
-                className="
+              <div className="border-t border-gray-100" />
+
+
+              {/* LOCATION */}
+              <section className="p-6 md:p-8">
+                <div className="mb-6">
+                  <h2
+                    className="
                   text-lg
                   font-bold
                   text-brand-blue
                 "
-              >
-                Location & Scale
-              </h2>
+                  >
+                    Location & Scale
+                  </h2>
 
-              <p
-                className="
+                  <p
+                    className="
                   text-xs
                   text-gray-400
                   mt-1
                 "
-              >
-                Basic property location and project size.
-              </p>
-            </div>
+                  >
+                    Basic property location and project size.
+                  </p>
+                </div>
 
 
-            {/* ADDRESS */}
-            <div className="mb-5">
-              <label
-                className="
+                {/* ADDRESS */}
+                <div className="mb-5">
+                  <label
+                    className="
                   block
                   text-[10px]
                   font-bold
@@ -3679,14 +3679,14 @@ if (!editId) {
                   text-gray-500
                   mb-2
                 "
-              >
-                Street Address
-              </label>
+                  >
+                    Street Address
+                  </label>
 
-              <input
-                {...registerBasic('address')}
-                placeholder="Enter street address"
-                className="
+                  <input
+                    {...registerBasic('address')}
+                    placeholder="Enter street address"
+                    className="
                   w-full
                   rounded-xl
                   border border-gray-200
@@ -3700,27 +3700,27 @@ if (!editId) {
                   focus:ring-2
                   focus:ring-brand-gold/10
                 "
-              />
+                  />
 
-              {basicErrors.address && (
-                <p className="text-red-500 text-xs mt-1.5">
-                  {basicErrors.address.message}
-                </p>
-              )}
-            </div>
+                  {basicErrors.address && (
+                    <p className="text-red-500 text-xs mt-1.5">
+                      {basicErrors.address.message}
+                    </p>
+                  )}
+                </div>
 
 
-            <div
-              className="
+                <div
+                  className="
                 grid
                 grid-cols-1 md:grid-cols-2
                 gap-5 mb-5
               "
-            >
-              {/* CITY */}
-              <div>
-                <label
-                  className="
+                >
+                  {/* CITY */}
+                  <div>
+                    <label
+                      className="
                     block
                     text-[10px]
                     font-bold
@@ -3729,14 +3729,14 @@ if (!editId) {
                     text-gray-500
                     mb-2
                   "
-                >
-                  City
-                </label>
+                    >
+                      City
+                    </label>
 
-                <input
-                  {...registerBasic('city')}
-                  placeholder="e.g. Cebu City"
-                  className="
+                    <input
+                      {...registerBasic('city')}
+                      placeholder="e.g. Cebu City"
+                      className="
                     w-full
                     rounded-xl
                     border border-gray-200
@@ -3750,20 +3750,20 @@ if (!editId) {
                     focus:ring-2
                     focus:ring-brand-gold/10
                   "
-                />
+                    />
 
-                {basicErrors.city && (
-                  <p className="text-red-500 text-xs mt-1.5">
-                    {basicErrors.city.message}
-                  </p>
-                )}
-              </div>
+                    {basicErrors.city && (
+                      <p className="text-red-500 text-xs mt-1.5">
+                        {basicErrors.city.message}
+                      </p>
+                    )}
+                  </div>
 
 
-              {/* COUNTRY */}
-              <div>
-                <label
-                  className="
+                  {/* COUNTRY */}
+                  <div>
+                    <label
+                      className="
                     block
                     text-[10px]
                     font-bold
@@ -3772,13 +3772,13 @@ if (!editId) {
                     text-gray-500
                     mb-2
                   "
-                >
-                  Country
-                </label>
+                    >
+                      Country
+                    </label>
 
-                <input
-                  {...registerBasic('country')}
-                  className="
+                    <input
+                      {...registerBasic('country')}
+                      className="
                     w-full
                     rounded-xl
                     border border-gray-200
@@ -3792,28 +3792,28 @@ if (!editId) {
                     focus:ring-2
                     focus:ring-brand-gold/10
                   "
-                />
+                    />
 
-                {basicErrors.country && (
-                  <p className="text-red-500 text-xs mt-1.5">
-                    {basicErrors.country.message}
-                  </p>
-                )}
-              </div>
-            </div>
+                    {basicErrors.country && (
+                      <p className="text-red-500 text-xs mt-1.5">
+                        {basicErrors.country.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
 
 
-            <div
-              className="
+                <div
+                  className="
                 grid
                 grid-cols-1 md:grid-cols-2
                 gap-5
               "
-            >
-              {/* SQM */}
-              <div>
-                <label
-                  className="
+                >
+                  {/* SQM */}
+                  <div>
+                    <label
+                      className="
                     block
                     text-[10px]
                     font-bold
@@ -3822,15 +3822,15 @@ if (!editId) {
                     text-gray-500
                     mb-2
                   "
-                >
-                  Total SQM
-                </label>
+                    >
+                      Total SQM
+                    </label>
 
-                <input
-                  {...registerBasic('sqm')}
-                  placeholder="e.g. 5280"
-                  inputMode="decimal"
-                  className="
+                    <input
+                      {...registerBasic('sqm')}
+                      placeholder="e.g. 5280"
+                      inputMode="decimal"
+                      className="
                     w-full
                     rounded-xl
                     border border-gray-200
@@ -3844,20 +3844,20 @@ if (!editId) {
                     focus:ring-2
                     focus:ring-brand-gold/10
                   "
-                />
+                    />
 
-                {basicErrors.sqm && (
-                  <p className="text-red-500 text-xs mt-1.5">
-                    {basicErrors.sqm.message}
-                  </p>
-                )}
-              </div>
+                    {basicErrors.sqm && (
+                      <p className="text-red-500 text-xs mt-1.5">
+                        {basicErrors.sqm.message}
+                      </p>
+                    )}
+                  </div>
 
 
-              {/* UNITS */}
-              <div>
-                <label
-                  className="
+                  {/* UNITS */}
+                  <div>
+                    <label
+                      className="
                     block
                     text-[10px]
                     font-bold
@@ -3866,15 +3866,15 @@ if (!editId) {
                     text-gray-500
                     mb-2
                   "
-                >
-                  Total Units
-                </label>
+                    >
+                      Total Units
+                    </label>
 
-                <input
-                  {...registerBasic('unit_total')}
-                  placeholder="e.g. 1622"
-                  inputMode="numeric"
-                  className="
+                    <input
+                      {...registerBasic('unit_total')}
+                      placeholder="e.g. 1622"
+                      inputMode="numeric"
+                      className="
                     w-full
                     rounded-xl
                     border border-gray-200
@@ -3888,23 +3888,23 @@ if (!editId) {
                     focus:ring-2
                     focus:ring-brand-gold/10
                   "
-                />
+                    />
 
-                {basicErrors.unit_total && (
-                  <p className="text-red-500 text-xs mt-1.5">
-                    {basicErrors.unit_total.message}
-                  </p>
-                )}
-              </div>
-            </div>
-          </section>
+                    {basicErrors.unit_total && (
+                      <p className="text-red-500 text-xs mt-1.5">
+                        {basicErrors.unit_total.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </section>
 
 
-          {/* SERVER ERROR */}
-          {createError && (
-            <div className="px-6 md:px-8 pb-5">
-              <div
-                className="
+              {/* SERVER ERROR */}
+              {createError && (
+                <div className="px-6 md:px-8 pb-5">
+                  <div
+                    className="
                   flex items-start gap-3
                   rounded-xl
                   border border-red-200
@@ -3913,21 +3913,21 @@ if (!editId) {
                   text-sm
                   text-red-600
                 "
-              >
-                <AlertCircle
-                  size={17}
-                  className="shrink-0 mt-0.5"
-                />
+                  >
+                    <AlertCircle
+                      size={17}
+                      className="shrink-0 mt-0.5"
+                    />
 
-                {createError}
-              </div>
-            </div>
-          )}
+                    {createError}
+                  </div>
+                </div>
+              )}
 
 
-          {/* ACTIONS */}
-          <footer
-            className="
+              {/* ACTIONS */}
+              <footer
+                className="
               flex
               flex-col-reverse sm:flex-row
               sm:items-center
@@ -3938,15 +3938,15 @@ if (!editId) {
               bg-gray-50/70
               border-t border-gray-100
             "
-          >
-            <button
-              type="button"
-              onClick={() =>
-                requestNavigation(
-                  '/admin/dashboard?section=Projects'
-                )
-              }
-              className="
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    requestNavigation(
+                      '/admin/dashboard?section=Projects'
+                    )
+                  }
+                  className="
                 px-4 py-2.5
                 text-xs
                 font-bold
@@ -3954,14 +3954,14 @@ if (!editId) {
                 hover:text-brand-blue
                 transition-colors
               "
-            >
-              Cancel
-            </button>
+                >
+                  Cancel
+                </button>
 
-            <button
-              type="submit"
-              disabled={isCreatingBasic}
-              className="
+                <button
+                  type="submit"
+                  disabled={isCreatingBasic}
+                  className="
                 inline-flex
                 items-center
                 justify-center
@@ -3981,39 +3981,39 @@ if (!editId) {
                 disabled:opacity-60
                 disabled:cursor-not-allowed
               "
-            >
-              {isCreatingBasic ? (
-                <>
-                  <Loader2
-                    size={16}
-                    className="animate-spin"
-                  />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <PlusCircle size={16} />
-                  Create Project & Continue
-                </>
-              )}
-            </button>
-          </footer>
+                >
+                  {isCreatingBasic ? (
+                    <>
+                      <Loader2
+                        size={16}
+                        className="animate-spin"
+                      />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <PlusCircle size={16} />
+                      Create Project & Continue
+                    </>
+                  )}
+                </button>
+              </footer>
 
-        </form>
-      </main>
-    </div>
-    </>
-  );
-}
+            </form>
+          </main>
+        </div>
+      </>
+    );
+  }
 
-// ==========================================
-// PROJECT VISUAL EDITOR
-// ==========================================
+  // ==========================================
+  // PROJECT VISUAL EDITOR
+  // ==========================================
 
-if (editId) {
-  return (
-    <div
-      className="
+  if (editId) {
+    return (
+      <div
+        className="
         h-screen
         w-full
         flex
@@ -4022,16 +4022,16 @@ if (editId) {
         bg-[#0B1220]
         font-sans
       "
-    >
-      {amenityRemoveModal}
-      {layoutRemoveModal}
-      {markerRemoveModal}
-      {unsavedNavigationModal}
+      >
+        {amenityRemoveModal}
+        {layoutRemoveModal}
+        {markerRemoveModal}
+        {unsavedNavigationModal}
 
-      {/* SUCCESS TOAST */}
-      {successMsg && (
-        <div
-          className="
+        {/* SUCCESS TOAST */}
+        {successMsg && (
+          <div
+            className="
             fixed
             top-24
             right-6
@@ -4046,138 +4046,137 @@ if (editId) {
             px-4 py-3
             shadow-xl
           "
-        >
-          <CheckCircle2
-            size={17}
-            className="text-green-500"
-          />
+          >
+            <CheckCircle2
+              size={17}
+              className="text-green-500"
+            />
 
-          <span
-            className="
+            <span
+              className="
               text-xs
               font-bold
               text-brand-blue
             "
-          >
-            {successMsg}
-          </span>
-        </div>
-      )}
+            >
+              {successMsg}
+            </span>
+          </div>
+        )}
 
 
-      {/* EDITOR TOP BAR */}
-      <header className="sticky top-0 z-40 flex h-[68px] shrink-0 items-center justify-between gap-6 border-b border-gray-200 bg-white px-6 shadow-sm">
-        <div className="flex min-w-0 items-center gap-4">
-          <button
-            type="button"
-            onClick={() =>
-              requestNavigation(
-                '/admin/dashboard?section=Projects'
-              )
-            }
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 transition-colors hover:border-brand-blue hover:text-brand-blue"
-            aria-label="Back to Projects"
-            title="Back to Projects"
-          >
-            <ArrowLeft size={18} />
-          </button>
+        {/* EDITOR TOP BAR */}
+        <header className="sticky top-0 z-40 flex h-[68px] shrink-0 items-center justify-between gap-6 border-b border-gray-200 bg-white px-6 shadow-sm">
+          <div className="flex min-w-0 items-center gap-4">
+            <button
+              type="button"
+              onClick={() =>
+                requestNavigation(
+                  '/admin/dashboard?section=Projects'
+                )
+              }
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 transition-colors hover:border-brand-blue hover:text-brand-blue"
+              aria-label="Back to Projects"
+              title="Back to Projects"
+            >
+              <ArrowLeft size={18} />
+            </button>
 
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-brand-gold">
-              <span>Projects</span>
-              <span className="text-gray-300">/</span>
-              <span className="truncate text-gray-400">
-                {formData.title || 'Project'}
-              </span>
-            </div>
-
-            <div className="mt-0.5 flex items-center gap-3">
-              <h1 className="truncate text-2xl font-serif text-brand-blue">
-                Edit Project
-              </h1>
-
-              {hasUnsavedChanges && (
-                <span className="hidden rounded-full bg-amber-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-amber-700 sm:inline-flex">
-                  Unsaved Changes
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-brand-gold">
+                <span>Projects</span>
+                <span className="text-gray-300">/</span>
+                <span className="truncate text-gray-400">
+                  {formData.title || 'Project'}
                 </span>
-              )}
+              </div>
+
+              <div className="mt-0.5 flex items-center gap-3">
+                <h1 className="truncate text-2xl font-serif text-brand-blue">
+                  Edit Project
+                </h1>
+
+                {hasUnsavedChanges && (
+                  <span className="hidden rounded-full bg-amber-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-amber-700 sm:inline-flex">
+                    Unsaved Changes
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="hidden xl:inline-flex items-center rounded-full bg-gray-100 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
-            Desktop Preview
-          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="hidden xl:inline-flex items-center rounded-full bg-gray-100 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+              Desktop Preview
+            </span>
 
-          <button
-            type="button"
-            onClick={() =>
-              setSelectedEditorRegion('page-settings')
-            }
-            className={`rounded-xl border px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest transition-colors ${
-              selectedEditorRegion === 'page-settings'
+            <button
+              type="button"
+              onClick={() =>
+                setSelectedEditorRegion('page-settings')
+              }
+              className={`rounded-xl border px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest transition-colors ${selectedEditorRegion === 'page-settings'
                 ? 'border-brand-blue bg-brand-blue/5 text-brand-blue'
                 : 'border-gray-200 bg-white text-gray-500 hover:border-brand-blue hover:text-brand-blue'
-            }`}
-          >
-            Page Settings
-          </button>
+                }`}
+            >
+              Page Settings
+            </button>
 
-          <div className="mx-1 hidden h-6 w-px bg-gray-200 lg:block" />
+            <div className="mx-1 hidden h-6 w-px bg-gray-200 lg:block" />
 
-          <button
-            type="button"
-            onClick={handleResetEditorChanges}
-            disabled={
-              !hasUnsavedChanges ||
-              isSaving ||
-              isSubmitting
-            }
-            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 transition-colors hover:border-brand-blue hover:text-brand-blue disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <RotateCcw size={14} />
-            Reset
-          </button>
+            <button
+              type="button"
+              onClick={handleResetEditorChanges}
+              disabled={
+                !hasUnsavedChanges ||
+                isSaving ||
+                isSubmitting
+              }
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 transition-colors hover:border-brand-blue hover:text-brand-blue disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <RotateCcw size={14} />
+              Reset
+            </button>
 
-          <button
-            type="button"
-            onClick={handleSubmit(onSubmit)}
-            disabled={
-              !hasUnsavedChanges ||
-              isSaving ||
-              isSubmitting
-            }
-            className="inline-flex min-w-[150px] items-center justify-center gap-2 rounded-xl bg-brand-blue px-5 py-2.5 text-[10px] font-bold uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-brand-gold disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {(isSaving || isSubmitting) ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <Save size={14} />
-            )}
+            <button
+              type="button"
+              onClick={handleSubmit(onSubmit)}
+              disabled={
+                !hasUnsavedChanges ||
+                isSaving ||
+                isSubmitting
+              }
+              className="inline-flex min-w-[150px] items-center justify-center gap-2 rounded-xl bg-brand-blue px-5 py-2.5 text-[10px] font-bold uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-brand-gold disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {(isSaving || isSubmitting) ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Save size={14} />
+              )}
 
-            {(isSaving || isSubmitting)
-              ? 'Saving...'
-              : 'Save Changes'}
-          </button>
-        </div>
-      </header>
+              {(isSaving || isSubmitting)
+                ? 'Saving...'
+                : 'Save Changes'}
+            </button>
+          </div>
+        </header>
 
 
-      {/* EDITOR BODY */}
-      <div
-        className="
+        {/* EDITOR BODY */}
+        <div
+          className="
           flex
           flex-1
           min-h-0
           overflow-hidden
         "
-      >
+        >
 
-        {/* WEBSITE CANVAS */}
-        <div
-          id="preview-scroller"
-          className="
+          {/* WEBSITE CANVAS */}
+          <div
+            id="preview-scroller"
+            className="
             flex-1
             min-w-0
             overflow-y-auto
@@ -4186,38 +4185,38 @@ if (editId) {
             bg-black
             custom-scrollbar
           "
-        >
-          <PreviewSkeleton
-            data={previewData}
-            editorMode
-            selectedRegion={
-              selectedEditorRegion ===
-              'page-settings'
-                ? null
-                : selectedEditorRegion
-            }
-            onSelectRegion={
-              setSelectedEditorRegion
-            }
-            onAddAmenity={
-              handleAddAmenity
-            }
-            onAddLayout={
-              handleAddLayout
-            }
-            onAddLandmark={
-              handleAddLandmark
-            }
-            pendingRemovedLandmarkIds={
-              pendingMarkerRemovalIds
-            }
-          />
-        </div>
+          >
+            <PreviewSkeleton
+              data={previewData}
+              editorMode
+              selectedRegion={
+                selectedEditorRegion ===
+                  'page-settings'
+                  ? null
+                  : selectedEditorRegion
+              }
+              onSelectRegion={
+                setSelectedEditorRegion
+              }
+              onAddAmenity={
+                handleAddAmenity
+              }
+              onAddLayout={
+                handleAddLayout
+              }
+              onAddLandmark={
+                handleAddLandmark
+              }
+              pendingRemovedLandmarkIds={
+                pendingMarkerRemovalIds
+              }
+            />
+          </div>
 
 
-        {/* INSPECTOR */}
-        <aside
-          className="
+          {/* INSPECTOR */}
+          <aside
+            className="
             w-[380px]
             xl:w-[420px]
             shrink-0
@@ -4229,18 +4228,18 @@ if (editId) {
             flex-col
             z-30
           "
-        >
+          >
 
-          {/* INSPECTOR HEADER */}
-          <div
-            className="
+            {/* INSPECTOR HEADER */}
+            <div
+              className="
               px-6 py-5
               border-b
               border-gray-100
             "
-          >
-            <p
-              className="
+            >
+              <p
+                className="
                 text-[10px]
                 uppercase
                 tracking-widest
@@ -4248,92 +4247,92 @@ if (editId) {
                 text-brand-gold
                 mb-1
               "
-            >
-              Selected Content
-            </p>
+              >
+                Selected Content
+              </p>
 
-            <h2
-              className="
+              <h2
+                className="
                 text-xl
                 font-serif
                 text-brand-blue
               "
-            >
-              {selectedEditorRegion === 'hero-image'
-              ? 'Hero Image'
-              : selectedEditorRegion === 'project-title'
-              ? 'Project Title'
-              : selectedEditorRegion === 'location'
-              ? 'Location'
-              : selectedEditorRegion === 'awards'
-              ? 'Awards Badge'
-              : selectedEditorRegion === 'tags'
-              ? 'Tags & Stats'
-              : selectedEditorRegion === 'editorial-title'
-              ? 'Editorial Headline'
-              : selectedEditorRegion === 'editorial-description'
-              ? 'Editorial Description'
-              : selectedEditorRegion === 'editorial-visuals'
-              ? 'Editorial Image & Background'
-              : selectedEditorRegion ===
-                'amenities'
-              ? 'Amenities Section'
-              : selectedEditorRegion?.startsWith(
-                  'amenity:'
-                )
-              ? selectedAmenity?.title ||
-                'Amenity'
-              : selectedEditorRegion ===
-                'unit-layouts'
-              ? 'Unit Layouts'
-              : selectedEditorRegion?.startsWith(
-                  'unit-layout:'
-                )
-              ? selectedLayout?.title ||
-                'Unit Layout'
-              : selectedEditorRegion ===
-                'points-of-interest'
-              ? 'Points of Interest'
-              : selectedEditorRegion?.startsWith(
-                  'landmark:'
-                )
-              ? selectedMarker?.interest_name ||
-                'Landmark'
-              : selectedEditorRegion === 'page-settings'
-              ? 'Page Settings'
-              : 'Select Content'}
-            </h2>
+              >
+                {selectedEditorRegion === 'hero-image'
+                  ? 'Hero Image'
+                  : selectedEditorRegion === 'project-title'
+                    ? 'Project Title'
+                    : selectedEditorRegion === 'location'
+                      ? 'Location'
+                      : selectedEditorRegion === 'awards'
+                        ? 'Awards Badge'
+                        : selectedEditorRegion === 'tags'
+                          ? 'Tags & Stats'
+                          : selectedEditorRegion === 'editorial-title'
+                            ? 'Editorial Headline'
+                            : selectedEditorRegion === 'editorial-description'
+                              ? 'Editorial Description'
+                              : selectedEditorRegion === 'editorial-visuals'
+                                ? 'Editorial Image & Background'
+                                : selectedEditorRegion ===
+                                  'amenities'
+                                  ? 'Amenities Section'
+                                  : selectedEditorRegion?.startsWith(
+                                    'amenity:'
+                                  )
+                                    ? selectedAmenity?.title ||
+                                    'Amenity'
+                                    : selectedEditorRegion ===
+                                      'unit-layouts'
+                                      ? 'Unit Layouts'
+                                      : selectedEditorRegion?.startsWith(
+                                        'unit-layout:'
+                                      )
+                                        ? selectedLayout?.title ||
+                                        'Unit Layout'
+                                        : selectedEditorRegion ===
+                                          'points-of-interest'
+                                          ? 'Points of Interest'
+                                          : selectedEditorRegion?.startsWith(
+                                            'landmark:'
+                                          )
+                                            ? selectedMarker?.interest_name ||
+                                            'Landmark'
+                                            : selectedEditorRegion === 'page-settings'
+                                              ? 'Page Settings'
+                                              : 'Select Content'}
+              </h2>
 
-            <p
-              className="
+              <p
+                className="
                 text-xs
                 text-gray-400
                 mt-2
                 leading-relaxed
               "
-            >
-              Click editable content in the
-              preview to change it.
-            </p>
-          </div>
+              >
+                Click editable content in the
+                preview to change it.
+              </p>
+            </div>
 
 
-          {/* INSPECTOR CONTENT */}
-          <div data-audit-inspector
-            className="
+            {/* INSPECTOR CONTENT */}
+            <div data-audit-inspector
+              className="
               flex-1
               overflow-y-auto
               p-6
               custom-scrollbar
             "
-          >
+            >
 
-            {/* PROJECT TITLE */}
-            {selectedEditorRegion ===
-              'project-title' && (
-              <div>
-                <label
-                  className="
+              {/* PROJECT TITLE */}
+              {selectedEditorRegion ===
+                'project-title' && (
+                  <div>
+                    <label
+                      className="
                     block
                     text-[10px]
                     font-bold
@@ -4342,13 +4341,13 @@ if (editId) {
                     text-gray-500
                     mb-2
                   "
-                >
-                  Project Title
-                </label>
+                    >
+                      Project Title
+                    </label>
 
-                <input
-                  {...register('title')}
-                  className="
+                    <input
+                      {...register('title')}
+                      className="
                     w-full
                     border
                     border-gray-200
@@ -4361,68 +4360,68 @@ if (editId) {
                     focus:ring-2
                     focus:ring-brand-gold/10
                   "
-                />
+                    />
 
-                {errors.title && (
-                  <p
-                    className="
+                    {errors.title && (
+                      <p
+                        className="
                       text-xs
                       text-red-500
                       mt-1.5
                     "
-                  >
-                    {errors.title.message}
-                  </p>
+                      >
+                        {errors.title.message}
+                      </p>
+                    )}
+                  </div>
                 )}
-              </div>
-            )}
 
 
-            {/* HERO IMAGE */}
-            {selectedEditorRegion ===
-              'hero-image' && (
-              <div>
-                <ImageDropzone
-                  fieldPath="image"
-                  label="Main Hero Image"
-                  height="h-52"
-                  watch={watch}
-                  setValue={setValue}
-                  errors={errors}
-                  setPendingFiles={
-                    setPendingFiles
-                  }
-                  setPreviews={
-                    setPreviews
-                  }
-                  previews={previews}
-                />
+              {/* HERO IMAGE */}
+              {selectedEditorRegion ===
+                'hero-image' && (
+                  <div>
+                    <ImageDropzone
+                      fieldPath="image"
+                      label="Main Hero Image"
+                      height="h-52"
+                      watch={watch}
+                      setValue={setValue}
+                      errors={errors}
+                      setPendingFiles={
+                        setPendingFiles
+                      }
+                      setPreviews={
+                        setPreviews
+                      }
+                      previews={previews}
+                    />
 
-                <p
-                  className="
+                    <p
+                      className="
                     text-[10px]
                     text-gray-400
                     leading-relaxed
                     mt-3
                   "
-                >
-                  This image fills the main
-                  project hero area. Use a
-                  high-resolution landscape
-                  image.
-                </p>
-              </div>
-            )}
+                    >
+                      This image fills the main
+                      project hero area. Use a
+                      high-resolution landscape
+                      image.
+                    </p>
+                  </div>
+                )}
 
 
-            {/* LOCATION */}
-            {selectedEditorRegion ===
-              'location' && (
-              <div className="space-y-4">
+              {/* LOCATION */}
+              {selectedEditorRegion ===
+                'location' && (
+                  <div className="space-y-4">
 
-                <div>
-                  <label
-                    className="
+                    <div>
+                      <label
+                        className="
                       block
                       text-[10px]
                       font-bold
@@ -4431,13 +4430,13 @@ if (editId) {
                       text-gray-500
                       mb-2
                     "
-                  >
-                    City
-                  </label>
+                      >
+                        City
+                      </label>
 
-                  <input
-                    {...register('city')}
-                    className="
+                      <input
+                        {...register('city')}
+                        className="
                       w-full
                       border
                       border-gray-200
@@ -4448,13 +4447,13 @@ if (editId) {
                       outline-none
                       focus:border-brand-gold
                     "
-                  />
-                </div>
+                      />
+                    </div>
 
 
-                <div>
-                  <label
-                    className="
+                    <div>
+                      <label
+                        className="
                       block
                       text-[10px]
                       font-bold
@@ -4463,15 +4462,15 @@ if (editId) {
                       text-gray-500
                       mb-2
                     "
-                  >
-                    Country
-                  </label>
+                      >
+                        Country
+                      </label>
 
-                  <input
-                    {...register(
-                      'country'
-                    )}
-                    className="
+                      <input
+                        {...register(
+                          'country'
+                        )}
+                        className="
                       w-full
                       border
                       border-gray-200
@@ -4482,13 +4481,13 @@ if (editId) {
                       outline-none
                       focus:border-brand-gold
                     "
-                  />
-                </div>
+                      />
+                    </div>
 
 
-                <div>
-                  <label
-                    className="
+                    <div>
+                      <label
+                        className="
                       block
                       text-[10px]
                       font-bold
@@ -4497,15 +4496,15 @@ if (editId) {
                       text-gray-500
                       mb-2
                     "
-                  >
-                    Street Address
-                  </label>
+                      >
+                        Street Address
+                      </label>
 
-                  <input
-                    {...register(
-                      'address'
-                    )}
-                    className="
+                      <input
+                        {...register(
+                          'address'
+                        )}
+                        className="
                       w-full
                       border
                       border-gray-200
@@ -4516,130 +4515,84 @@ if (editId) {
                       outline-none
                       focus:border-brand-gold
                     "
-                  />
-                </div>
+                      />
+                    </div>
 
-                <div
-                  className="
+                    <div
+                      className="
                     rounded-xl
                     border border-brand-blue/10
                     bg-brand-blue/[0.03]
                     px-4 py-3
                   "
-                >
-                  <p className="text-[10px] leading-relaxed text-gray-500">
-                    This is the public-facing location shown in the hero.
-                    Exact map coordinates are managed separately under
-                    Points of Interest.
-                  </p>
-                </div>
+                    >
+                      <p className="text-[10px] leading-relaxed text-gray-500">
+                        This is the public-facing location shown in the hero.
+                        Exact map coordinates are managed separately under
+                        Points of Interest.
+                      </p>
+                    </div>
 
-              </div>
-            )}
+                  </div>
+                )}
 
 
-            {/* AWARDS */}
-            {selectedEditorRegion ===
-              'awards' && (
-              <div>
-                <ImageDropzone
-                  fieldPath="img_awards"
-                  label="Awards Badge"
-                  height="h-52"
-                  watch={watch}
-                  setValue={setValue}
-                  errors={errors}
-                  setPendingFiles={
-                    setPendingFiles
-                  }
-                  setPreviews={
-                    setPreviews
-                  }
-                  previews={previews}
-                />
+              {/* AWARDS */}
+              {selectedEditorRegion ===
+                'awards' && (
+                  <div>
+                    <ImageDropzone
+                      fieldPath="img_awards"
+                      label="Awards Badge"
+                      height="h-52"
+                      watch={watch}
+                      setValue={setValue}
+                      errors={errors}
+                      setPendingFiles={
+                        setPendingFiles
+                      }
+                      setPreviews={
+                        setPreviews
+                      }
+                      previews={previews}
+                    />
 
-                <p
-                  className="
+                    <p
+                      className="
                     text-[10px]
                     text-gray-400
                     mt-3
                   "
-                >
-                  Optional. Remove the image
-                  if this project does not
-                  have an award badge.
-                </p>
-              </div>
-            )}
+                    >
+                      Optional. Remove the image
+                      if this project does not
+                      have an award badge.
+                    </p>
+                  </div>
+                )}
 
 
-            {/* TAGS AND STATS */}
-            {selectedEditorRegion ===
-              'tags' && (
-              <div>
+              {/* TAGS AND STATS */}
+              {selectedEditorRegion ===
+                'tags' && (
+                  <div>
 
-                <div
-                  className="
+                    <div
+                      className="
                     flex
                     items-center
                     justify-between
                     mb-4
                   "
-                >
-                  <p
-                    className="
+                    >
+                      <p
+                        className="
                       text-xs
                       font-bold
                       text-brand-blue
                     "
-                  >
-                    Project Tags
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      appendTag({
-                        tag_name: ''
-                      })
-                    }
-                    className="
-                      text-[10px]
-                      font-bold
-                      uppercase
-                      text-brand-blue
-                      hover:text-brand-gold
-                    "
-                  >
-                    + Add Tag
-                  </button>
-                </div>
-
-
-                <div
-                  className="
-                    space-y-3
-                  "
-                >
-                  {tagFields.length === 0 ? (
-                    <div
-                      className="
-                        rounded-xl
-                        border-2
-                        border-dashed
-                        border-gray-200
-                        bg-gray-50/70
-                        px-4 py-6
-                        text-center
-                      "
-                    >
-                      <p className="text-xs font-medium text-brand-blue">
-                        No project tags yet
-                      </p>
-
-                      <p className="mx-auto mt-1 max-w-xs text-[10px] leading-relaxed text-gray-400">
-                        Add short public-facing labels such as Pre-Selling,
-                        Residential, or Ready for Occupancy.
+                      >
+                        Project Tags
                       </p>
 
                       <button
@@ -4650,6 +4603,52 @@ if (editId) {
                           })
                         }
                         className="
+                      text-[10px]
+                      font-bold
+                      uppercase
+                      text-brand-blue
+                      hover:text-brand-gold
+                    "
+                      >
+                        + Add Tag
+                      </button>
+                    </div>
+
+
+                    <div
+                      className="
+                    space-y-3
+                  "
+                    >
+                      {tagFields.length === 0 ? (
+                        <div
+                          className="
+                        rounded-xl
+                        border-2
+                        border-dashed
+                        border-gray-200
+                        bg-gray-50/70
+                        px-4 py-6
+                        text-center
+                      "
+                        >
+                          <p className="text-xs font-medium text-brand-blue">
+                            No project tags yet
+                          </p>
+
+                          <p className="mx-auto mt-1 max-w-xs text-[10px] leading-relaxed text-gray-400">
+                            Add short public-facing labels such as Pre-Selling,
+                            Residential, or Ready for Occupancy.
+                          </p>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              appendTag({
+                                tag_name: ''
+                              })
+                            }
+                            className="
                           mt-4
                           inline-flex
                           items-center
@@ -4665,28 +4664,28 @@ if (editId) {
                           hover:bg-brand-gold
                           hover:text-brand-blue
                         "
-                      >
-                        <PlusCircle size={13} />
-                        Add First Tag
-                      </button>
-                    </div>
-                  ) : (
-                    tagFields.map(
-                      (field, index) => (
-                        <div
-                          key={field.id}
-                          className="
+                          >
+                            <PlusCircle size={13} />
+                            Add First Tag
+                          </button>
+                        </div>
+                      ) : (
+                        tagFields.map(
+                          (field, index) => (
+                            <div
+                              key={field.id}
+                              className="
                             flex
                             items-center
                             gap-2
                           "
-                        >
-                          <input
-                            {...register(
-                              `tags.${index}.tag_name`
-                            )}
-                            placeholder="Tag name"
-                            className="
+                            >
+                              <input
+                                {...register(
+                                  `tags.${index}.tag_name`
+                                )}
+                                placeholder="Tag name"
+                                className="
                               flex-1
                               border
                               border-gray-200
@@ -4697,40 +4696,40 @@ if (editId) {
                               outline-none
                               focus:border-brand-gold
                             "
-                          />
+                              />
 
-                          <button
-                            type="button"
-                            onClick={() =>
-                              removeTag(
-                                index
-                              )
-                            }
-                            aria-label="Remove tag"
-                            className="
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  removeTag(
+                                    index
+                                  )
+                                }
+                                aria-label="Remove tag"
+                                className="
                               p-2
                               text-gray-300
                               hover:text-red-500
                             "
-                          >
-                            <Trash2
-                              size={15}
-                            />
-                          </button>
-                        </div>
-                      )
-                    )
-                  )}
-                </div>
+                              >
+                                <Trash2
+                                  size={15}
+                                />
+                              </button>
+                            </div>
+                          )
+                        )
+                      )}
+                    </div>
 
-                <p className="mt-3 text-[10px] leading-relaxed text-gray-400">
-                  Tags are descriptive labels. Total SQM and Total Units below
-                  are separate project statistics.
-                </p>
+                    <p className="mt-3 text-[10px] leading-relaxed text-gray-400">
+                      Tags are descriptive labels. Total SQM and Total Units below
+                      are separate project statistics.
+                    </p>
 
 
-                <div
-                  className="
+                    <div
+                      className="
                     border-t
                     border-gray-100
                     mt-6 pt-6
@@ -4738,10 +4737,10 @@ if (editId) {
                     grid-cols-2
                     gap-4
                   "
-                >
-                  <div>
-                    <label
-                      className="
+                    >
+                      <div>
+                        <label
+                          className="
                         block
                         text-[10px]
                         font-bold
@@ -4750,13 +4749,13 @@ if (editId) {
                         text-gray-500
                         mb-2
                       "
-                    >
-                      Total SQM
-                    </label>
+                        >
+                          Total SQM
+                        </label>
 
-                    <input
-                      {...register('sqm')}
-                      className="
+                        <input
+                          {...register('sqm')}
+                          className="
                         w-full
                         border
                         border-gray-200
@@ -4767,13 +4766,13 @@ if (editId) {
                         outline-none
                         focus:border-brand-gold
                       "
-                    />
-                  </div>
+                        />
+                      </div>
 
 
-                  <div>
-                    <label
-                      className="
+                      <div>
+                        <label
+                          className="
                         block
                         text-[10px]
                         font-bold
@@ -4782,15 +4781,15 @@ if (editId) {
                         text-gray-500
                         mb-2
                       "
-                    >
-                      Total Units
-                    </label>
+                        >
+                          Total Units
+                        </label>
 
-                    <input
-                      {...register(
-                        'unit_total'
-                      )}
-                      className="
+                        <input
+                          {...register(
+                            'unit_total'
+                          )}
+                          className="
                         w-full
                         border
                         border-gray-200
@@ -4801,20 +4800,20 @@ if (editId) {
                         outline-none
                         focus:border-brand-gold
                       "
-                    />
+                        />
+                      </div>
+                    </div>
+
                   </div>
-                </div>
+                )}
 
-              </div>
-            )}
-
-            {/* EDITORIAL HEADLINE */}
-            {selectedEditorRegion ===
-              'editorial-title' && (
-              <div className="space-y-6">
-                <div>
-                  <label
-                    className="
+              {/* EDITORIAL HEADLINE */}
+              {selectedEditorRegion ===
+                'editorial-title' && (
+                  <div className="space-y-6">
+                    <div>
+                      <label
+                        className="
                       block
                       text-[10px]
                       font-bold
@@ -4823,17 +4822,17 @@ if (editId) {
                       text-gray-500
                       mb-2
                     "
-                  >
-                    Headline
-                  </label>
+                      >
+                        Headline
+                      </label>
 
-                  <textarea
-                    {...register(
-                      'editorial_title'
-                    )}
-                    rows={4}
-                    placeholder="Editorial headline"
-                    className="
+                      <textarea
+                        {...register(
+                          'editorial_title'
+                        )}
+                        rows={4}
+                        placeholder="Editorial headline"
+                        className="
                       w-full
                       resize-none
                       rounded-xl
@@ -4848,66 +4847,66 @@ if (editId) {
                       focus:ring-2
                       focus:ring-brand-gold/10
                     "
-                  />
+                      />
 
-                  {errors.editorial_title && (
-                    <p
-                      className="
+                      {errors.editorial_title && (
+                        <p
+                          className="
                         mt-1.5
                         text-xs
                         text-red-500
                       "
-                    >
-                      {
-                        errors.editorial_title
-                          .message
-                      }
-                    </p>
-                  )}
-                </div>
+                        >
+                          {
+                            errors.editorial_title
+                              .message
+                          }
+                        </p>
+                      )}
+                    </div>
 
-                <div
-                  className="
+                    <div
+                      className="
                     border-t
                     border-gray-100
                     pt-5
                   "
-                >
-                  <ColorInputSync
-                    label="Headline Color"
-                    fieldName="editorial_title_color"
-                    register={register}
-                    watch={watch}
-                    setValue={setValue}
-                    inputStyles={inputStyles}
-                    labelStyles={labelStyles}
-                  />
+                    >
+                      <ColorInputSync
+                        label="Headline Color"
+                        fieldName="editorial_title_color"
+                        register={register}
+                        watch={watch}
+                        setValue={setValue}
+                        inputStyles={inputStyles}
+                        labelStyles={labelStyles}
+                      />
 
-                  <p
-                    className="
+                      <p
+                        className="
                       mt-2
                       text-[10px]
                       leading-relaxed
                       text-gray-400
                     "
-                  >
-                    Click the editorial headline
-                    in the preview whenever you
-                    want to return to these
-                    controls.
-                  </p>
-                </div>
-              </div>
-            )}
+                      >
+                        Click the editorial headline
+                        in the preview whenever you
+                        want to return to these
+                        controls.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
 
-            {/* EDITORIAL DESCRIPTION */}
-            {selectedEditorRegion ===
-              'editorial-description' && (
-              <div className="space-y-6">
-                <div>
-                  <label
-                    className="
+              {/* EDITORIAL DESCRIPTION */}
+              {selectedEditorRegion ===
+                'editorial-description' && (
+                  <div className="space-y-6">
+                    <div>
+                      <label
+                        className="
                       block
                       text-[10px]
                       font-bold
@@ -4916,17 +4915,17 @@ if (editId) {
                       text-gray-500
                       mb-2
                     "
-                  >
-                    Description
-                  </label>
+                      >
+                        Description
+                      </label>
 
-                  <textarea
-                    {...register(
-                      'editorial_long'
-                    )}
-                    rows={10}
-                    placeholder="Project description"
-                    className="
+                      <textarea
+                        {...register(
+                          'editorial_long'
+                        )}
+                        rows={10}
+                        placeholder="Project description"
+                        className="
                       w-full
                       resize-y
                       rounded-xl
@@ -4942,148 +4941,148 @@ if (editId) {
                       focus:ring-2
                       focus:ring-brand-gold/10
                     "
-                  />
-                </div>
+                      />
+                    </div>
 
-                <div
-                  className="
+                    <div
+                      className="
                     border-t
                     border-gray-100
                     pt-5
                   "
-                >
-                  <ColorInputSync
-                    label="Text Color"
-                    fieldName="editorial_desc_color"
-                    register={register}
-                    watch={watch}
-                    setValue={setValue}
-                    inputStyles={inputStyles}
-                    labelStyles={labelStyles}
-                  />
+                    >
+                      <ColorInputSync
+                        label="Text Color"
+                        fieldName="editorial_desc_color"
+                        register={register}
+                        watch={watch}
+                        setValue={setValue}
+                        inputStyles={inputStyles}
+                        labelStyles={labelStyles}
+                      />
 
-                  <p
-                    className="
+                      <p
+                        className="
                       mt-2
                       text-[10px]
                       leading-relaxed
                       text-gray-400
                     "
-                  >
-                    Text and color stay together
-                    because they describe the same
-                    visible element.
-                  </p>
-                </div>
-              </div>
-            )}
+                      >
+                        Text and color stay together
+                        because they describe the same
+                        visible element.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
 
-            {/* EDITORIAL IMAGE + BACKGROUND */}
-            {selectedEditorRegion ===
-              'editorial-visuals' && (
-              <div className="space-y-6">
-                <div>
-                  <ImageDropzone
-                    fieldPath="editorial_img"
-                    label="Editorial Image"
-                    height="h-52"
-                    watch={watch}
-                    setValue={setValue}
-                    errors={errors}
-                    setPendingFiles={
-                      setPendingFiles
-                    }
-                    setPreviews={
-                      setPreviews
-                    }
-                    previews={previews}
-                  />
+              {/* EDITORIAL IMAGE + BACKGROUND */}
+              {selectedEditorRegion ===
+                'editorial-visuals' && (
+                  <div className="space-y-6">
+                    <div>
+                      <ImageDropzone
+                        fieldPath="editorial_img"
+                        label="Editorial Image"
+                        height="h-52"
+                        watch={watch}
+                        setValue={setValue}
+                        errors={errors}
+                        setPendingFiles={
+                          setPendingFiles
+                        }
+                        setPreviews={
+                          setPreviews
+                        }
+                        previews={previews}
+                      />
 
-                  <p
-                    className="
+                      <p
+                        className="
                       mt-2
                       text-[10px]
                       leading-relaxed
                       text-gray-400
                     "
-                  >
-                    Click the image or the empty
-                    background area of the
-                    editorial section to open
-                    these visual controls.
-                  </p>
-                </div>
+                      >
+                        Click the image or the empty
+                        background area of the
+                        editorial section to open
+                        these visual controls.
+                      </p>
+                    </div>
 
-                <div
-                  className="
+                    <div
+                      className="
                     border-t
                     border-gray-100
                     pt-5
                   "
-                >
-                  <ColorInputSync
-                    label="Section Background Color"
-                    fieldName="editorial_bg_color"
-                    register={register}
-                    watch={watch}
-                    setValue={setValue}
-                    inputStyles={inputStyles}
-                    labelStyles={labelStyles}
-                  />
+                    >
+                      <ColorInputSync
+                        label="Section Background Color"
+                        fieldName="editorial_bg_color"
+                        register={register}
+                        watch={watch}
+                        setValue={setValue}
+                        inputStyles={inputStyles}
+                        labelStyles={labelStyles}
+                      />
 
-                  <p
-                    className="
+                      <p
+                        className="
                       mt-2
                       text-[10px]
                       leading-relaxed
                       text-gray-400
                     "
-                  >
-                    The image and section
-                    background share one inspector
-                    because they define the
-                    editorial section's visual
-                    treatment.
-                  </p>
-                </div>
-              </div>
-            )}
+                      >
+                        The image and section
+                        background share one inspector
+                        because they define the
+                        editorial section's visual
+                        treatment.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
-            {/* AMENITIES SECTION */}
-            {selectedEditorRegion ===
-              'amenities' && (
-              <div className="space-y-6">
+              {/* AMENITIES SECTION */}
+              {selectedEditorRegion ===
+                'amenities' && (
+                  <div className="space-y-6">
 
-                <div>
-                  <p
-                    className="
+                    <div>
+                      <p
+                        className="
                       text-xs
                       font-bold
                       text-brand-blue
                     "
-                  >
-                    Section Headline
-                  </p>
+                      >
+                        Section Headline
+                      </p>
 
-                  <p
-                    className="
+                      <p
+                        className="
                       mt-1
                       text-[10px]
                       leading-relaxed
                       text-gray-400
                     "
-                  >
-                    Edit the heading displayed
-                    above the amenities carousel.
-                  </p>
-                </div>
+                      >
+                        Edit the heading displayed
+                        above the amenities carousel.
+                      </p>
+                    </div>
 
 
-                {/* WHITE HEADLINE */}
-                <div>
-                  <label
-                    className="
+                    {/* WHITE HEADLINE */}
+                    <div>
+                      <label
+                        className="
                       block
                       text-[10px]
                       font-bold
@@ -5092,16 +5091,16 @@ if (editId) {
                       text-gray-500
                       mb-2
                     "
-                  >
-                    Headline
-                  </label>
+                      >
+                        Headline
+                      </label>
 
-                  <input
-                    {...register(
-                      'amenities_title'
-                    )}
-                    placeholder="Experience A Fresh"
-                    className="
+                      <input
+                        {...register(
+                          'amenities_title'
+                        )}
+                        placeholder="Experience A Fresh"
+                        className="
                       w-full
                       rounded-xl
                       border
@@ -5116,14 +5115,14 @@ if (editId) {
                       focus:ring-2
                       focus:ring-brand-gold/10
                     "
-                  />
-                </div>
+                      />
+                    </div>
 
 
-                {/* GOLD HEADLINE */}
-                <div>
-                  <label
-                    className="
+                    {/* GOLD HEADLINE */}
+                    <div>
+                      <label
+                        className="
                       block
                       text-[10px]
                       font-bold
@@ -5132,16 +5131,16 @@ if (editId) {
                       text-gray-500
                       mb-2
                     "
-                  >
-                    Highlighted Headline
-                  </label>
+                      >
+                        Highlighted Headline
+                      </label>
 
-                  <input
-                    {...register(
-                      'amenities_title_gold'
-                    )}
-                    placeholder="Way Of Living in City Clou."
-                    className="
+                      <input
+                        {...register(
+                          'amenities_title_gold'
+                        )}
+                        placeholder="Way Of Living in City Clou."
+                        className="
                       w-full
                       rounded-xl
                       border
@@ -5156,33 +5155,33 @@ if (editId) {
                       focus:ring-2
                       focus:ring-brand-gold/10
                     "
-                  />
+                      />
 
-                  <p
-                    className="
+                      <p
+                        className="
                       mt-1.5
                       text-[10px]
                       text-gray-400
                     "
-                  >
-                    This portion appears in gold.
-                  </p>
-                </div>
+                      >
+                        This portion appears in gold.
+                      </p>
+                    </div>
 
 
-                <div
-                  className="
+                    <div
+                      className="
                     border-t
                     border-gray-100
                     pt-6
                   "
-                >
-                  <button
-                    type="button"
-                    onClick={
-                      handleAddAmenity
-                    }
-                    className="
+                    >
+                      <button
+                        type="button"
+                        onClick={
+                          handleAddAmenity
+                        }
+                        className="
                       w-full
                       inline-flex
                       items-center
@@ -5197,37 +5196,37 @@ if (editId) {
                       hover:bg-brand-blue/90
                       transition-colors
                     "
-                  >
-                    <PlusCircle size={15} />
-                    Add Amenity
-                  </button>
-                </div>
+                      >
+                        <PlusCircle size={15} />
+                        Add Amenity
+                      </button>
+                    </div>
 
 
-                <p
-                  className="
+                    <p
+                      className="
                     text-[10px]
                     text-gray-400
                     leading-relaxed
                   "
-                >
-                  Click an amenity card in the
-                  preview to edit that specific
-                  amenity.
-                </p>
+                    >
+                      Click an amenity card in the
+                      preview to edit that specific
+                      amenity.
+                    </p>
 
-              </div>
-            )}
+                  </div>
+                )}
 
-            {/* INDIVIDUAL AMENITY */}
-            {selectedAmenityIndex !== null &&
-              selectedAmenity && (
-              <div className="space-y-6">
+              {/* INDIVIDUAL AMENITY */}
+              {selectedAmenityIndex !== null &&
+                selectedAmenity && (
+                  <div className="space-y-6">
 
-                {/* NAME */}
-                <div>
-                  <label
-                    className="
+                    {/* NAME */}
+                    <div>
+                      <label
+                        className="
                       block
                       text-[10px]
                       font-bold
@@ -5236,15 +5235,15 @@ if (editId) {
                       text-gray-500
                       mb-2
                     "
-                  >
-                    Amenity Name
-                  </label>
+                      >
+                        Amenity Name
+                      </label>
 
-                  <input
-                    {...register(
-                      `amenities.${selectedAmenityIndex}.title`
-                    )}
-                    className="
+                      <input
+                        {...register(
+                          `amenities.${selectedAmenityIndex}.title`
+                        )}
+                        className="
                       w-full
                       rounded-xl
                       border border-gray-200
@@ -5256,32 +5255,32 @@ if (editId) {
                       focus:ring-2
                       focus:ring-brand-gold/10
                     "
-                  />
+                      />
 
-                  {errors?.amenities?.[
-                    selectedAmenityIndex
-                  ]?.title && (
-                    <p
-                      className="
+                      {errors?.amenities?.[
+                        selectedAmenityIndex
+                      ]?.title && (
+                          <p
+                            className="
                         mt-1.5
                         text-xs
                         text-red-500
                       "
-                    >
-                      {
-                        errors.amenities[
-                          selectedAmenityIndex
-                        ]?.title?.message
-                      }
-                    </p>
-                  )}
-                </div>
+                          >
+                            {
+                              errors.amenities[
+                                selectedAmenityIndex
+                              ]?.title?.message
+                            }
+                          </p>
+                        )}
+                    </div>
 
 
-                {/* TOWER */}
-                <div>
-                  <label
-                    className="
+                    {/* TOWER */}
+                    <div>
+                      <label
+                        className="
                       block
                       text-[10px]
                       font-bold
@@ -5290,15 +5289,15 @@ if (editId) {
                       text-gray-500
                       mb-2
                     "
-                  >
-                    Assigned Tower
-                  </label>
+                      >
+                        Assigned Tower
+                      </label>
 
-                  <select
-                    {...register(
-                      `amenities.${selectedAmenityIndex}.tower`
-                    )}
-                    className="
+                      <select
+                        {...register(
+                          `amenities.${selectedAmenityIndex}.tower`
+                        )}
+                        className="
                       w-full
                       rounded-xl
                       border border-gray-200
@@ -5310,78 +5309,78 @@ if (editId) {
                       cursor-pointer
                       focus:border-brand-gold
                     "
-                  >
-                    <option value="">
-                      All Towers / Shared
-                    </option>
-
-                    {selectedAmenity?.tower &&
-                      !isValidTowerAssignment(
-                        selectedAmenity.tower
-                      ) && (
-                        <option
-                          value={selectedAmenity.tower}
-                          disabled
-                        >
-                          {selectedAmenity.tower} — no longer exists
+                      >
+                        <option value="">
+                          All Towers / Shared
                         </option>
-                      )}
 
-                    {availableTowerOptions.map(
-                      (option) => (
-                        <option
-                          key={option}
-                          value={option}
-                        >
-                          {option}
-                        </option>
-                      )
-                    )}
-                  </select>
+                        {selectedAmenity?.tower &&
+                          !isValidTowerAssignment(
+                            selectedAmenity.tower
+                          ) && (
+                            <option
+                              value={selectedAmenity.tower}
+                              disabled
+                            >
+                              {selectedAmenity.tower} — no longer exists
+                            </option>
+                          )}
 
-                  {isValidTowerAssignment(
-                    selectedAmenity?.tower
-                  ) ? (
-                    <p
-                      className="
+                        {availableTowerOptions.map(
+                          (option) => (
+                            <option
+                              key={option}
+                              value={option}
+                            >
+                              {option}
+                            </option>
+                          )
+                        )}
+                      </select>
+
+                      {isValidTowerAssignment(
+                        selectedAmenity?.tower
+                      ) ? (
+                        <p
+                          className="
                         mt-1.5
                         text-[10px]
                         text-gray-400
                       "
-                    >
-                      Select a tower, or choose All Towers / Shared.
-                    </p>
-                  ) : (
-                    <div
-                      className="
+                        >
+                          Select a tower, or choose All Towers / Shared.
+                        </p>
+                      ) : (
+                        <div
+                          className="
                         mt-2
                         rounded-lg
                         border border-amber-200
                         bg-amber-50
                         px-3 py-2
                       "
-                    >
-                      <p
-                        className="
+                        >
+                          <p
+                            className="
                           text-[10px]
                           font-semibold
                           leading-relaxed
                           text-amber-700
                         "
-                      >
-                        This amenity is assigned to a tower that no
-                        longer exists. Choose a valid tower or
-                        All Towers / Shared before saving.
-                      </p>
+                          >
+                            This amenity is assigned to a tower that no
+                            longer exists. Choose a valid tower or
+                            All Towers / Shared before saving.
+                          </p>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
 
 
-                {/* DESCRIPTION */}
-                <div>
-                  <label
-                    className="
+                    {/* DESCRIPTION */}
+                    <div>
+                      <label
+                        className="
                       block
                       text-[10px]
                       font-bold
@@ -5390,16 +5389,16 @@ if (editId) {
                       text-gray-500
                       mb-2
                     "
-                  >
-                    Description
-                  </label>
+                      >
+                        Description
+                      </label>
 
-                  <textarea
-                    {...register(
-                      `amenities.${selectedAmenityIndex}.description`
-                    )}
-                    rows={5}
-                    className="
+                      <textarea
+                        {...register(
+                          `amenities.${selectedAmenityIndex}.description`
+                        )}
+                        rows={5}
+                        className="
                       w-full
                       resize-y
                       rounded-xl
@@ -5413,49 +5412,49 @@ if (editId) {
                       focus:ring-2
                       focus:ring-brand-gold/10
                     "
-                  />
-                </div>
+                      />
+                    </div>
 
 
-                {/* IMAGE */}
-                <ImageDropzone
-                  fieldPath={`amenities.${selectedAmenityIndex}.thumbnail`}
-                  label="Amenity Image"
-                  height="h-52"
-                  watch={watch}
-                  setValue={setValue}
-                  errors={errors}
-                  setPendingFiles={
-                    setPendingFiles
-                  }
-                  setPreviews={
-                    setPreviews
-                  }
-                  previews={previews}
-                />
+                    {/* IMAGE */}
+                    <ImageDropzone
+                      fieldPath={`amenities.${selectedAmenityIndex}.thumbnail`}
+                      label="Amenity Image"
+                      height="h-52"
+                      watch={watch}
+                      setValue={setValue}
+                      errors={errors}
+                      setPendingFiles={
+                        setPendingFiles
+                      }
+                      setPreviews={
+                        setPreviews
+                      }
+                      previews={previews}
+                    />
 
-                <p className="-mt-3 text-[10px] leading-relaxed text-gray-400">
-                  This image appears in the amenities carousel. A landscape
-                  image with the subject near the center works best.
-                </p>
+                    <p className="-mt-3 text-[10px] leading-relaxed text-gray-400">
+                      This image appears in the amenities carousel. A landscape
+                      image with the subject near the center works best.
+                    </p>
 
 
-                {/* DELETE */}
-                <div
-                  className="
+                    {/* DELETE */}
+                    <div
+                      className="
                     border-t
                     border-gray-100
                     pt-6
                   "
-                >
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleRequestRemoveAmenity(
-                        selectedAmenityIndex
-                      )
-                    }
-                    className="
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleRequestRemoveAmenity(
+                            selectedAmenityIndex
+                          )
+                        }
+                        className="
                       w-full
                       inline-flex
                       items-center
@@ -5472,45 +5471,45 @@ if (editId) {
                       hover:bg-red-100
                       transition-colors
                     "
-                  >
-                    <Trash2 size={15} />
-                    Remove Amenity
-                  </button>
-                </div>
+                      >
+                        <Trash2 size={15} />
+                        Remove Amenity
+                      </button>
+                    </div>
 
-              </div>
-            )}
-
-
-            {/* UNIT LAYOUTS SECTION */}
-            {selectedEditorRegion ===
-              'unit-layouts' && (
-              <div className="space-y-6">
-
-                <div>
-                  <p className="text-xs font-bold text-brand-blue">
-                    Blueprint display order
-                  </p>
-
-                  <p className="mt-1 text-[10px] leading-relaxed text-gray-400">
-                    Drag towers to choose which tower appears first, then drag
-                    layouts inside each tower to control their sequence.
-                  </p>
-                </div>
-
-                {layoutEditorError && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                    <p className="text-[10px] font-semibold leading-relaxed text-amber-700">
-                      {layoutEditorError}
-                    </p>
                   </div>
                 )}
 
-                <button
-                  type="button"
-                  onClick={handleAddLayout}
-                  disabled={availableTowerOptions.length === 0}
-                  className="
+
+              {/* UNIT LAYOUTS SECTION */}
+              {selectedEditorRegion ===
+                'unit-layouts' && (
+                  <div className="space-y-6">
+
+                    <div>
+                      <p className="text-xs font-bold text-brand-blue">
+                        Blueprint display order
+                      </p>
+
+                      <p className="mt-1 text-[10px] leading-relaxed text-gray-400">
+                        Drag towers to choose which tower appears first, then drag
+                        layouts inside each tower to control their sequence.
+                      </p>
+                    </div>
+
+                    {layoutEditorError && (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                        <p className="text-[10px] font-semibold leading-relaxed text-amber-700">
+                          {layoutEditorError}
+                        </p>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleAddLayout}
+                      disabled={availableTowerOptions.length === 0}
+                      className="
                     w-full
                     inline-flex
                     items-center
@@ -5527,131 +5526,265 @@ if (editId) {
                     disabled:opacity-40
                     transition-colors
                   "
-                >
-                  <PlusCircle size={15} />
-                  Add Unit Layout
-                </button>
+                    >
+                      <PlusCircle size={15} />
+                      Add Unit Layout
+                    </button>
 
-                {/* TOWER ORDER */}
-                <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-                  <div className="border-b border-gray-100 px-4 py-3">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
-                      Tower Display Order
-                    </p>
-                    <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
-                      Drag a tower by its handle. This same order is used by the
-                      blueprint section and tower filters.
-                    </p>
-                  </div>
+                    {/* TOWER ORDER */}
+                    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+                      <div className="border-b border-gray-100 px-4 py-3">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
+                          Tower Display Order
+                        </p>
+                        <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
+                          Drag a tower by its handle. This same order is used by the
+                          blueprint section and tower filters.
+                        </p>
+                      </div>
 
-                  <div className="p-3 space-y-2">
-                    {(formData.towers || []).length === 0 ? (
-                      <p className="rounded-lg bg-gray-50 px-3 py-4 text-center text-[10px] text-gray-400">
-                        Add a tower from Page Settings first.
-                      </p>
-                    ) : (
-                      (formData.towers || []).map(
-                        (tower, index) => (
-                          <div
-                            key={
-                              towerFields[index]?.fieldKey ||
-                              tower.id ||
-                              `${tower.name}-${index}`
-                            }
-                            draggable
-                            onDragStart={() =>
-                              setDragState({
-                                type: 'tower',
-                                index,
-                              })
-                            }
-                            onDragEnd={() =>
-                              setDragState(null)
-                            }
-                            onDragOver={(e) =>
-                              e.preventDefault()
-                            }
-                            onDrop={() =>
-                              handleTowerDrop(index)
-                            }
-                            className={`
+                      <div className="p-3 space-y-2">
+                        {(formData.towers || []).length === 0 ? (
+                          <p className="rounded-lg bg-gray-50 px-3 py-4 text-center text-[10px] text-gray-400">
+                            Add a tower from Page Settings first.
+                          </p>
+                        ) : (
+                          (formData.towers || []).map(
+                            (tower, index) => (
+                              <div
+                                key={
+                                  towerFields[index]?.fieldKey ||
+                                  tower.id ||
+                                  `${tower.name}-${index}`
+                                }
+                                draggable
+                                onDragStart={() =>
+                                  setDragState({
+                                    type: 'tower',
+                                    index,
+                                  })
+                                }
+                                onDragEnd={() =>
+                                  setDragState(null)
+                                }
+                                onDragOver={(e) =>
+                                  e.preventDefault()
+                                }
+                                onDrop={() =>
+                                  handleTowerDrop(index)
+                                }
+                                className={`
                               flex items-center gap-3
                               rounded-xl
                               border
                               px-3 py-3
                               transition-all
-                              ${
-                                dragState?.type === 'tower' &&
-                                dragState.index === index
-                                  ? 'border-brand-gold bg-brand-gold/10 opacity-70'
-                                  : 'border-gray-200 bg-gray-50 hover:border-brand-gold/50'
-                              }
+                              ${dragState?.type === 'tower' &&
+                                    dragState.index === index
+                                    ? 'border-brand-gold bg-brand-gold/10 opacity-70'
+                                    : 'border-gray-200 bg-gray-50 hover:border-brand-gold/50'
+                                  }
                             `}
-                          >
-                            <GripVertical
-                              size={16}
-                              className="shrink-0 cursor-grab text-gray-400 active:cursor-grabbing"
-                            />
+                              >
+                                <GripVertical
+                                  size={16}
+                                  className="shrink-0 cursor-grab text-gray-400 active:cursor-grabbing"
+                                />
 
-                            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-brand-blue">
-                              {tower.name}
-                            </span>
-                          </div>
-                        )
-                      )
-                    )}
-                  </div>
-                </div>
+                                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-brand-blue">
+                                  {tower.name}
+                                </span>
+                              </div>
+                            )
+                          )
+                        )}
+                      </div>
+                    </div>
 
-                {/* LAYOUT ORDER BY TOWER */}
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
-                      Layout Sequence
-                    </p>
-                    <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
-                      Layouts can be reordered within their assigned tower.
-                      Change the Assigned Tower inside a layout to move it to
-                      another tower.
-                    </p>
-                  </div>
+                    {/* LAYOUT ORDER BY TOWER */}
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
+                          Layout Sequence
+                        </p>
+                        <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
+                          Layouts can be reordered within their assigned tower.
+                          Change the Assigned Tower inside a layout to move it to
+                          another tower.
+                        </p>
+                      </div>
 
-                  {availableTowerOptions.map(
-                    (towerName) => {
-                      const orderedIndices =
-                        getOrderedLayoutIndicesForTower(
-                          towerName
-                        );
+                      {availableTowerOptions.map(
+                        (towerName) => {
+                          const orderedIndices =
+                            getOrderedLayoutIndicesForTower(
+                              towerName
+                            );
 
-                      return (
-                        <div
-                          key={towerName}
-                          className="rounded-xl border border-gray-200 bg-white overflow-hidden"
-                        >
-                          <div className="flex items-center justify-between gap-3 border-b border-gray-100 bg-gray-50/70 px-4 py-3">
-                            <span className="truncate text-xs font-bold text-brand-blue">
-                              {towerName}
-                            </span>
+                          return (
+                            <div
+                              key={towerName}
+                              className="rounded-xl border border-gray-200 bg-white overflow-hidden"
+                            >
+                              <div className="flex items-center justify-between gap-3 border-b border-gray-100 bg-gray-50/70 px-4 py-3">
+                                <span className="truncate text-xs font-bold text-brand-blue">
+                                  {towerName}
+                                </span>
 
-                            <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[9px] font-bold text-gray-400 border border-gray-200">
-                              {orderedIndices.length}{' '}
-                              {orderedIndices.length === 1
-                                ? 'layout'
-                                : 'layouts'}
-                            </span>
-                          </div>
+                                <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[9px] font-bold text-gray-400 border border-gray-200">
+                                  {orderedIndices.length}{' '}
+                                  {orderedIndices.length === 1
+                                    ? 'layout'
+                                    : 'layouts'}
+                                </span>
+                              </div>
 
-                          <div className="p-3 space-y-2">
-                            {orderedIndices.length === 0 ? (
-                              <p className="px-2 py-3 text-center text-[10px] text-gray-400">
-                                No layouts assigned to this tower.
+                              <div className="p-3 space-y-2">
+                                {orderedIndices.length === 0 ? (
+                                  <p className="px-2 py-3 text-center text-[10px] text-gray-400">
+                                    No layouts assigned to this tower.
+                                  </p>
+                                ) : (
+                                  orderedIndices.map(
+                                    (layoutIndex) => {
+                                      const layout =
+                                        formData.unit_layouts?.[
+                                        layoutIndex
+                                        ];
+
+                                      if (!layout) {
+                                        return null;
+                                      }
+
+                                      return (
+                                        <div
+                                          key={
+                                            layoutFields[
+                                              layoutIndex
+                                            ]?.fieldKey ||
+                                            layout.id ||
+                                            layoutIndex
+                                          }
+                                          draggable
+                                          onDragStart={() =>
+                                            setDragState({
+                                              type:
+                                                'tower-layout',
+                                              index:
+                                                layoutIndex,
+                                            })
+                                          }
+                                          onDragEnd={() =>
+                                            setDragState(
+                                              null
+                                            )
+                                          }
+                                          onDragOver={(e) =>
+                                            e.preventDefault()
+                                          }
+                                          onDrop={() =>
+                                            handleTowerLayoutDrop(
+                                              layoutIndex
+                                            )
+                                          }
+                                          className={`
+                                        flex items-center gap-3
+                                        rounded-xl border
+                                        px-3 py-3
+                                        transition-all
+                                        ${dragState?.type ===
+                                              'tower-layout' &&
+                                              dragState.index ===
+                                              layoutIndex
+                                              ? 'border-brand-gold bg-brand-gold/10 opacity-70'
+                                              : 'border-gray-200 bg-gray-50 hover:border-brand-gold/50'
+                                            }
+                                      `}
+                                        >
+                                          <GripVertical
+                                            size={16}
+                                            className="shrink-0 cursor-grab text-gray-400 active:cursor-grabbing"
+                                          />
+
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setSelectedEditorRegion(
+                                                `unit-layout:${layoutIndex}`
+                                              )
+                                            }
+                                            className="min-w-0 flex-1 text-left"
+                                          >
+                                            <span className="block truncate text-xs font-bold text-brand-blue">
+                                              {layout.title ||
+                                                `Untitled Layout`}
+                                            </span>
+
+                                            <span className="mt-0.5 block truncate text-[9px] text-gray-400">
+                                              {layout.min_sqm ||
+                                                '—'}
+                                              {layout.max_sqm &&
+                                                layout.max_sqm !==
+                                                layout.min_sqm
+                                                ? `–${layout.max_sqm}`
+                                                : ''}{' '}
+                                              SQM
+                                            </span>
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setSelectedEditorRegion(
+                                                `unit-layout:${layoutIndex}`
+                                              )
+                                            }
+                                            className="shrink-0 text-[9px] font-bold uppercase tracking-wider text-gray-400 hover:text-brand-blue"
+                                          >
+                                            Edit
+                                          </button>
+                                        </div>
+                                      );
+                                    }
+                                  )
+                                )}
+                              </div>
+                            </div>
+                          );
+                        }
+                      )}
+                    </div>
+
+                    {/* ADVANCED PLACEMENT ORDER */}
+                    <details className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+                      <summary className="cursor-pointer select-none px-4 py-4 text-[10px] font-bold uppercase tracking-widest text-brand-blue">
+                        Other Display Placement Order
+                      </summary>
+
+                      <div className="space-y-5 border-t border-gray-100 p-4">
+                        <div>
+                          <p className="text-[10px] font-bold text-brand-blue">
+                            Map Card
+                          </p>
+                          <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
+                            Drag layouts that are enabled for the project map card.
+                          </p>
+
+                          <div className="mt-3 space-y-2">
+                            {getOrderedPlacementIndices(
+                              'map-card'
+                            ).length === 0 ? (
+                              <p className="rounded-lg bg-gray-50 px-3 py-3 text-[10px] text-gray-400">
+                                No layouts are currently shown on the map card.
                               </p>
                             ) : (
-                              orderedIndices.map(
+                              getOrderedPlacementIndices(
+                                'map-card'
+                              ).map(
                                 (layoutIndex) => {
                                   const layout =
                                     formData.unit_layouts?.[
-                                      layoutIndex
+                                    layoutIndex
                                     ];
 
                                   if (!layout) {
@@ -5660,18 +5793,12 @@ if (editId) {
 
                                   return (
                                     <div
-                                      key={
-                                        layoutFields[
-                                          layoutIndex
-                                        ]?.fieldKey ||
-                                        layout.id ||
-                                        layoutIndex
-                                      }
+                                      key={`map-${layout.id || layoutIndex}`}
                                       draggable
                                       onDragStart={() =>
                                         setDragState({
                                           type:
-                                            'tower-layout',
+                                            'map-card',
                                           index:
                                             layoutIndex,
                                         })
@@ -5685,67 +5812,21 @@ if (editId) {
                                         e.preventDefault()
                                       }
                                       onDrop={() =>
-                                        handleTowerLayoutDrop(
+                                        handlePlacementDrop(
+                                          'map-card',
                                           layoutIndex
                                         )
                                       }
-                                      className={`
-                                        flex items-center gap-3
-                                        rounded-xl border
-                                        px-3 py-3
-                                        transition-all
-                                        ${
-                                          dragState?.type ===
-                                            'tower-layout' &&
-                                          dragState.index ===
-                                            layoutIndex
-                                            ? 'border-brand-gold bg-brand-gold/10 opacity-70'
-                                            : 'border-gray-200 bg-gray-50 hover:border-brand-gold/50'
-                                        }
-                                      `}
+                                      className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5"
                                     >
                                       <GripVertical
-                                        size={16}
-                                        className="shrink-0 cursor-grab text-gray-400 active:cursor-grabbing"
+                                        size={14}
+                                        className="cursor-grab text-gray-400"
                                       />
-
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          setSelectedEditorRegion(
-                                            `unit-layout:${layoutIndex}`
-                                          )
-                                        }
-                                        className="min-w-0 flex-1 text-left"
-                                      >
-                                        <span className="block truncate text-xs font-bold text-brand-blue">
-                                          {layout.title ||
-                                            `Untitled Layout`}
-                                        </span>
-
-                                        <span className="mt-0.5 block truncate text-[9px] text-gray-400">
-                                          {layout.min_sqm ||
-                                            '—'}
-                                          {layout.max_sqm &&
-                                          layout.max_sqm !==
-                                            layout.min_sqm
-                                            ? `–${layout.max_sqm}`
-                                            : ''}{' '}
-                                          SQM
-                                        </span>
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          setSelectedEditorRegion(
-                                            `unit-layout:${layoutIndex}`
-                                          )
-                                        }
-                                        className="shrink-0 text-[9px] font-bold uppercase tracking-wider text-gray-400 hover:text-brand-blue"
-                                      >
-                                        Edit
-                                      </button>
+                                      <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-brand-blue">
+                                        {layout.title ||
+                                          'Untitled Layout'}
+                                      </span>
                                     </div>
                                   );
                                 }
@@ -5753,209 +5834,125 @@ if (editId) {
                             )}
                           </div>
                         </div>
-                      );
-                    }
-                  )}
-                </div>
 
-                {/* ADVANCED PLACEMENT ORDER */}
-                <details className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-                  <summary className="cursor-pointer select-none px-4 py-4 text-[10px] font-bold uppercase tracking-widest text-brand-blue">
-                    Other Display Placement Order
-                  </summary>
-
-                  <div className="space-y-5 border-t border-gray-100 p-4">
-                    <div>
-                      <p className="text-[10px] font-bold text-brand-blue">
-                        Map Card
-                      </p>
-                      <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
-                        Drag layouts that are enabled for the project map card.
-                      </p>
-
-                      <div className="mt-3 space-y-2">
-                        {getOrderedPlacementIndices(
-                          'map-card'
-                        ).length === 0 ? (
-                          <p className="rounded-lg bg-gray-50 px-3 py-3 text-[10px] text-gray-400">
-                            No layouts are currently shown on the map card.
+                        <div className="border-t border-gray-100 pt-5">
+                          <p className="text-[10px] font-bold text-brand-blue">
+                            Projects Page
                           </p>
-                        ) : (
-                          getOrderedPlacementIndices(
-                            'map-card'
-                          ).map(
-                            (layoutIndex) => {
-                              const layout =
-                                formData.unit_layouts?.[
-                                  layoutIndex
-                                ];
-
-                              if (!layout) {
-                                return null;
-                              }
-
-                              return (
-                                <div
-                                  key={`map-${layout.id || layoutIndex}`}
-                                  draggable
-                                  onDragStart={() =>
-                                    setDragState({
-                                      type:
-                                        'map-card',
-                                      index:
-                                        layoutIndex,
-                                    })
-                                  }
-                                  onDragEnd={() =>
-                                    setDragState(
-                                      null
-                                    )
-                                  }
-                                  onDragOver={(e) =>
-                                    e.preventDefault()
-                                  }
-                                  onDrop={() =>
-                                    handlePlacementDrop(
-                                      'map-card',
-                                      layoutIndex
-                                    )
-                                  }
-                                  className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5"
-                                >
-                                  <GripVertical
-                                    size={14}
-                                    className="cursor-grab text-gray-400"
-                                  />
-                                  <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-brand-blue">
-                                    {layout.title ||
-                                      'Untitled Layout'}
-                                  </span>
-                                </div>
-                              );
-                            }
-                          )
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="border-t border-gray-100 pt-5">
-                      <p className="text-[10px] font-bold text-brand-blue">
-                        Projects Page
-                      </p>
-                      <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
-                        Drag layouts that are enabled for the public projects listing.
-                      </p>
-
-                      <div className="mt-3 space-y-2">
-                        {getOrderedPlacementIndices(
-                          'projects-page'
-                        ).length === 0 ? (
-                          <p className="rounded-lg bg-gray-50 px-3 py-3 text-[10px] text-gray-400">
-                            No layouts are currently shown on the Projects page.
+                          <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
+                            Drag layouts that are enabled for the public projects listing.
                           </p>
-                        ) : (
-                          getOrderedPlacementIndices(
-                            'projects-page'
-                          ).map(
-                            (layoutIndex) => {
-                              const layout =
-                                formData.unit_layouts?.[
-                                  layoutIndex
-                                ];
 
-                              if (!layout) {
-                                return null;
-                              }
+                          <div className="mt-3 space-y-2">
+                            {getOrderedPlacementIndices(
+                              'projects-page'
+                            ).length === 0 ? (
+                              <p className="rounded-lg bg-gray-50 px-3 py-3 text-[10px] text-gray-400">
+                                No layouts are currently shown on the Projects page.
+                              </p>
+                            ) : (
+                              getOrderedPlacementIndices(
+                                'projects-page'
+                              ).map(
+                                (layoutIndex) => {
+                                  const layout =
+                                    formData.unit_layouts?.[
+                                    layoutIndex
+                                    ];
 
-                              return (
-                                <div
-                                  key={`projects-${layout.id || layoutIndex}`}
-                                  draggable
-                                  onDragStart={() =>
-                                    setDragState({
-                                      type:
-                                        'projects-page',
-                                      index:
-                                        layoutIndex,
-                                    })
+                                  if (!layout) {
+                                    return null;
                                   }
-                                  onDragEnd={() =>
-                                    setDragState(
-                                      null
-                                    )
-                                  }
-                                  onDragOver={(e) =>
-                                    e.preventDefault()
-                                  }
-                                  onDrop={() =>
-                                    handlePlacementDrop(
-                                      'projects-page',
-                                      layoutIndex
-                                    )
-                                  }
-                                  className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5"
-                                >
-                                  <GripVertical
-                                    size={14}
-                                    className="cursor-grab text-gray-400"
-                                  />
-                                  <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-brand-blue">
-                                    {layout.title ||
-                                      'Untitled Layout'}
-                                  </span>
-                                </div>
-                              );
-                            }
-                          )
-                        )}
+
+                                  return (
+                                    <div
+                                      key={`projects-${layout.id || layoutIndex}`}
+                                      draggable
+                                      onDragStart={() =>
+                                        setDragState({
+                                          type:
+                                            'projects-page',
+                                          index:
+                                            layoutIndex,
+                                        })
+                                      }
+                                      onDragEnd={() =>
+                                        setDragState(
+                                          null
+                                        )
+                                      }
+                                      onDragOver={(e) =>
+                                        e.preventDefault()
+                                      }
+                                      onDrop={() =>
+                                        handlePlacementDrop(
+                                          'projects-page',
+                                          layoutIndex
+                                        )
+                                      }
+                                      className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5"
+                                    >
+                                      <GripVertical
+                                        size={14}
+                                        className="cursor-grab text-gray-400"
+                                      />
+                                      <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-brand-blue">
+                                        {layout.title ||
+                                          'Untitled Layout'}
+                                      </span>
+                                    </div>
+                                  );
+                                }
+                              )
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    </details>
+
+                    <p className="text-[10px] leading-relaxed text-gray-400">
+                      All ordering changes are staged until Save Changes is pressed.
+                      Reset restores the previously saved sequence.
+                    </p>
                   </div>
-                </details>
+                )}
 
-                <p className="text-[10px] leading-relaxed text-gray-400">
-                  All ordering changes are staged until Save Changes is pressed.
-                  Reset restores the previously saved sequence.
-                </p>
-              </div>
-            )}
+              {/* INDIVIDUAL UNIT LAYOUT */}
+              {selectedLayoutIndex !== null &&
+                selectedLayout && (
+                  <div className="space-y-6">
 
-            {/* INDIVIDUAL UNIT LAYOUT */}
-            {selectedLayoutIndex !== null &&
-              selectedLayout && (
-              <div className="space-y-6">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedEditorRegion(
+                          'unit-layouts'
+                        )
+                      }
+                      className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-gray-400 hover:text-brand-blue"
+                    >
+                      <ArrowLeft size={13} />
+                      Layout Order
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={() =>
-                    setSelectedEditorRegion(
-                      'unit-layouts'
-                    )
-                  }
-                  className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-gray-400 hover:text-brand-blue"
-                >
-                  <ArrowLeft size={13} />
-                  Layout Order
-                </button>
+                    {/* TOWER */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                        Assigned Tower
+                      </label>
 
-                {/* TOWER */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
-                    Assigned Tower
-                  </label>
-
-                  <select
-                    value={
-                      selectedLayout.tower_name ||
-                      ''
-                    }
-                    onChange={(e) =>
-                      handleLayoutTowerChange(
-                        selectedLayoutIndex,
-                        e.target.value
-                      )
-                    }
-                    className="
+                      <select
+                        value={
+                          selectedLayout.tower_name ||
+                          ''
+                        }
+                        onChange={(e) =>
+                          handleLayoutTowerChange(
+                            selectedLayoutIndex,
+                            e.target.value
+                          )
+                        }
+                        className="
                       w-full
                       rounded-xl
                       border border-gray-200
@@ -5967,61 +5964,61 @@ if (editId) {
                       cursor-pointer
                       focus:border-brand-gold
                     "
-                  >
-                    <option value="" disabled>
-                      Select tower...
-                    </option>
+                      >
+                        <option value="" disabled>
+                          Select tower...
+                        </option>
 
-                    {selectedLayout.tower_name &&
-                      !isValidTowerAssignment(
+                        {selectedLayout.tower_name &&
+                          !isValidTowerAssignment(
+                            selectedLayout.tower_name
+                          ) && (
+                            <option
+                              value={
+                                selectedLayout.tower_name
+                              }
+                              disabled
+                            >
+                              {
+                                selectedLayout.tower_name
+                              }{' '}
+                              — no longer exists
+                            </option>
+                          )}
+
+                        {availableTowerOptions.map(
+                          (tower) => (
+                            <option
+                              key={tower}
+                              value={tower}
+                            >
+                              {tower}
+                            </option>
+                          )
+                        )}
+                      </select>
+
+                      {!isValidTowerAssignment(
                         selectedLayout.tower_name
                       ) && (
-                        <option
-                          value={
-                            selectedLayout.tower_name
-                          }
-                          disabled
-                        >
-                          {
-                            selectedLayout.tower_name
-                          }{' '}
-                          — no longer exists
-                        </option>
-                      )}
+                          <p className="mt-1.5 text-[10px] font-medium leading-relaxed text-amber-600">
+                            Choose a valid tower before saving.
+                          </p>
+                        )}
+                    </div>
 
-                    {availableTowerOptions.map(
-                      (tower) => (
-                        <option
-                          key={tower}
-                          value={tower}
-                        >
-                          {tower}
-                        </option>
-                      )
-                    )}
-                  </select>
+                    {/* TITLE */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                        Layout Title
+                      </label>
 
-                  {!isValidTowerAssignment(
-                    selectedLayout.tower_name
-                  ) && (
-                    <p className="mt-1.5 text-[10px] font-medium leading-relaxed text-amber-600">
-                      Choose a valid tower before saving.
-                    </p>
-                  )}
-                </div>
-
-                {/* TITLE */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
-                    Layout Title
-                  </label>
-
-                  <input
-                    {...register(
-                      `unit_layouts.${selectedLayoutIndex}.title`
-                    )}
-                    placeholder="e.g. Studio Unit"
-                    className="
+                      <input
+                        {...register(
+                          `unit_layouts.${selectedLayoutIndex}.title`
+                        )}
+                        placeholder="e.g. Studio Unit"
+                        className="
                       w-full rounded-xl
                       border border-gray-200
                       px-4 py-3
@@ -6031,34 +6028,34 @@ if (editId) {
                       focus:ring-2
                       focus:ring-brand-gold/10
                     "
-                  />
+                      />
 
-                  {errors?.unit_layouts?.[
-                    selectedLayoutIndex
-                  ]?.title && (
-                    <p className="mt-1.5 text-xs text-red-500">
-                      {
-                        errors.unit_layouts[
-                          selectedLayoutIndex
-                        ]?.title?.message
-                      }
-                    </p>
-                  )}
-                </div>
+                      {errors?.unit_layouts?.[
+                        selectedLayoutIndex
+                      ]?.title && (
+                          <p className="mt-1.5 text-xs text-red-500">
+                            {
+                              errors.unit_layouts[
+                                selectedLayoutIndex
+                              ]?.title?.message
+                            }
+                          </p>
+                        )}
+                    </div>
 
-                {/* SIZE */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
-                      Min SQM
-                    </label>
+                    {/* SIZE */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                          Min SQM
+                        </label>
 
-                    <input
-                      {...register(
-                        `unit_layouts.${selectedLayoutIndex}.min_sqm`
-                      )}
-                      inputMode="decimal"
-                      className="
+                        <input
+                          {...register(
+                            `unit_layouts.${selectedLayoutIndex}.min_sqm`
+                          )}
+                          inputMode="decimal"
+                          className="
                         w-full rounded-xl
                         border border-gray-200
                         px-4 py-3
@@ -6066,20 +6063,20 @@ if (editId) {
                         outline-none
                         focus:border-brand-gold
                       "
-                    />
-                  </div>
+                        />
+                      </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
-                      Max SQM
-                    </label>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                          Max SQM
+                        </label>
 
-                    <input
-                      {...register(
-                        `unit_layouts.${selectedLayoutIndex}.max_sqm`
-                      )}
-                      inputMode="decimal"
-                      className="
+                        <input
+                          {...register(
+                            `unit_layouts.${selectedLayoutIndex}.max_sqm`
+                          )}
+                          inputMode="decimal"
+                          className="
                         w-full rounded-xl
                         border border-gray-200
                         px-4 py-3
@@ -6087,22 +6084,22 @@ if (editId) {
                         outline-none
                         focus:border-brand-gold
                       "
-                    />
-                  </div>
-                </div>
+                        />
+                      </div>
+                    </div>
 
-                {/* DESCRIPTION */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
-                    Description
-                  </label>
+                    {/* DESCRIPTION */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                        Description
+                      </label>
 
-                  <textarea
-                    {...register(
-                      `unit_layouts.${selectedLayoutIndex}.description`
-                    )}
-                    rows={5}
-                    className="
+                      <textarea
+                        {...register(
+                          `unit_layouts.${selectedLayoutIndex}.description`
+                        )}
+                        rows={5}
+                        className="
                       w-full
                       resize-y
                       rounded-xl
@@ -6116,63 +6113,63 @@ if (editId) {
                       focus:ring-2
                       focus:ring-brand-gold/10
                     "
-                  />
-                </div>
+                      />
+                    </div>
 
-                {/* COLOR */}
-                <ColorInputSync
-                  label="Card Background Color"
-                  fieldName={`unit_layouts.${selectedLayoutIndex}.bg_color`}
-                  register={register}
-                  watch={watch}
-                  setValue={setValue}
-                  inputStyles={inputStyles}
-                  labelStyles={labelStyles}
-                />
+                    {/* COLOR */}
+                    <ColorInputSync
+                      label="Card Background Color"
+                      fieldName={`unit_layouts.${selectedLayoutIndex}.bg_color`}
+                      register={register}
+                      watch={watch}
+                      setValue={setValue}
+                      inputStyles={inputStyles}
+                      labelStyles={labelStyles}
+                    />
 
-                {/* IMAGE */}
-                <ImageDropzone
-                  fieldPath={`unit_layouts.${selectedLayoutIndex}.thumbnail`}
-                  label="Floorplan Image"
-                  height="h-52"
-                  watch={watch}
-                  setValue={setValue}
-                  errors={errors}
-                  setPendingFiles={
-                    setPendingFiles
-                  }
-                  setPreviews={
-                    setPreviews
-                  }
-                  previews={previews}
-                />
-
-                <p className="-mt-3 text-[10px] leading-relaxed text-gray-400">
-                  Transparent PNG or WebP floorplans work best so the drawing
-                  stays clear on the white blueprint card.
-                </p>
-
-                {/* DISPLAY PLACEMENT */}
-                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
-                    Other Display Placements
-                  </p>
-
-                  <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
-                    Turn placements on or off here. Reorder enabled layouts from
-                    the Unit Layouts inspector—no order numbers required.
-                  </p>
-
-                  <div className="mt-4 space-y-3">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleLayoutPlacementToggle(
-                          selectedLayoutIndex,
-                          'map-card'
-                        )
+                    {/* IMAGE */}
+                    <ImageDropzone
+                      fieldPath={`unit_layouts.${selectedLayoutIndex}.thumbnail`}
+                      label="Floorplan Image"
+                      height="h-52"
+                      watch={watch}
+                      setValue={setValue}
+                      errors={errors}
+                      setPendingFiles={
+                        setPendingFiles
                       }
-                      className={`
+                      setPreviews={
+                        setPreviews
+                      }
+                      previews={previews}
+                    />
+
+                    <p className="-mt-3 text-[10px] leading-relaxed text-gray-400">
+                      Transparent PNG or WebP floorplans work best so the drawing
+                      stays clear on the white blueprint card.
+                    </p>
+
+                    {/* DISPLAY PLACEMENT */}
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
+                        Other Display Placements
+                      </p>
+
+                      <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
+                        Turn placements on or off here. Reorder enabled layouts from
+                        the Unit Layouts inspector—no order numbers required.
+                      </p>
+
+                      <div className="mt-4 space-y-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleLayoutPlacementToggle(
+                              selectedLayoutIndex,
+                              'map-card'
+                            )
+                          }
+                          className={`
                         w-full
                         flex items-center
                         justify-between
@@ -6182,54 +6179,51 @@ if (editId) {
                         px-4 py-3
                         text-left
                         transition-all
-                        ${
-                          selectedLayout.show_on_map_card
-                            ? 'border-brand-gold/50 bg-brand-gold/10'
-                            : 'border-gray-200 bg-white'
-                        }
-                      `}
-                    >
-                      <span>
-                        <span className="block text-[10px] font-bold uppercase tracking-wider text-brand-blue">
-                          Show on Map Card
-                        </span>
-                        <span className="mt-0.5 block text-[9px] text-gray-400">
-                          Makes this layout available on the project map popup.
-                        </span>
-                      </span>
-
-                      <span
-                        className={`
-                          relative h-5 w-9 shrink-0 rounded-full transition-colors
-                          ${
-                            selectedLayout.show_on_map_card
-                              ? 'bg-brand-gold'
-                              : 'bg-gray-300'
-                          }
-                        `}
-                      >
-                        <span
-                          className={`
-                            absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform
-                            ${
-                              selectedLayout.show_on_map_card
-                                ? 'translate-x-[18px]'
-                                : 'translate-x-0.5'
+                        ${selectedLayout.show_on_map_card
+                              ? 'border-brand-gold/50 bg-brand-gold/10'
+                              : 'border-gray-200 bg-white'
                             }
-                          `}
-                        />
-                      </span>
-                    </button>
+                      `}
+                        >
+                          <span>
+                            <span className="block text-[10px] font-bold uppercase tracking-wider text-brand-blue">
+                              Show on Map Card
+                            </span>
+                            <span className="mt-0.5 block text-[9px] text-gray-400">
+                              Makes this layout available on the project map popup.
+                            </span>
+                          </span>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleLayoutPlacementToggle(
-                          selectedLayoutIndex,
-                          'projects-page'
-                        )
-                      }
-                      className={`
+                          <span
+                            className={`
+                          relative h-5 w-9 shrink-0 rounded-full transition-colors
+                          ${selectedLayout.show_on_map_card
+                                ? 'bg-brand-gold'
+                                : 'bg-gray-300'
+                              }
+                        `}
+                          >
+                            <span
+                              className={`
+                            absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform
+                            ${selectedLayout.show_on_map_card
+                                  ? 'translate-x-[18px]'
+                                  : 'translate-x-0.5'
+                                }
+                          `}
+                            />
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleLayoutPlacementToggle(
+                              selectedLayoutIndex,
+                              'projects-page'
+                            )
+                          }
+                          className={`
                         w-full
                         flex items-center
                         justify-between
@@ -6239,57 +6233,54 @@ if (editId) {
                         px-4 py-3
                         text-left
                         transition-all
-                        ${
-                          selectedLayout.show_on_project_page
-                            ? 'border-brand-gold/50 bg-brand-gold/10'
-                            : 'border-gray-200 bg-white'
-                        }
-                      `}
-                    >
-                      <span>
-                        <span className="block text-[10px] font-bold uppercase tracking-wider text-brand-blue">
-                          Show on Projects Page
-                        </span>
-                        <span className="mt-0.5 block text-[9px] text-gray-400">
-                          Includes this layout in the public projects listing.
-                        </span>
-                      </span>
-
-                      <span
-                        className={`
-                          relative h-5 w-9 shrink-0 rounded-full transition-colors
-                          ${
-                            selectedLayout.show_on_project_page
-                              ? 'bg-brand-gold'
-                              : 'bg-gray-300'
-                          }
-                        `}
-                      >
-                        <span
-                          className={`
-                            absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform
-                            ${
-                              selectedLayout.show_on_project_page
-                                ? 'translate-x-[18px]'
-                                : 'translate-x-0.5'
+                        ${selectedLayout.show_on_project_page
+                              ? 'border-brand-gold/50 bg-brand-gold/10'
+                              : 'border-gray-200 bg-white'
                             }
-                          `}
-                        />
-                      </span>
-                    </button>
-                  </div>
-                </div>
+                      `}
+                        >
+                          <span>
+                            <span className="block text-[10px] font-bold uppercase tracking-wider text-brand-blue">
+                              Show on Projects Page
+                            </span>
+                            <span className="mt-0.5 block text-[9px] text-gray-400">
+                              Includes this layout in the public projects listing.
+                            </span>
+                          </span>
 
-                {/* DELETE */}
-                <div className="border-t border-gray-100 pt-6">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleRequestRemoveLayout(
-                        selectedLayoutIndex
-                      )
-                    }
-                    className="
+                          <span
+                            className={`
+                          relative h-5 w-9 shrink-0 rounded-full transition-colors
+                          ${selectedLayout.show_on_project_page
+                                ? 'bg-brand-gold'
+                                : 'bg-gray-300'
+                              }
+                        `}
+                          >
+                            <span
+                              className={`
+                            absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform
+                            ${selectedLayout.show_on_project_page
+                                  ? 'translate-x-[18px]'
+                                  : 'translate-x-0.5'
+                                }
+                          `}
+                            />
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* DELETE */}
+                    <div className="border-t border-gray-100 pt-6">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleRequestRemoveLayout(
+                            selectedLayoutIndex
+                          )
+                        }
+                        className="
                       w-full
                       inline-flex
                       items-center
@@ -6305,44 +6296,44 @@ if (editId) {
                       hover:bg-red-100
                       transition-colors
                     "
-                  >
-                    <Trash2 size={15} />
-                    Remove Unit Layout
-                  </button>
-                </div>
-              </div>
-            )}
+                      >
+                        <Trash2 size={15} />
+                        Remove Unit Layout
+                      </button>
+                    </div>
+                  </div>
+                )}
 
 
-            {/* POINTS OF INTEREST SECTION */}
-            {selectedEditorRegion ===
-              'points-of-interest' && (
-              <div className="space-y-6">
-                <div>
-                  <p className="text-xs font-bold text-brand-blue">
-                    Map Section
-                  </p>
+              {/* POINTS OF INTEREST SECTION */}
+              {selectedEditorRegion ===
+                'points-of-interest' && (
+                  <div className="space-y-6">
+                    <div>
+                      <p className="text-xs font-bold text-brand-blue">
+                        Map Section
+                      </p>
 
-                  <p className="mt-1 text-[10px] leading-relaxed text-gray-400">
-                    Edit the project map context and manage nearby landmarks.
-                    The live public map remains interactive on the website;
-                    this editor uses a simplified preview so map controls do
-                    not compete with content editing.
-                  </p>
-                </div>
+                      <p className="mt-1 text-[10px] leading-relaxed text-gray-400">
+                        Edit the project map context and manage nearby landmarks.
+                        The live public map remains interactive on the website;
+                        this editor uses a simplified preview so map controls do
+                        not compete with content editing.
+                      </p>
+                    </div>
 
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
-                    Section Subtitle
-                  </label>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                        Section Subtitle
+                      </label>
 
-                  <textarea
-                    {...register(
-                      'map_subtitle'
-                    )}
-                    rows={3}
-                    placeholder="Everything you need, strategically positioned right around your sanctuary."
-                    className="
+                      <textarea
+                        {...register(
+                          'map_subtitle'
+                        )}
+                        rows={3}
+                        placeholder="Everything you need, strategically positioned right around your sanctuary."
+                        className="
                       w-full
                       resize-none
                       rounded-xl
@@ -6358,38 +6349,38 @@ if (editId) {
                       focus:ring-2
                       focus:ring-brand-gold/10
                     "
-                  />
-                </div>
+                      />
+                    </div>
 
-                <div
-                  className="
+                    <div
+                      className="
                     overflow-hidden
                     rounded-xl
                     border border-gray-200
                     bg-white
                   "
-                >
-                  <div className="border-b border-gray-100 px-4 py-4">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
-                      Project Map Location
-                    </p>
+                    >
+                      <div className="border-b border-gray-100 px-4 py-4">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
+                          Project Map Location
+                        </p>
 
-                    <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
-                      These coordinates place the development itself on the
-                      map. They are separate from nearby landmark coordinates.
-                    </p>
-                  </div>
+                        <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
+                          These coordinates place the development itself on the
+                          map. They are separate from nearby landmark coordinates.
+                        </p>
+                      </div>
 
-                  <div className="space-y-4 p-4">
-                    <details
-                      className="
+                      <div className="space-y-4 p-4">
+                        <details
+                          className="
                         rounded-xl
                         border border-gray-200
                         bg-gray-50
                       "
-                    >
-                      <summary
-                        className="
+                        >
+                          <summary
+                            className="
                           cursor-pointer
                           list-none
                           px-4 py-3
@@ -6399,24 +6390,24 @@ if (editId) {
                           tracking-wider
                           text-brand-blue
                         "
-                      >
-                        Location Coordinates
-                      </summary>
+                          >
+                            Location Coordinates
+                          </summary>
 
-                      <div className="grid grid-cols-2 gap-3 border-t border-gray-200 p-4">
-                        <div>
-                          <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
-                            Latitude
-                          </label>
+                          <div className="grid grid-cols-2 gap-3 border-t border-gray-200 p-4">
+                            <div>
+                              <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
+                                Latitude
+                              </label>
 
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            {...register(
-                              'map_latitude'
-                            )}
-                            placeholder="14.5995"
-                            className="
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                {...register(
+                                  'map_latitude'
+                                )}
+                                placeholder="14.5995"
+                                className="
                               w-full rounded-lg
                               border border-gray-200
                               bg-white
@@ -6426,22 +6417,22 @@ if (editId) {
                               outline-none
                               focus:border-brand-gold
                             "
-                          />
-                        </div>
+                              />
+                            </div>
 
-                        <div>
-                          <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
-                            Longitude
-                          </label>
+                            <div>
+                              <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
+                                Longitude
+                              </label>
 
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            {...register(
-                              'map_longitude'
-                            )}
-                            placeholder="120.9842"
-                            className="
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                {...register(
+                                  'map_longitude'
+                                )}
+                                placeholder="120.9842"
+                                className="
                               w-full rounded-lg
                               border border-gray-200
                               bg-white
@@ -6451,56 +6442,56 @@ if (editId) {
                               outline-none
                               focus:border-brand-gold
                             "
-                          />
+                              />
+                            </div>
+                          </div>
+                        </details>
+
+                        <ImageDropzone
+                          fieldPath="map_icon"
+                          label="Project Map Pin"
+                          height="h-32"
+                          watch={watch}
+                          setValue={setValue}
+                          errors={errors}
+                          setPendingFiles={
+                            setPendingFiles
+                          }
+                          setPreviews={
+                            setPreviews
+                          }
+                          previews={previews}
+                        />
+
+                        <p className="text-[9px] leading-relaxed text-gray-400">
+                          A transparent PNG or SVG works best for the project pin.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-gray-100 pt-6">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
+                            Nearby Landmarks
+                          </p>
+
+                          <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
+                            {markerFields.length}{' '}
+                            {markerFields.length === 1
+                              ? 'landmark'
+                              : 'landmarks'}{' '}
+                            configured
+                          </p>
                         </div>
                       </div>
-                    </details>
 
-                    <ImageDropzone
-                      fieldPath="map_icon"
-                      label="Project Map Pin"
-                      height="h-32"
-                      watch={watch}
-                      setValue={setValue}
-                      errors={errors}
-                      setPendingFiles={
-                        setPendingFiles
-                      }
-                      setPreviews={
-                        setPreviews
-                      }
-                      previews={previews}
-                    />
-
-                    <p className="text-[9px] leading-relaxed text-gray-400">
-                      A transparent PNG or SVG works best for the project pin.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="border-t border-gray-100 pt-6">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
-                        Nearby Landmarks
-                      </p>
-
-                      <p className="mt-1 text-[9px] leading-relaxed text-gray-400">
-                        {markerFields.length}{' '}
-                        {markerFields.length === 1
-                          ? 'landmark'
-                          : 'landmarks'}{' '}
-                        configured
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={
-                      handleAddLandmark
-                    }
-                    className="
+                      <button
+                        type="button"
+                        onClick={
+                          handleAddLandmark
+                        }
+                        className="
                       w-full
                       inline-flex
                       items-center
@@ -6516,84 +6507,48 @@ if (editId) {
                       hover:bg-brand-gold
                       hover:text-brand-blue
                     "
-                  >
-                    <PlusCircle size={15} />
-                    Add Landmark
-                  </button>
+                      >
+                        <PlusCircle size={15} />
+                        Add Landmark
+                      </button>
 
-                  <p className="mt-3 text-[10px] leading-relaxed text-gray-400">
-                    Select any landmark card in the preview to edit its
-                    details. New landmarks also appear as the last card in
-                    the section.
-                  </p>
-                </div>
-              </div>
-            )}
+                      <p className="mt-3 text-[10px] leading-relaxed text-gray-400">
+                        Select any landmark card in the preview to edit its
+                        details. New landmarks also appear as the last card in
+                        the section.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
-            {/* INDIVIDUAL LANDMARK */}
-            {selectedMarkerIndex !== null &&
-              selectedMarker && (
-              <div className="space-y-6">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setSelectedEditorRegion(
-                      'points-of-interest'
-                    )
-                  }
-                  className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-gray-400 hover:text-brand-blue"
-                >
-                  <ArrowLeft size={13} />
-                  Points of Interest
-                </button>
-
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
-                    Landmark Name
-                  </label>
-
-                  <input
-                    {...register(
-                      `child_markers.${selectedMarkerIndex}.interest_name`
-                    )}
-                    placeholder="e.g. SM City"
-                    className="
-                      w-full rounded-xl
-                      border border-gray-200
-                      px-4 py-3
-                      text-sm text-brand-blue
-                      outline-none
-                      focus:border-brand-gold
-                      focus:ring-2
-                      focus:ring-brand-gold/10
-                    "
-                  />
-
-                  {errors?.child_markers?.[
-                    selectedMarkerIndex
-                  ]?.interest_name && (
-                    <p className="mt-1.5 text-[10px] font-medium text-red-500">
-                      {
-                        errors.child_markers[
-                          selectedMarkerIndex
-                        ]?.interest_name
-                          ?.message
+              {/* INDIVIDUAL LANDMARK */}
+              {selectedMarkerIndex !== null &&
+                selectedMarker && (
+                  <div className="space-y-6">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedEditorRegion(
+                          'points-of-interest'
+                        )
                       }
-                    </p>
-                  )}
-                </div>
+                      className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-gray-400 hover:text-brand-blue"
+                    >
+                      <ArrowLeft size={13} />
+                      Points of Interest
+                    </button>
 
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
-                    Address
-                  </label>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                        Landmark Name
+                      </label>
 
-                  <input
-                    {...register(
-                      `child_markers.${selectedMarkerIndex}.address`
-                    )}
-                    placeholder="Street, city, or area"
-                    className="
+                      <input
+                        {...register(
+                          `child_markers.${selectedMarkerIndex}.interest_name`
+                        )}
+                        placeholder="e.g. SM City"
+                        className="
                       w-full rounded-xl
                       border border-gray-200
                       px-4 py-3
@@ -6603,20 +6558,33 @@ if (editId) {
                       focus:ring-2
                       focus:ring-brand-gold/10
                     "
-                  />
-                </div>
+                      />
 
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
-                    Short Description
-                  </label>
+                      {errors?.child_markers?.[
+                        selectedMarkerIndex
+                      ]?.interest_name && (
+                          <p className="mt-1.5 text-[10px] font-medium text-red-500">
+                            {
+                              errors.child_markers[
+                                selectedMarkerIndex
+                              ]?.interest_name
+                                ?.message
+                            }
+                          </p>
+                        )}
+                    </div>
 
-                  <input
-                    {...register(
-                      `child_markers.${selectedMarkerIndex}.phrase`
-                    )}
-                    placeholder="e.g. Everyday essentials nearby"
-                    className="
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                        Address
+                      </label>
+
+                      <input
+                        {...register(
+                          `child_markers.${selectedMarkerIndex}.address`
+                        )}
+                        placeholder="Street, city, or area"
+                        className="
                       w-full rounded-xl
                       border border-gray-200
                       px-4 py-3
@@ -6626,35 +6594,58 @@ if (editId) {
                       focus:ring-2
                       focus:ring-brand-gold/10
                     "
-                  />
-                </div>
+                      />
+                    </div>
 
-                <div
-                  className="
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                        Short Description
+                      </label>
+
+                      <input
+                        {...register(
+                          `child_markers.${selectedMarkerIndex}.phrase`
+                        )}
+                        placeholder="e.g. Everyday essentials nearby"
+                        className="
+                      w-full rounded-xl
+                      border border-gray-200
+                      px-4 py-3
+                      text-sm text-brand-blue
+                      outline-none
+                      focus:border-brand-gold
+                      focus:ring-2
+                      focus:ring-brand-gold/10
+                    "
+                      />
+                    </div>
+
+                    <div
+                      className="
                     rounded-xl
                     border border-gray-200
                     bg-gray-50
                     p-4
                   "
-                >
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
-                    Distance &amp; Travel Time
-                  </p>
+                    >
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue">
+                        Distance &amp; Travel Time
+                      </p>
 
-                  <div className="mt-4 grid grid-cols-3 gap-2">
-                    <div>
-                      <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
-                        Distance
-                      </label>
+                      <div className="mt-4 grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
+                            Distance
+                          </label>
 
-                      <div className="relative">
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          {...register(
-                            `child_markers.${selectedMarkerIndex}.distance_km`
-                          )}
-                          className="
+                          <div className="relative">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              {...register(
+                                `child_markers.${selectedMarkerIndex}.distance_km`
+                              )}
+                              className="
                             w-full rounded-lg
                             border border-gray-200
                             bg-white
@@ -6664,27 +6655,27 @@ if (editId) {
                             outline-none
                             focus:border-brand-gold
                           "
-                        />
+                            />
 
-                        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-gray-300">
-                          KM
-                        </span>
-                      </div>
-                    </div>
+                            <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-gray-300">
+                              KM
+                            </span>
+                          </div>
+                        </div>
 
-                    <div>
-                      <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
-                        Drive
-                      </label>
+                        <div>
+                          <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
+                            Drive
+                          </label>
 
-                      <div className="relative">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          {...register(
-                            `child_markers.${selectedMarkerIndex}.distance_drive`
-                          )}
-                          className="
+                          <div className="relative">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              {...register(
+                                `child_markers.${selectedMarkerIndex}.distance_drive`
+                              )}
+                              className="
                             w-full rounded-lg
                             border border-gray-200
                             bg-white
@@ -6694,27 +6685,27 @@ if (editId) {
                             outline-none
                             focus:border-brand-gold
                           "
-                        />
+                            />
 
-                        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-gray-300">
-                          MIN
-                        </span>
-                      </div>
-                    </div>
+                            <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-gray-300">
+                              MIN
+                            </span>
+                          </div>
+                        </div>
 
-                    <div>
-                      <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
-                        Walk
-                      </label>
+                        <div>
+                          <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
+                            Walk
+                          </label>
 
-                      <div className="relative">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          {...register(
-                            `child_markers.${selectedMarkerIndex}.distance_walk`
-                          )}
-                          className="
+                          <div className="relative">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              {...register(
+                                `child_markers.${selectedMarkerIndex}.distance_walk`
+                              )}
+                              className="
                             w-full rounded-lg
                             border border-gray-200
                             bg-white
@@ -6724,42 +6715,42 @@ if (editId) {
                             outline-none
                             focus:border-brand-gold
                           "
-                        />
+                            />
 
-                        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-gray-300">
-                          MIN
-                        </span>
+                            <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-gray-300">
+                              MIN
+                            </span>
+                          </div>
+                        </div>
                       </div>
+
+                      {(errors?.child_markers?.[
+                        selectedMarkerIndex
+                      ]?.distance_km ||
+                        errors?.child_markers?.[
+                          selectedMarkerIndex
+                        ]?.distance_drive ||
+                        errors?.child_markers?.[
+                          selectedMarkerIndex
+                        ]?.distance_walk) && (
+                          <p className="mt-2 text-[9px] font-medium text-red-500">
+                            Distance, drive time, and walk time are required.
+                          </p>
+                        )}
                     </div>
-                  </div>
 
-                  {(errors?.child_markers?.[
-                    selectedMarkerIndex
-                  ]?.distance_km ||
-                    errors?.child_markers?.[
-                      selectedMarkerIndex
-                    ]?.distance_drive ||
-                    errors?.child_markers?.[
-                      selectedMarkerIndex
-                    ]?.distance_walk) && (
-                    <p className="mt-2 text-[9px] font-medium text-red-500">
-                      Distance, drive time, and walk time are required.
-                    </p>
-                  )}
-                </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                        Category / Tag
+                      </label>
 
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
-                    Category / Tag
-                  </label>
-
-                  <input
-                    list="landmark-type-suggestions"
-                    {...register(
-                      `child_markers.${selectedMarkerIndex}.marker_type`
-                    )}
-                    placeholder="e.g. retail"
-                    className="
+                      <input
+                        list="landmark-type-suggestions"
+                        {...register(
+                          `child_markers.${selectedMarkerIndex}.marker_type`
+                        )}
+                        placeholder="e.g. retail"
+                        className="
                       w-full rounded-xl
                       border border-gray-200
                       px-4 py-3
@@ -6769,89 +6760,89 @@ if (editId) {
                       focus:ring-2
                       focus:ring-brand-gold/10
                     "
-                  />
+                      />
 
-                  <datalist id="landmark-type-suggestions">
-                    {!markerTypeSuggestions
-                      .some(
-                        (value) =>
-                          value.toLowerCase() ===
-                          'general'
-                      ) && (
-                      <option value="general" />
-                    )}
+                      <datalist id="landmark-type-suggestions">
+                        {!markerTypeSuggestions
+                          .some(
+                            (value) =>
+                              value.toLowerCase() ===
+                              'general'
+                          ) && (
+                            <option value="general" />
+                          )}
 
-                    {markerTypeSuggestions.map(
-                      (value) => (
-                        <option
-                          key={value}
-                          value={value}
-                        />
-                      )
-                    )}
-                  </datalist>
+                        {markerTypeSuggestions.map(
+                          (value) => (
+                            <option
+                              key={value}
+                              value={value}
+                            />
+                          )
+                        )}
+                      </datalist>
 
-                  <p className="mt-1.5 text-[9px] leading-relaxed text-gray-400">
-                    Keep category names short and consistent across landmarks.
-                  </p>
-                </div>
+                      <p className="mt-1.5 text-[9px] leading-relaxed text-gray-400">
+                        Keep category names short and consistent across landmarks.
+                      </p>
+                    </div>
 
-                <div>
-                  <ImageDropzone
-                    fieldPath={`child_markers.${selectedMarkerIndex}.marker_icon`}
-                    label="Custom Map Icon"
-                    height="h-28"
-                    watch={watch}
-                    setValue={setValue}
-                    errors={errors}
-                    setPendingFiles={
-                      setPendingFiles
-                    }
-                    setPreviews={
-                      setPreviews
-                    }
-                    previews={previews}
-                  />
+                    <div>
+                      <ImageDropzone
+                        fieldPath={`child_markers.${selectedMarkerIndex}.marker_icon`}
+                        label="Custom Map Icon"
+                        height="h-28"
+                        watch={watch}
+                        setValue={setValue}
+                        errors={errors}
+                        setPendingFiles={
+                          setPendingFiles
+                        }
+                        setPreviews={
+                          setPreviews
+                        }
+                        previews={previews}
+                      />
 
-                  <p className="mt-2 text-[9px] leading-relaxed text-gray-400">
-                    Optional. Use a small transparent icon if this landmark
-                    needs a custom pin on the public map.
-                  </p>
-                </div>
+                      <p className="mt-2 text-[9px] leading-relaxed text-gray-400">
+                        Optional. Use a small transparent icon if this landmark
+                        needs a custom pin on the public map.
+                      </p>
+                    </div>
 
-                <div>
-                  <ImageDropzone
-                    fieldPath={`child_markers.${selectedMarkerIndex}.thumbnail`}
-                    label="Landmark Photo"
-                    height="h-36"
-                    watch={watch}
-                    setValue={setValue}
-                    errors={errors}
-                    setPendingFiles={
-                      setPendingFiles
-                    }
-                    setPreviews={
-                      setPreviews
-                    }
-                    previews={previews}
-                  />
+                    <div>
+                      <ImageDropzone
+                        fieldPath={`child_markers.${selectedMarkerIndex}.thumbnail`}
+                        label="Landmark Photo"
+                        height="h-36"
+                        watch={watch}
+                        setValue={setValue}
+                        errors={errors}
+                        setPendingFiles={
+                          setPendingFiles
+                        }
+                        setPreviews={
+                          setPreviews
+                        }
+                        previews={previews}
+                      />
 
-                  <p className="mt-2 text-[9px] leading-relaxed text-gray-400">
-                    Used for the landmark preview/card. A simple landscape
-                    photo is easiest to recognize at a glance.
-                  </p>
-                </div>
+                      <p className="mt-2 text-[9px] leading-relaxed text-gray-400">
+                        Used for the landmark preview/card. A simple landscape
+                        photo is easiest to recognize at a glance.
+                      </p>
+                    </div>
 
-                <details
-                  className="
+                    <details
+                      className="
                     overflow-hidden
                     rounded-xl
                     border border-gray-200
                     bg-white
                   "
-                >
-                  <summary
-                    className="
+                    >
+                      <summary
+                        className="
                       cursor-pointer
                       list-none
                       px-4 py-3
@@ -6861,29 +6852,29 @@ if (editId) {
                       tracking-wider
                       text-brand-blue
                     "
-                  >
-                    Advanced Location Details
-                  </summary>
+                      >
+                        Advanced Location Details
+                      </summary>
 
-                  <div className="border-t border-gray-100 p-4">
-                    <p className="mb-3 text-[9px] leading-relaxed text-gray-400">
-                      Required for exact map placement. Copy the latitude and
-                      longitude from your mapping source.
-                    </p>
+                      <div className="border-t border-gray-100 p-4">
+                        <p className="mb-3 text-[9px] leading-relaxed text-gray-400">
+                          Required for exact map placement. Copy the latitude and
+                          longitude from your mapping source.
+                        </p>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
-                          Latitude
-                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
+                              Latitude
+                            </label>
 
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          {...register(
-                            `child_markers.${selectedMarkerIndex}.latitude`
-                          )}
-                          className="
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              {...register(
+                                `child_markers.${selectedMarkerIndex}.latitude`
+                              )}
+                              className="
                             w-full rounded-lg
                             border border-gray-200
                             bg-gray-50
@@ -6894,21 +6885,21 @@ if (editId) {
                             focus:border-brand-gold
                             focus:bg-white
                           "
-                        />
-                      </div>
+                            />
+                          </div>
 
-                      <div>
-                        <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
-                          Longitude
-                        </label>
+                          <div>
+                            <label className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400">
+                              Longitude
+                            </label>
 
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          {...register(
-                            `child_markers.${selectedMarkerIndex}.longitude`
-                          )}
-                          className="
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              {...register(
+                                `child_markers.${selectedMarkerIndex}.longitude`
+                              )}
+                              className="
                             w-full rounded-lg
                             border border-gray-200
                             bg-gray-50
@@ -6919,52 +6910,52 @@ if (editId) {
                             focus:border-brand-gold
                             focus:bg-white
                           "
-                        />
+                            />
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                </details>
+                    </details>
 
-                {(errors?.child_markers?.[
-                  selectedMarkerIndex
-                ]?.latitude ||
-                  errors?.child_markers?.[
-                    selectedMarkerIndex
-                  ]?.longitude) && (
-                  <p className="-mt-3 text-[9px] font-medium leading-relaxed text-red-500">
-                    Latitude and longitude are required before this landmark can
-                    be saved.
-                  </p>
-                )}
+                    {(errors?.child_markers?.[
+                      selectedMarkerIndex
+                    ]?.latitude ||
+                      errors?.child_markers?.[
+                        selectedMarkerIndex
+                      ]?.longitude) && (
+                        <p className="-mt-3 text-[9px] font-medium leading-relaxed text-red-500">
+                          Latitude and longitude are required before this landmark can
+                          be saved.
+                        </p>
+                      )}
 
-                <div className="border-t border-gray-100 pt-6">
-                  {selectedMarkerPendingRemoval &&
-                  selectedMarkerId !== null ? (
-                    <div
-                      className="
+                    <div className="border-t border-gray-100 pt-6">
+                      {selectedMarkerPendingRemoval &&
+                        selectedMarkerId !== null ? (
+                        <div
+                          className="
                         rounded-xl
                         border border-amber-200
                         bg-amber-50
                         p-4
                       "
-                    >
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700">
-                        Pending removal
-                      </p>
+                        >
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700">
+                            Pending removal
+                          </p>
 
-                      <p className="mt-1.5 text-[10px] leading-relaxed text-amber-700/80">
-                        This landmark is still on screen and in the database.
-                        It will only be deleted when you save your changes.
-                      </p>
+                          <p className="mt-1.5 text-[10px] leading-relaxed text-amber-700/80">
+                            This landmark is still on screen and in the database.
+                            It will only be deleted when you save your changes.
+                          </p>
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleUndoRemoveLandmark(
-                            selectedMarkerId
-                          )
-                        }
-                        className="
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleUndoRemoveLandmark(
+                                selectedMarkerId
+                              )
+                            }
+                            className="
                           mt-3
                           w-full
                           rounded-lg
@@ -6976,19 +6967,19 @@ if (editId) {
                           hover:bg-amber-100
                           transition-colors
                         "
-                      >
-                        Undo Removal
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleRequestRemoveLandmark(
-                          selectedMarkerIndex
-                        )
-                      }
-                      className="
+                          >
+                            Undo Removal
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleRequestRemoveLandmark(
+                              selectedMarkerIndex
+                            )
+                          }
+                          className="
                         w-full
                         inline-flex
                         items-center
@@ -7004,106 +6995,106 @@ if (editId) {
                         transition-colors
                         hover:bg-red-100
                       "
-                    >
-                      <Trash2 size={15} />
-                      Remove Landmark
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
+                        >
+                          <Trash2 size={15} />
+                          Remove Landmark
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
 
-            {/* PAGE SETTINGS */}
-            {selectedEditorRegion ===
-              'page-settings' && (
-              <div className="space-y-5">
+              {/* PAGE SETTINGS */}
+              {selectedEditorRegion ===
+                'page-settings' && (
+                  <div className="space-y-5">
 
-                <div
-                  className="
+                    <div
+                      className="
                     rounded-xl
                     bg-amber-50
                     border
                     border-amber-100
                     p-4
                   "
-                >
-                  <p
-                    className="
+                    >
+                      <p
+                        className="
                       text-xs
                       font-bold
                       text-amber-700
                     "
-                  >
-                    Technical settings
-                  </p>
+                      >
+                        Technical settings
+                      </p>
 
-                  <p
-                    className="
+                      <p
+                        className="
                       text-[10px]
                       leading-relaxed
                       text-amber-700/70
                       mt-1
                     "
-                  >
-                    These values affect how
-                    the project is identified
-                    and addressed on the
-                    website.
-                  </p>
-                </div>
+                      >
+                        These values affect how
+                        the project is identified
+                        and addressed on the
+                        website.
+                      </p>
+                    </div>
 
-                {/* PROJECT TOWERS */}
-                <div
-                  data-audit-tower-order
-                  className="
+                    {/* PROJECT TOWERS */}
+                    <div
+                      data-audit-tower-order
+                      className="
                     rounded-xl
                     border
                     border-gray-200
                     bg-white
                     overflow-hidden
                   "
-                >
-                  <div
-                    className="
+                    >
+                      <div
+                        className="
                       px-4 py-4
                       border-b
                       border-gray-100
                     "
-                  >
-                    <div
-                      className="
+                      >
+                        <div
+                          className="
                         flex
                         items-start
                         justify-between
                         gap-4
                       "
-                    >
-                      <div>
-                        <p
-                          className="
+                        >
+                          <div>
+                            <p
+                              className="
                             text-sm
                             font-bold
                             text-brand-blue
                           "
-                        >
-                          Project Towers
-                        </p>
+                            >
+                              Project Towers
+                            </p>
 
-                        <p
-                          className="
+                            <p
+                              className="
                             mt-1
                             text-[10px]
                             leading-relaxed
                             text-gray-400
                           "
-                        >
-                          Towers available for amenities
-                          and unit layouts.
-                        </p>
-                      </div>
+                            >
+                              Towers available for amenities
+                              and unit layouts.
+                            </p>
+                          </div>
 
-                      <span
-                        className="
+                          <span
+                            className="
                           shrink-0
                           rounded-full
                           bg-gray-100
@@ -7112,43 +7103,43 @@ if (editId) {
                           font-bold
                           text-gray-500
                         "
-                      >
-                        {towerFields.length}
-                        {' '}
-                        {towerFields.length === 1
-                          ? 'tower'
-                          : 'towers'}
-                      </span>
-                    </div>
-                  </div>
+                          >
+                            {towerFields.length}
+                            {' '}
+                            {towerFields.length === 1
+                              ? 'tower'
+                              : 'towers'}
+                          </span>
+                        </div>
+                      </div>
 
 
-                {/* EXISTING TOWERS */}
-                <div>
-                  {towerFields.length === 0 ? (
-                    <div
-                      className="
+                      {/* EXISTING TOWERS */}
+                      <div>
+                        {towerFields.length === 0 ? (
+                          <div
+                            className="
                         px-4 py-6
                         text-center
                       "
-                    >
-                      <p
-                        className="
+                          >
+                            <p
+                              className="
                           text-xs
                           font-medium
                           text-gray-400
                         "
-                      >
-                        No towers added yet.
-                      </p>
-                    </div>
-                  ) : (
-                    towerFields.map(
-                    (tower, index) => (
-                      <div
-                        key={tower.fieldKey}
-                        data-audit-tower-id={tower.id ?? undefined}
-                        className="
+                            >
+                              No towers added yet.
+                            </p>
+                          </div>
+                        ) : (
+                          towerFields.map(
+                            (tower, index) => (
+                              <div
+                                key={tower.fieldKey}
+                                data-audit-tower-id={tower.id ?? undefined}
+                                className="
                           flex
                           items-center
                           justify-between
@@ -7158,32 +7149,32 @@ if (editId) {
                           border-gray-100
                           last:border-b-0
                         "
-                      >
-                        {editingTowerIndex === index ? (
-                          <div className="flex flex-1 items-center gap-2 min-w-0">
-                            <input
-                              type="text"
-                              value={editingTowerName}
-                              onChange={(e) => {
-                                setEditingTowerName(e.target.value);
+                              >
+                                {editingTowerIndex === index ? (
+                                  <div className="flex flex-1 items-center gap-2 min-w-0">
+                                    <input
+                                      type="text"
+                                      value={editingTowerName}
+                                      onChange={(e) => {
+                                        setEditingTowerName(e.target.value);
 
-                                if (towerRenameError) {
-                                  setTowerRenameError('');
-                                }
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleApplyRenameTower();
-                                }
+                                        if (towerRenameError) {
+                                          setTowerRenameError('');
+                                        }
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          handleApplyRenameTower();
+                                        }
 
-                                if (e.key === 'Escape') {
-                                  e.preventDefault();
-                                  handleCancelRenameTower();
-                                }
-                              }}
-                              autoFocus
-                              className="
+                                        if (e.key === 'Escape') {
+                                          e.preventDefault();
+                                          handleCancelRenameTower();
+                                        }
+                                      }}
+                                      autoFocus
+                                      className="
                                 min-w-0
                                 flex-1
                                 rounded-lg
@@ -7197,12 +7188,12 @@ if (editId) {
                                 ring-2
                                 ring-brand-gold/10
                               "
-                            />
+                                    />
 
-                            <button
-                              type="button"
-                              onClick={handleApplyRenameTower}
-                              className="
+                                    <button
+                                      type="button"
+                                      onClick={handleApplyRenameTower}
+                                      className="
                                 rounded-lg
                                 bg-brand-blue
                                 px-3 py-2
@@ -7210,14 +7201,14 @@ if (editId) {
                                 font-bold
                                 text-white
                               "
-                            >
-                              Apply
-                            </button>
+                                    >
+                                      Apply
+                                    </button>
 
-                            <button
-                              type="button"
-                              onClick={handleCancelRenameTower}
-                              className="
+                                    <button
+                                      type="button"
+                                      onClick={handleCancelRenameTower}
+                                      className="
                                 rounded-lg
                                 px-2 py-2
                                 text-[10px]
@@ -7225,15 +7216,15 @@ if (editId) {
                                 text-gray-400
                                 hover:text-brand-blue
                               "
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="flex items-center gap-3 min-w-0 flex-1">
-                              <div
-                                className="
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                      <div
+                                        className="
                                   flex
                                   h-8 w-8
                                   shrink-0
@@ -7245,38 +7236,38 @@ if (editId) {
                                   font-bold
                                   text-brand-blue
                                 "
-                              >
-                                {index + 1}
-                              </div>
+                                      >
+                                        {index + 1}
+                                      </div>
 
-                              <span
-                                className="
+                                      <span
+                                        className="
                                   truncate
                                   text-sm
                                   font-medium
                                   text-brand-blue
                                 "
-                              >
-                                {watch(`towers.${index}.name`)}
-                              </span>
-                            </div>
+                                      >
+                                        {watch(`towers.${index}.name`)}
+                                      </span>
+                                    </div>
 
-                            <div
-  className="
+                                    <div
+                                      className="
     flex
     items-center
     gap-3
     shrink-0
   "
->
-  <button
-    type="button"
-    onClick={() =>
-      handleStartRenameTower(
-        index
-      )
-    }
-    className="
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleStartRenameTower(
+                                            index
+                                          )
+                                        }
+                                        className="
       text-[9px]
       font-bold
       uppercase
@@ -7285,21 +7276,21 @@ if (editId) {
       hover:text-brand-blue
       transition-colors
     "
-  >
-    Rename
-  </button>
+                                      >
+                                        Rename
+                                      </button>
 
-  <button
-    type="button"
-    disabled={
-      isCheckingTowerUsage
-    }
-    onClick={() =>
-      handleRequestDeleteTower(
-        index
-      )
-    }
-    className="
+                                      <button
+                                        type="button"
+                                        disabled={
+                                          isCheckingTowerUsage
+                                        }
+                                        onClick={() =>
+                                          handleRequestDeleteTower(
+                                            index
+                                          )
+                                        }
+                                        className="
       text-[9px]
       font-bold
       uppercase
@@ -7309,44 +7300,44 @@ if (editId) {
       disabled:opacity-40
       transition-colors
     "
-  >
-    Delete
-  </button>
-</div>
-                          </>
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            )
+                          )
                         )}
                       </div>
-                    )
-                  )
-                  )}
-                </div>
 
-                {towerRenameError && (
-                <div
-                  className="
+                      {towerRenameError && (
+                        <div
+                          className="
                     border-t
                     border-red-100
                     bg-red-50
                     px-4 py-2
                   "
-                >
-                  <p className="text-[10px] font-medium text-red-500">
-                    {towerRenameError}
-                  </p>
-                </div>
-              )}
+                        >
+                          <p className="text-[10px] font-medium text-red-500">
+                            {towerRenameError}
+                          </p>
+                        </div>
+                      )}
 
-  {/* ADD TOWER */}
-  <div
-    className="
+                      {/* ADD TOWER */}
+                      <div
+                        className="
       border-t
       border-gray-100
       bg-gray-50/60
       p-4
     "
-  >
-    <label
-      className="
+                      >
+                        <label
+                          className="
         block
         text-[10px]
         font-bold
@@ -7355,36 +7346,36 @@ if (editId) {
         text-gray-500
         mb-2
       "
-    >
-      Add New Tower
-    </label>
+                        >
+                          Add New Tower
+                        </label>
 
-    <div
-      className="
+                        <div
+                          className="
         flex
         gap-2
       "
-    >
-      <input
-        type="text"
-        value={newTowerName}
-        onChange={(e) => {
-          setNewTowerName(
-            e.target.value
-          );
+                        >
+                          <input
+                            type="text"
+                            value={newTowerName}
+                            onChange={(e) => {
+                              setNewTowerName(
+                                e.target.value
+                              );
 
-          if (towerError) {
-            setTowerError('');
-          }
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            handleAddTower();
-          }
-        }}
-        placeholder="e.g. Tower D"
-        className="
+                              if (towerError) {
+                                setTowerError('');
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddTower();
+                              }
+                            }}
+                            placeholder="e.g. Tower D"
+                            className="
           min-w-0
           flex-1
           rounded-xl
@@ -7400,14 +7391,14 @@ if (editId) {
           focus:ring-2
           focus:ring-brand-gold/10
         "
-      />
+                          />
 
-      <button
-        type="button"
-        onClick={
-          handleAddTower
-        }
-        className="
+                          <button
+                            type="button"
+                            onClick={
+                              handleAddTower
+                            }
+                            className="
           inline-flex
           shrink-0
           items-center
@@ -7422,44 +7413,44 @@ if (editId) {
           transition-colors
           hover:bg-brand-blue/90
         "
-      >
-        <PlusCircle size={14} />
-        Add
-      </button>
-    </div>
+                          >
+                            <PlusCircle size={14} />
+                            Add
+                          </button>
+                        </div>
 
-    {towerError && (
-      <p
-        className="
+                        {towerError && (
+                          <p
+                            className="
           mt-2
           text-[10px]
           font-medium
           text-red-500
         "
-      >
-        {towerError}
-      </p>
-    )}
+                          >
+                            {towerError}
+                          </p>
+                        )}
 
-    <p
-      className="
+                        <p
+                          className="
         mt-2
         text-[10px]
         leading-relaxed
         text-gray-400
       "
-    >
-      New towers become available
-      after you save the project.
-    </p>
-  </div>
-</div>
-{/* DELETE TOWER MODAL */}
-{towerToDelete &&
-  towerUsage && (
+                        >
+                          New towers become available
+                          after you save the project.
+                        </p>
+                      </div>
+                    </div>
+                    {/* DELETE TOWER MODAL */}
+                    {towerToDelete &&
+                      towerUsage && (
 
-  <div
-    className="
+                        <div
+                          className="
       fixed
       inset-0
       z-[200]
@@ -7470,16 +7461,16 @@ if (editId) {
       backdrop-blur-sm
       p-4
     "
-    onMouseDown={
-      handleCloseTowerDelete
-    }
-  >
+                          onMouseDown={
+                            handleCloseTowerDelete
+                          }
+                        >
 
-    <div
-      onMouseDown={(e) =>
-        e.stopPropagation()
-      }
-      className="
+                          <div
+                            onMouseDown={(e) =>
+                              e.stopPropagation()
+                            }
+                            className="
         w-full
         max-w-md
         overflow-hidden
@@ -7487,141 +7478,141 @@ if (editId) {
         bg-white
         shadow-2xl
       "
-    >
+                          >
 
-      {/* HEADER */}
-      <div
-        className="
+                            {/* HEADER */}
+                            <div
+                              className="
           border-b
           border-gray-100
           px-6 py-5
         "
-      >
-        <p
-          className="
+                            >
+                              <p
+                                className="
             text-[10px]
             font-bold
             uppercase
             tracking-widest
             text-red-500
           "
-        >
-          Delete Tower
-        </p>
+                              >
+                                Delete Tower
+                              </p>
 
-        <h3
-          className="
+                              <h3
+                                className="
             mt-1
             text-xl
             font-semibold
             text-brand-blue
           "
-        >
-          Delete{' '}
-          {towerToDelete.name}?
-        </h3>
-      </div>
+                              >
+                                Delete{' '}
+                                {towerToDelete.name}?
+                              </h3>
+                            </div>
 
 
-      <div
-        className="
+                            <div
+                              className="
           space-y-5
           px-6 py-5
         "
-      >
+                            >
 
-        {/* USAGE SUMMARY */}
-        {towerUsage.amenityCount ===
-          0 &&
-        towerUsage.layoutCount ===
-          0 ? (
+                              {/* USAGE SUMMARY */}
+                              {towerUsage.amenityCount ===
+                                0 &&
+                                towerUsage.layoutCount ===
+                                0 ? (
 
-          <div
-            className="
+                                <div
+                                  className="
               rounded-xl
               bg-gray-50
               p-4
             "
-          >
-            <p
-              className="
+                                >
+                                  <p
+                                    className="
                 text-sm
                 leading-relaxed
                 text-gray-500
               "
-            >
-              This tower is not
-              currently used by any
-              amenities or unit
-              layouts.
-            </p>
-          </div>
+                                  >
+                                    This tower is not
+                                    currently used by any
+                                    amenities or unit
+                                    layouts.
+                                  </p>
+                                </div>
 
-        ) : (
+                              ) : (
 
-          <div
-            className="
+                                <div
+                                  className="
               rounded-xl
               border
               border-amber-200
               bg-amber-50
               p-4
             "
-          >
-            <p
-              className="
+                                >
+                                  <p
+                                    className="
                 text-xs
                 font-bold
                 text-amber-800
               "
-            >
-              This tower is currently
-              in use.
-            </p>
+                                  >
+                                    This tower is currently
+                                    in use.
+                                  </p>
 
-            <div
-              className="
+                                  <div
+                                    className="
                 mt-3
                 space-y-1
                 text-sm
                 text-amber-700
               "
-            >
-              <p>
-                {
-                  towerUsage.amenityCount
-                }{' '}
-                {
-                  towerUsage.amenityCount ===
-                  1
-                    ? 'amenity'
-                    : 'amenities'
-                }
-              </p>
+                                  >
+                                    <p>
+                                      {
+                                        towerUsage.amenityCount
+                                      }{' '}
+                                      {
+                                        towerUsage.amenityCount ===
+                                          1
+                                          ? 'amenity'
+                                          : 'amenities'
+                                      }
+                                    </p>
 
-              <p>
-                {
-                  towerUsage.layoutCount
-                }{' '}
-                {
-                  towerUsage.layoutCount ===
-                  1
-                    ? 'unit layout'
-                    : 'unit layouts'
-                }
-              </p>
-            </div>
-          </div>
-        )}
+                                    <p>
+                                      {
+                                        towerUsage.layoutCount
+                                      }{' '}
+                                      {
+                                        towerUsage.layoutCount ===
+                                          1
+                                          ? 'unit layout'
+                                          : 'unit layouts'
+                                      }
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
 
 
-        {/* AMENITY REASSIGNMENT */}
-        {towerUsage.amenityCount >
-          0 && (
+                              {/* AMENITY REASSIGNMENT */}
+                              {towerUsage.amenityCount >
+                                0 && (
 
-          <div>
-            <label
-              className="
+                                  <div>
+                                    <label
+                                      className="
                 mb-2
                 block
                 text-[10px]
@@ -7630,20 +7621,20 @@ if (editId) {
                 tracking-widest
                 text-gray-500
               "
-            >
-              Move Amenities To
-            </label>
+                                    >
+                                      Move Amenities To
+                                    </label>
 
-            <select
-              value={
-                deleteAmenityTarget
-              }
-              onChange={(e) =>
-                setDeleteAmenityTarget(
-                  e.target.value
-                )
-              }
-              className="
+                                    <select
+                                      value={
+                                        deleteAmenityTarget
+                                      }
+                                      onChange={(e) =>
+                                        setDeleteAmenityTarget(
+                                          e.target.value
+                                        )
+                                      }
+                                      className="
                 w-full
                 rounded-xl
                 border
@@ -7655,41 +7646,41 @@ if (editId) {
                 outline-none
                 focus:border-brand-gold
               "
-            >
-              <option
-                value="__shared__"
-              >
-                All Towers / Shared
-              </option>
+                                    >
+                                      <option
+                                        value="__shared__"
+                                      >
+                                        All Towers / Shared
+                                      </option>
 
-              {towerUsage.otherTowers.map(
-                (tower) => (
-                  <option
-                    key={
-                      tower.id
-                    }
-                    value={
-                      tower.name
-                    }
-                  >
-                    {
-                      tower.name
-                    }
-                  </option>
-                )
-              )}
-            </select>
-          </div>
-        )}
+                                      {towerUsage.otherTowers.map(
+                                        (tower) => (
+                                          <option
+                                            key={
+                                              tower.id
+                                            }
+                                            value={
+                                              tower.name
+                                            }
+                                          >
+                                            {
+                                              tower.name
+                                            }
+                                          </option>
+                                        )
+                                      )}
+                                    </select>
+                                  </div>
+                                )}
 
 
-        {/* UNIT LAYOUT REASSIGNMENT */}
-        {towerUsage.layoutCount >
-          0 && (
+                              {/* UNIT LAYOUT REASSIGNMENT */}
+                              {towerUsage.layoutCount >
+                                0 && (
 
-          <div>
-            <label
-              className="
+                                  <div>
+                                    <label
+                                      className="
                 mb-2
                 block
                 text-[10px]
@@ -7698,23 +7689,23 @@ if (editId) {
                 tracking-widest
                 text-gray-500
               "
-            >
-              Move Unit Layouts To
-            </label>
+                                    >
+                                      Move Unit Layouts To
+                                    </label>
 
-            {towerUsage.otherTowers
-              .length > 0 ? (
+                                    {towerUsage.otherTowers
+                                      .length > 0 ? (
 
-              <select
-                value={
-                  deleteLayoutTarget
-                }
-                onChange={(e) =>
-                  setDeleteLayoutTarget(
-                    e.target.value
-                  )
-                }
-                className="
+                                      <select
+                                        value={
+                                          deleteLayoutTarget
+                                        }
+                                        onChange={(e) =>
+                                          setDeleteLayoutTarget(
+                                            e.target.value
+                                          )
+                                        }
+                                        className="
                   w-full
                   rounded-xl
                   border
@@ -7726,78 +7717,78 @@ if (editId) {
                   outline-none
                   focus:border-brand-gold
                 "
-              >
-                <option value="">
-                  Select replacement tower
-                </option>
+                                      >
+                                        <option value="">
+                                          Select replacement tower
+                                        </option>
 
-                {towerUsage.otherTowers.map(
-                  (tower) => (
-                    <option
-                      key={
-                        tower.id
-                      }
-                      value={
-                        tower.name
-                      }
-                    >
-                      {
-                        tower.name
-                      }
-                    </option>
-                  )
-                )}
-              </select>
+                                        {towerUsage.otherTowers.map(
+                                          (tower) => (
+                                            <option
+                                              key={
+                                                tower.id
+                                              }
+                                              value={
+                                                tower.name
+                                              }
+                                            >
+                                              {
+                                                tower.name
+                                              }
+                                            </option>
+                                          )
+                                        )}
+                                      </select>
 
-            ) : (
+                                    ) : (
 
-              <div
-                className="
+                                      <div
+                                        className="
                   rounded-xl
                   border
                   border-red-200
                   bg-red-50
                   p-3
                 "
-              >
-                <p
-                  className="
+                                      >
+                                        <p
+                                          className="
                     text-xs
                     leading-relaxed
                     text-red-600
                   "
-                >
-                  This is the only
-                  project tower.
-                  Add another tower
-                  before deleting it
-                  because unit layouts
-                  require a tower.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
+                                        >
+                                          This is the only
+                                          project tower.
+                                          Add another tower
+                                          before deleting it
+                                          because unit layouts
+                                          require a tower.
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
 
 
-        {towerDeleteError && (
-          <p
-            className="
+                              {towerDeleteError && (
+                                <p
+                                  className="
               text-xs
               font-medium
               text-red-500
             "
-          >
-            {towerDeleteError}
-          </p>
-        )}
+                                >
+                                  {towerDeleteError}
+                                </p>
+                              )}
 
-      </div>
+                            </div>
 
 
-      {/* ACTIONS */}
-      <div
-        className="
+                            {/* ACTIONS */}
+                            <div
+                              className="
           flex
           justify-end
           gap-3
@@ -7806,16 +7797,16 @@ if (editId) {
           bg-gray-50
           px-6 py-4
         "
-      >
-        <button
-          type="button"
-          disabled={
-            isDeletingTower
-          }
-          onClick={
-            handleCloseTowerDelete
-          }
-          className="
+                            >
+                              <button
+                                type="button"
+                                disabled={
+                                  isDeletingTower
+                                }
+                                onClick={
+                                  handleCloseTowerDelete
+                                }
+                                className="
             rounded-lg
             px-4 py-2.5
             text-xs
@@ -7823,29 +7814,29 @@ if (editId) {
             text-gray-500
             hover:bg-gray-100
           "
-        >
-          Cancel
-        </button>
+                              >
+                                Cancel
+                              </button>
 
-        <button
-          type="button"
-          disabled={
-            isDeletingTower ||
-            (
-              towerUsage.layoutCount >
-                0 &&
-              (
-                !deleteLayoutTarget ||
-                towerUsage
-                  .otherTowers
-                  .length === 0
-              )
-            )
-          }
-          onClick={
-            handleConfirmDeleteTower
-          }
-          className="
+                              <button
+                                type="button"
+                                disabled={
+                                  isDeletingTower ||
+                                  (
+                                    towerUsage.layoutCount >
+                                    0 &&
+                                    (
+                                      !deleteLayoutTarget ||
+                                      towerUsage
+                                        .otherTowers
+                                        .length === 0
+                                    )
+                                  )
+                                }
+                                onClick={
+                                  handleConfirmDeleteTower
+                                }
+                                className="
             inline-flex
             min-w-[120px]
             items-center
@@ -7861,41 +7852,41 @@ if (editId) {
             disabled:cursor-not-allowed
             disabled:opacity-40
           "
-        >
-          {isDeletingTower ? (
-            <>
-              <Loader2
-                size={14}
-                className="
+                              >
+                                {isDeletingTower ? (
+                                  <>
+                                    <Loader2
+                                      size={14}
+                                      className="
                   animate-spin
                 "
-              />
+                                    />
 
-              Deleting...
-            </>
-          ) : (
-            <>
-              <Trash2
-                size={14}
-              />
+                                    Deleting...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Trash2
+                                      size={14}
+                                    />
 
-              {towerUsage.amenityCount >
-                0 ||
-              towerUsage.layoutCount >
-                0
-                ? 'Move & Delete'
-                : 'Delete Tower'}
-            </>
-          )}
-        </button>
-      </div>
+                                    {towerUsage.amenityCount >
+                                      0 ||
+                                      towerUsage.layoutCount >
+                                      0
+                                      ? 'Move & Delete'
+                                      : 'Delete Tower'}
+                                  </>
+                                )}
+                              </button>
+                            </div>
 
-    </div>
-  </div>
-)}
-                <div>
-                  <label
-                    className="
+                          </div>
+                        </div>
+                      )}
+                    <div>
+                      <label
+                        className="
                       block
                       text-[10px]
                       font-bold
@@ -7904,13 +7895,13 @@ if (editId) {
                       text-gray-500
                       mb-2
                     "
-                  >
-                    URL Slug
-                  </label>
+                      >
+                        URL Slug
+                      </label>
 
-                  <input
-                    {...register('slug')}
-                    className="
+                      <input
+                        {...register('slug')}
+                        className="
                       w-full
                       border
                       border-gray-200
@@ -7921,25 +7912,25 @@ if (editId) {
                       outline-none
                       focus:border-brand-gold
                     "
-                  />
+                      />
 
-                  {errors.slug && (
-                    <p
-                      className="
+                      {errors.slug && (
+                        <p
+                          className="
                         text-xs
                         text-red-500
                         mt-1
                       "
-                    >
-                      {errors.slug.message}
-                    </p>
-                  )}
-                </div>
+                        >
+                          {errors.slug.message}
+                        </p>
+                      )}
+                    </div>
 
 
-                <div>
-                  <label
-                    className="
+                    <div>
+                      <label
+                        className="
                       block
                       text-[10px]
                       font-bold
@@ -7948,15 +7939,15 @@ if (editId) {
                       text-gray-500
                       mb-2
                     "
-                  >
-                    Project Status
-                  </label>
+                      >
+                        Project Status
+                      </label>
 
-                  <select
-                    {...register(
-                      'status'
-                    )}
-                    className="
+                      <select
+                        {...register(
+                          'status'
+                        )}
+                        className="
                       w-full
                       border
                       border-gray-200
@@ -7968,67 +7959,67 @@ if (editId) {
                       outline-none
                       focus:border-brand-gold
                     "
-                  >
-                    <option value="">
-                      Select status
-                    </option>
+                      >
+                        <option value="">
+                          Select status
+                        </option>
 
-                    <option
-                      value="Pre-Selling"
-                    >
-                      Pre-Selling
-                    </option>
+                        <option
+                          value="Pre-Selling"
+                        >
+                          Pre-Selling
+                        </option>
 
-                    <option
-                      value="Ready for Occupancy"
-                    >
-                      Ready for Occupancy
-                    </option>
-                  </select>
-                </div>
+                        <option
+                          value="Ready for Occupancy"
+                        >
+                          Ready for Occupancy
+                        </option>
+                      </select>
+                    </div>
 
-              </div>
-            )}
+                  </div>
+                )}
 
-            {/* NOTHING SELECTED */}
-            {!selectedEditorRegion && (
-              <div
-                className="
+              {/* NOTHING SELECTED */}
+              {!selectedEditorRegion && (
+                <div
+                  className="
                   py-12
                   text-center
                 "
-              >
-                <p
-                  className="
+                >
+                  <p
+                    className="
                     text-sm
                     font-bold
                     text-brand-blue
                   "
-                >
-                  Select something to edit
-                </p>
+                  >
+                    Select something to edit
+                  </p>
 
-                <p
-                  className="
+                  <p
+                    className="
                     text-xs
                     text-gray-400
                     mt-2
                   "
-                >
-                  Hover over editable
-                  content in the preview
-                  and click it.
-                </p>
-              </div>
-            )}
+                  >
+                    Hover over editable
+                    content in the preview
+                    and click it.
+                  </p>
+                </div>
+              )}
 
-          </div>
+            </div>
 
-        </aside>
+          </aside>
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
   return null;
 }

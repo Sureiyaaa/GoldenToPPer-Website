@@ -80,8 +80,8 @@ function getOrderedTourTowers(project: any): string[] {
 
   const configuredOrder: string[] = Array.isArray(project?.virtual_tour_tower_order)
     ? project.virtual_tour_tower_order
-        .map((name: any) => String(name || '').trim())
-        .filter(Boolean)
+      .map((name: any) => String(name || '').trim())
+      .filter(Boolean)
     : [];
 
   const actualByKey = new Map(
@@ -129,7 +129,7 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
   const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
   const [isTowerDropdownOpen, setIsTowerDropdownOpen] = useState(false);     // NEW
   const [isUnitDropdownOpen, setIsUnitDropdownOpen] = useState(false);
-  
+
   // Responsive thumbnail count (3 on mobile, 6 on desktop)
   const [maxVisible, setMaxVisible] = useState(6);
 
@@ -329,53 +329,53 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
 
                           <div className="flex flex-col sm:flex-row gap-3 w-full">
 
-                        {/* 2. SECONDARY ACTION (360 Tour / Coming Soon) */}
-                        {hasTour ? (
-                          <button
-                            type="button"
-                            onClick={() => activateTourProject(project)}
-                            className="group flex-1 flex items-center justify-center gap-3 bg-transparent border border-gray-300 px-4 py-3.5 rounded-sm hover:border-brand-gold hover:bg-brand-gold/5 transition-all duration-300 outline-none cursor-pointer"
-                            aria-label="Open 360 degree virtual tour"
-                          >
-                            <Move3d
-                              size={14}
-                              className="text-brand-blue group-hover:text-brand-gold transition-colors"
-                            />
+                            {/* 2. SECONDARY ACTION (360 Tour / Coming Soon) */}
+                            {hasTour ? (
+                              <button
+                                type="button"
+                                onClick={() => activateTourProject(project)}
+                                className="group flex-1 flex items-center justify-center gap-3 bg-transparent border border-gray-300 px-4 py-3.5 rounded-sm hover:border-brand-gold hover:bg-brand-gold/5 transition-all duration-300 outline-none cursor-pointer"
+                                aria-label="Open 360 degree virtual tour"
+                              >
+                                <Move3d
+                                  size={14}
+                                  className="text-brand-blue group-hover:text-brand-gold transition-colors"
+                                />
 
-                            <span className="text-[10px] tracking-[0.2em] font-bold text-brand-blue uppercase group-hover:text-brand-gold transition-colors">
-                              360° Tour
-                            </span>
-                          </button>
-                        ) : (
-                          <div className="w-full sm:flex-1 flex items-center justify-center gap-2.5 py-3.5">
-                            <Move3d
-                              size={14}
-                              strokeWidth={1.8}
-                              className="text-gray-400"
-                            />
+                                <span className="text-[10px] tracking-[0.2em] font-bold text-brand-blue uppercase group-hover:text-brand-gold transition-colors">
+                                  360° Tour
+                                </span>
+                              </button>
+                            ) : (
+                              <div className="w-full sm:flex-1 flex items-center justify-center gap-2.5 py-3.5">
+                                <Move3d
+                                  size={14}
+                                  strokeWidth={1.8}
+                                  className="text-gray-400"
+                                />
 
-                            <span className="text-[10px] tracking-[0.2em] font-bold text-gray-400 uppercase">
-                              Coming Soon
-                            </span>
+                                <span className="text-[10px] tracking-[0.2em] font-bold text-gray-400 uppercase">
+                                  Coming Soon
+                                </span>
+                              </div>
+                            )}
+
+                            {/* 3. Tertiary Action (Details) */}
+                            <Link
+                              href={`/projects/${project.slug?.replace(/^\//, '')}`}
+                              className="group flex-1 flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 px-4 py-3.5 rounded-sm transition-all duration-300 outline-none"
+                            >
+                              <span className="text-[10px] tracking-[0.2em] font-bold text-gray-500 uppercase group-hover:text-brand-blue transition-colors">
+                                Details
+                              </span>
+
+                              <ArrowRight
+                                size={14}
+                                className="text-gray-400 group-hover:text-brand-blue transform group-hover:translate-x-1 transition-all duration-300"
+                              />
+                            </Link>
+
                           </div>
-                        )}
-
-                        {/* 3. Tertiary Action (Details) */}
-                        <Link
-                          href={`/projects/${project.slug?.replace(/^\//, '')}`}
-                          className="group flex-1 flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 px-4 py-3.5 rounded-sm transition-all duration-300 outline-none"
-                        >
-                          <span className="text-[10px] tracking-[0.2em] font-bold text-gray-500 uppercase group-hover:text-brand-blue transition-colors">
-                            Details
-                          </span>
-
-                          <ArrowRight
-                            size={14}
-                            className="text-gray-400 group-hover:text-brand-blue transform group-hover:translate-x-1 transition-all duration-300"
-                          />
-                        </Link>
-
-                      </div>
                         </div>
                       </div>
                     </div>
@@ -410,10 +410,10 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
 
           return (
             <div className="fixed inset-0 z-[9999] bg-black animate-in fade-in duration-500 flex flex-col overflow-hidden select-none">
-              
+
               {/* TOP BAR: Header + 3 Dropdowns (Project -> Tower -> Unit) */}
               <div className="absolute top-0 left-0 w-full bg-gradient-to-b from-black/90 via-black/50 to-transparent z-50 p-3.5 sm:p-4 md:p-6 pointer-events-none flex flex-col gap-2.5">
-                
+
                 {/* Row 1: Badge + Close Button */}
                 <div className="w-full flex items-center justify-between">
                   <div className="flex items-center gap-1.5 px-3 py-1 md:px-4 md:py-1.5 bg-black/80 backdrop-blur-md rounded-full border border-[#D4AF37]/30 shadow-lg pointer-events-auto">
@@ -446,7 +446,7 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
 
                 {/* Row 2: Responsive 3-Dropdown Bar (Project -> Tower -> Unit) */}
                 <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto w-full max-w-sm sm:max-w-xl">
-                  
+
                   {/* 1. PROJECT DROPDOWN */}
                   <div className="relative flex-1 min-w-0">
                     <button
@@ -480,9 +480,8 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
                                 key={p.id}
                                 type="button"
                                 onClick={() => activateTourProject(p)}
-                                className={`w-full px-3 py-2 text-left text-xs font-medium font-sans flex items-center justify-between cursor-pointer ${
-                                  isSelected ? 'bg-white/15 text-[#d4b26f]' : 'text-white/85 hover:bg-white/10 hover:text-white'
-                                }`}
+                                className={`w-full px-3 py-2 text-left text-xs font-medium font-sans flex items-center justify-between cursor-pointer ${isSelected ? 'bg-white/15 text-[#d4b26f]' : 'text-white/85 hover:bg-white/10 hover:text-white'
+                                  }`}
                               >
                                 <span className="truncate">{p.name || p.title}</span>
                                 {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#d4b26f] shrink-0" />}
@@ -531,9 +530,8 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
                                   setActiveRoomIndex(0);
                                   setIsTowerDropdownOpen(false);
                                 }}
-                                className={`w-full px-3 py-2 text-left text-xs font-medium font-sans flex items-center justify-between cursor-pointer ${
-                                  isSelected ? 'bg-white/15 text-[#d4b26f]' : 'text-white/85 hover:bg-white/10 hover:text-white'
-                                }`}
+                                className={`w-full px-3 py-2 text-left text-xs font-medium font-sans flex items-center justify-between cursor-pointer ${isSelected ? 'bg-white/15 text-[#d4b26f]' : 'text-white/85 hover:bg-white/10 hover:text-white'
+                                  }`}
                               >
                                 <span className="truncate">{tower}</span>
                                 {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#d4b26f] shrink-0" />}
@@ -581,9 +579,8 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
                                   setActiveRoomIndex(0);
                                   setIsUnitDropdownOpen(false);
                                 }}
-                                className={`w-full px-3 py-2 text-left text-xs font-medium font-sans flex items-center justify-between cursor-pointer ${
-                                  isSelected ? 'bg-white/15 text-[#d4b26f]' : 'text-white/85 hover:bg-white/10 hover:text-white'
-                                }`}
+                                className={`w-full px-3 py-2 text-left text-xs font-medium font-sans flex items-center justify-between cursor-pointer ${isSelected ? 'bg-white/15 text-[#d4b26f]' : 'text-white/85 hover:bg-white/10 hover:text-white'
+                                  }`}
                               >
                                 <span className="truncate">{u.unit_name || u.title || 'Standard Unit'}</span>
                                 {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#d4b26f] shrink-0" />}
@@ -614,15 +611,15 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
 
               {/* BOTTOM THUMBNAIL STRIP (View Areas Carousel) */}
               {currentAreas.length > 1 && (() => {
-                const startIndex = currentAreas.length <= maxVisible 
-                  ? 0 
+                const startIndex = currentAreas.length <= maxVisible
+                  ? 0
                   : Math.max(0, Math.min(activeRoomIndex - (maxVisible - 1), currentAreas.length - maxVisible));
-                
+
                 const visibleAreas = currentAreas.slice(startIndex, startIndex + maxVisible);
 
                 return (
                   <div className="absolute bottom-16 md:bottom-8 left-1/2 -translate-x-1/2 z-40 pointer-events-auto flex items-center gap-1 sm:gap-2 bg-black/65 hover:bg-black/75 backdrop-blur-2xl px-2.5 py-2 sm:px-4 sm:py-3 rounded-[22px] md:rounded-[28px] border border-white/15 shadow-[0_12px_40px_rgba(0,0,0,0.6)] max-w-[96vw]">
-                    
+
                     {/* Left Arrow */}
                     <button
                       type="button"
@@ -647,21 +644,19 @@ export default function ProjectsClient({ initialProjects }: { initialProjects: a
                             className="flex flex-col items-center gap-1 shrink-0 cursor-pointer group outline-none transition-transform duration-200"
                           >
                             <span
-                              className={`text-center font-sans tracking-tight transition-all duration-200 max-w-[62px] sm:max-w-[72px] md:max-w-[85px] truncate ${
-                                isSelected
+                              className={`text-center font-sans tracking-tight transition-all duration-200 max-w-[62px] sm:max-w-[72px] md:max-w-[85px] truncate ${isSelected
                                   ? 'text-white text-[11px] sm:text-[13px] md:text-[15px] font-semibold scale-105'
                                   : 'text-white/65 text-[9px] sm:text-[11px] md:text-[12px] font-normal group-hover:text-white'
-                              }`}
+                                }`}
                             >
                               {area.title || `Area ${originalIndex + 1}`}
                             </span>
 
                             <div
-                              className={`relative w-14 h-10 sm:w-16 sm:h-12 md:w-20 md:h-14 rounded-lg md:rounded-xl overflow-hidden transition-all duration-200 ${
-                                isSelected
+                              className={`relative w-14 h-10 sm:w-16 sm:h-12 md:w-20 md:h-14 rounded-lg md:rounded-xl overflow-hidden transition-all duration-200 ${isSelected
                                   ? 'border-2 border-[#d4b26f] shadow-[0_0_12px_rgba(212,178,111,0.5)] scale-105'
                                   : 'border border-white/20 opacity-70 group-hover:opacity-100 group-hover:border-white/50'
-                              }`}
+                                }`}
                             >
                               <img
                                 src={area.image}
