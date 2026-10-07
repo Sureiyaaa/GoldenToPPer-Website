@@ -15,9 +15,10 @@ import { z } from 'zod';
 import {
   LogOut, Building2, Landmark, LayoutDashboard, Search, Filter,
   Edit2, Archive, Plus, Loader2, Eye, EyeOff, History, Move3d, Newspaper, House,
-  Bell, CheckCircle2, X, Mail, MailOpen, CornerUpLeft, Menu, UserCircle2, Megaphone, Settings, ShieldAlert, AlertCircle, BookOpen, Upload, ChevronDown, GripVertical, ArrowUpRight
+  Bell, CheckCircle2, X, Menu, UserCircle2, Megaphone, Settings, ShieldAlert, AlertCircle, BookOpen, Upload, ChevronDown, GripVertical, ArrowUpRight
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
+import { CustomerInboxProvider, CustomerInboxManager, NotificationCenter } from '@/app/admin/components/customer-inbox';
 import { toggleActiveStatus, archiveRecord } from '@/app/actions/updates';
 import {
   fetchAdminProjectsList,
@@ -38,12 +39,10 @@ import {
   fetchRecentAuditLogsAction,
   fetchDetailedAuditLogsAction,
   deleteAuditLogAction,
-  fetchNotificationsAction,
   fetchWebsiteSectionStatesAction,
   saveWebsiteSectionStatesAction,
-  toggleNotificationReadAction
 } from '@/app/actions/admin_fetchers';
-import { getCustomSession, getCurrentUser, logoutAction, getRBACProfile } from '@/app/actions/auth';
+import { getCustomSession, logoutAction, getRBACProfile } from '@/app/actions/auth';
 
 
 // --- SCHEMAS & TYPES ---
@@ -81,220 +80,6 @@ const formatDateTime = (dateString: string) => {
   const date = new Date(dateString);
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 };
-
-// ==========================================
-// NOTIFICATION CENTER COMPONENT
-// ==========================================
-function NotificationCenter() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedMessage, setSelectedMessage] = useState<any | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const supabase = createClient();
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const fetchNotifications = async () => {
-    setIsLoading(true);
-    const user = await getCurrentUser();
-    if (!user) return;
-
-    try {
-      // ✅ SECURE SERVER ACTION FETCH (Bypasses RLS)
-      const data = await fetchNotificationsAction(user.id);
-      setNotifications(data || []);
-    } catch (error) {
-      console.error("Error fetching notifications:", error);
-    }
-    setIsLoading(false);
-  };
-
-  useEffect(() => {
-    fetchNotifications();
-
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'inquire' }, () => fetchNotifications())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'contact' }, () => fetchNotifications())
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [supabase]);
-
-  const unreadCount = notifications.filter(n => !n.is_read).length;
-
-  const toggleReadStatus = async (e: React.MouseEvent, notif: any) => {
-    e.stopPropagation();
-    const newStatus = !notif.is_read;
-    const user = await getCurrentUser();
-    if (!user) return;
-
-    setNotifications(prev => prev.map(n => n.id === notif.id && n.type === notif.type ? { ...n, is_read: newStatus } : n));
-    if (selectedMessage && selectedMessage.id === notif.id && selectedMessage.type === notif.type) {
-      setSelectedMessage({ ...selectedMessage, is_read: newStatus });
-    }
-
-    // ✅ SECURE SERVER ACTION UPDATE (Bypasses RLS)
-    await toggleNotificationReadAction(user.id, notif.id, notif.type, newStatus);
-  };
-
-  const handleOpenMessage = async (notif: any) => {
-    setSelectedMessage(notif);
-    setIsOpen(false);
-
-    if (!notif.is_read) {
-      const user = await getCurrentUser();
-      if (!user) return;
-
-      setNotifications(prev => prev.map(n => n.id === notif.id && n.type === notif.type ? { ...n, is_read: true } : n));
-      setSelectedMessage({ ...notif, is_read: true });
-
-      // ✅ SECURE SERVER ACTION UPDATE (Bypasses RLS)
-      await toggleNotificationReadAction(user.id, notif.id, notif.type, true);
-    }
-  };
-
-  return (
-    <>
-      <div className="relative" ref={dropdownRef}>
-        <button
-          onClick={() => { setIsOpen(!isOpen); if (!isOpen) fetchNotifications(); }}
-          className="relative p-2.5 text-brand-blue hover:bg-[#f8f9fa] hover:shadow-sm rounded-full transition-all outline-none"
-        >
-          <Bell size={22} />
-          {unreadCount > 0 && (
-            <span className="absolute top-1.5 right-1.5 flex items-center justify-center w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full border-2 border-white">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          )}
-        </button>
-
-        {isOpen && (
-          <div className="absolute right-0 mt-3 w-[300px] sm:w-[400px] bg-white rounded-2xl shadow-2xl shadow-black/10 border border-gray-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-[#f8f9fa]">
-              <h3 className="text-xs font-bold text-brand-blue tracking-widest uppercase">Inbox</h3>
-              {unreadCount > 0 && <span className="text-[10px] font-bold px-2 py-0.5 bg-brand-gold/10 text-brand-gold rounded-full">{unreadCount} Unread</span>}
-            </div>
-
-            <div className="max-h-[400px] overflow-y-auto">
-              {isLoading ? (
-                <div className="flex justify-center items-center p-8"><Loader2 className="animate-spin text-brand-blue" size={24} /></div>
-              ) : notifications.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-10 text-gray-400">
-                  <CheckCircle2 size={36} className="mb-3 text-green-400/50" />
-                  <p className="text-sm font-medium text-brand-blue">Inbox Empty</p>
-                  <p className="text-xs mt-1">No messages recorded yet.</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-50 flex flex-col">
-                  {notifications.map((notif) => (
-                    <div
-                      key={`${notif.type}-${notif.id}`}
-                      onClick={() => handleOpenMessage(notif)}
-                      className={`w-full text-left p-4 cursor-pointer transition-colors flex gap-3 sm:gap-4 group relative ${!notif.is_read ? 'bg-white hover:bg-gray-50' : 'bg-gray-50/50 hover:bg-gray-100'}`}
-                    >
-                      <div className={`mt-1 flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${notif.type === 'inquiry' ? 'bg-brand-blue/10 text-brand-blue' : 'bg-brand-gold/10 text-brand-gold'}`}>
-                        {notif.type === 'inquiry' ? <Building2 size={14} /> : <Mail size={14} />}
-                      </div>
-                      <div className="flex-1 min-w-0 pr-8">
-                        <p className={`text-xs truncate mb-0.5 ${!notif.is_read ? 'font-bold text-brand-blue' : 'font-semibold text-gray-600'}`}>{notif.title}</p>
-                        <p className={`text-xs sm:text-sm truncate ${!notif.is_read ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
-                          {notif.name} sent a message.
-                        </p>
-                        <p className="text-[10px] text-gray-400 mt-1.5 uppercase tracking-wider font-semibold">
-                          {formatDateTime(notif.created_at)}
-                        </p>
-                      </div>
-                      <button
-                        onClick={(e) => toggleReadStatus(e, notif)}
-                        className={`absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full transition-all shrink-0 ${!notif.is_read ? 'text-brand-blue bg-brand-blue/5 hover:bg-brand-blue/10' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100 opacity-100 sm:opacity-0 group-hover:opacity-100'}`}
-                        title={notif.is_read ? "Mark as Unread" : "Mark as Read"}
-                      >
-                        {notif.is_read ? <MailOpen size={16} /> : <Mail size={16} className="fill-current" />}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Reading Modal */}
-      {selectedMessage && (
-        <div className="fixed inset-0 bg-brand-blue/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl md:rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 max-h-[90vh]">
-            <div className="flex items-center justify-between px-4 sm:px-8 py-4 sm:py-5 border-b border-gray-100 bg-[#f8f9fa]">
-              <div className="flex items-center gap-3">
-                <span className="inline-block px-2 sm:px-3 py-1 bg-white border border-gray-200 text-brand-blue rounded-md text-[10px] font-bold tracking-widest uppercase truncate max-w-[150px] sm:max-w-none">
-                  {selectedMessage.title}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={(e) => toggleReadStatus(e, selectedMessage)} className="hidden sm:flex px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-brand-blue hover:bg-gray-100 rounded-md transition-colors items-center gap-2">
-                  {selectedMessage.is_read ? <MailOpen size={14} /> : <Mail size={14} />}
-                  {selectedMessage.is_read ? 'Mark Unread' : 'Mark Read'}
-                </button>
-                <div className="hidden sm:block w-px h-4 bg-gray-300 mx-1"></div>
-                <button onClick={() => setSelectedMessage(null)} className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors">
-                  <X size={20} />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-4 sm:p-8 overflow-y-auto">
-              <h2 className="text-xl sm:text-2xl font-serif text-brand-blue pl-4 sm:pl-6">Message Details</h2>
-              <div className="bg-gray-50 rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-6 flex flex-col sm:flex-row flex-wrap gap-4 sm:gap-6">
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Client Name</div>
-                  <div className="text-sm font-semibold text-gray-900">{selectedMessage.name}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Email</div>
-                  <div className="text-sm font-semibold text-blue-600 break-all">{selectedMessage.client_email || 'N/A'}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Phone</div>
-                  <div className="text-sm font-semibold text-gray-900">{selectedMessage.client_phone || 'N/A'}</div>
-                </div>
-                <div className="w-full mt-2 pt-4 border-t border-gray-200">
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Date Received</div>
-                  <div className="text-sm text-gray-600">{formatDateTime(selectedMessage.created_at)}</div>
-                </div>
-              </div>
-              <div className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap bg-white border border-gray-100 p-4 sm:p-6 rounded-xl sm:rounded-2xl shadow-sm">
-                {selectedMessage.type === 'inquiry' ? (
-                  <>I am interested in getting more information about the property <strong>{selectedMessage.title.replace('Inquiry: ', '')}</strong>. Please contact me at your earliest convenience.</>
-                ) : (
-                  <>{selectedMessage.message}</>
-                )}
-              </div>
-            </div>
-            <div className="px-4 sm:px-8 py-4 sm:py-5 border-t border-gray-100 bg-gray-50 flex justify-end">
-              <a
-                href={`mailto:${selectedMessage.client_email}?subject=RE: ${selectedMessage.title}`}
-                onClick={() => setSelectedMessage(null)}
-                className="flex items-center justify-center w-full sm:w-auto gap-2 px-6 py-3 sm:py-2.5 bg-brand-blue text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-brand-blue/80 transition-colors"
-              >
-                <CornerUpLeft size={16} /> Reply via Email
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
 
 // ==========================================
 // MANAGER COMPONENTS
@@ -4363,6 +4148,7 @@ const ALL_MENU_ITEMS = [
     icon: Megaphone,
     moduleCode: 'promotion_code'
   },
+  { name: 'Customer Inbox', icon: Bell, moduleCode: 'notifications_code' },
   // Kept internally even though they are no longer
   // displayed as normal sidebar destinations.
   {
@@ -4578,6 +4364,7 @@ const contentMenuItems = allowedMenuItems.filter(
 
 
   return (
+    <CustomerInboxProvider enabled={checkPerm('notifications_code', 'can_view')}>
     <div className="flex h-screen bg-[#F8F9FA] text-gray-900 font-sans overflow-hidden relative">
       {isSidebarOpen && <div className="fixed inset-0 bg-brand-blue/40 backdrop-blur-sm z-30 md:hidden" onClick={() => setIsSidebarOpen(false)} />}
 
@@ -4737,7 +4524,7 @@ const contentMenuItems = allowedMenuItems.filter(
                   uppercase
                 "
               >
-                Home
+                Dashboard
               </span>
             )}
           </button>
@@ -4990,6 +4777,7 @@ const contentMenuItems = allowedMenuItems.filter(
                     duration-200
                     group
                     outline-none
+                    ${item.name === 'Customer Inbox' ? 'focus-visible:ring-2 focus-visible:ring-brand-gold' : ''}
 
                     ${
                       sidebarExpanded
@@ -5212,7 +5000,7 @@ const contentMenuItems = allowedMenuItems.filter(
           </div>
         </header>
 
-                <div className={`min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] ${activeTab === 'Home' ? 'px-4 py-4 sm:px-6 sm:py-5 xl:px-8' : 'p-8'}`}>
+                <div className={`min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] ${activeTab === 'Home' || activeTab === 'Customer Inbox' ? 'px-4 py-4 sm:px-6 sm:py-5 xl:px-8' : 'p-8'}`}>
           {contentArchiveSection && (
             <div className="mx-auto w-full max-w-6xl">
               <ContentArchiveTabs
@@ -5233,7 +5021,11 @@ const contentMenuItems = allowedMenuItems.filter(
             />
           ) : allowedMenuItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-32 text-center"><div className="w-20 h-20 bg-brand-blue/5 rounded-full flex justify-center items-center mb-6"><ShieldAlert size={32} className="text-brand-blue/40" /></div><h2 className="text-2xl font-serif text-brand-blue mb-3">No Access</h2><p className="text-gray-500 text-sm">Please contact your Super Admin to request access.</p></div>
-        ): activeTab === 'Modules' ? <SystemModulesManager />
+        ): activeTab === 'Customer Inbox' ? (
+            checkPerm('notifications_code', 'can_view') ? <CustomerInboxManager /> : (
+              <div className="py-24 text-center"><ShieldAlert className="mx-auto mb-4 text-brand-blue/40" size={32} /><h2 className="font-serif text-2xl text-brand-blue">No Access</h2><p className="mt-3 text-sm text-gray-500">Please contact your Super Admin to request access.</p></div>
+            )
+          ) : activeTab === 'Modules' ? <SystemModulesManager />
           : activeTab === 'Homepage' ? <HomepageManager checkPerm={checkPerm} />
           : activeTab === 'Projects' ? <ProjectsManager checkPerm={checkPerm} />
           : activeTab === 'Virtual Tours' ? <VirtualToursManager checkPerm={checkPerm} />
@@ -5493,6 +5285,7 @@ const contentMenuItems = allowedMenuItems.filter(
         </div>
       </main>
     </div>
+    </CustomerInboxProvider>
   );
 }
 

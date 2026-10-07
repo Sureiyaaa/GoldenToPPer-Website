@@ -3,6 +3,14 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { getCustomSession, getCurrentUser, getRBACProfile } from './auth';
+import {
+  normalizeCustomerInbox,
+  type CustomerInboxItem,
+  type CustomerInboxItemType,
+  type InquiryInboxRow,
+  type SupportInboxRow,
+  type LoanInboxRow,
+} from '@/lib/customer-inbox';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -690,75 +698,85 @@ export async function submitInquiryAction(data: any) {
   }
 }
 
-export async function fetchNotificationsAction(userId: number | string) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
-
-  const { data: inqData } = await supabaseAdmin
-    .from('inquire')
-    .select('id, created_at, client(first_name, last_name, email, phone_number), project_table(title), admin_inquire_reads(admin_id)')
-    .order('created_at', { ascending: false })
-    .limit(50);
-
-  const { data: contactData } = await supabaseAdmin
-    .from('contact')
-    .select('id, created_at, "type of inquiry", message, client(first_name, last_name, email, phone_number), admin_contact_reads(admin_id)')
-    .order('created_at', { ascending: false })
-    .limit(50);
-
-  const combined = [
-    ...(inqData || []).map((item: any) => {
-      const clientObj = Array.isArray(item.client) ? item.client[0] : item.client;
-      const projectObj = Array.isArray(item.project_table) ? item.project_table[0] : item.project_table;
-      const hasRead = item.admin_inquire_reads?.some((read: any) => String(read.admin_id) === String(userId)) || false;
-
-      return {
-        ...item,
-        type: 'inquiry',
-        is_read: hasRead,
-        title: `Inquiry: ${projectObj?.title || 'Unknown Property'}`,
-        name: `${clientObj?.first_name || ''} ${clientObj?.last_name || ''}`.trim(),
-        client_email: clientObj?.email,
-        client_phone: clientObj?.phone_number
-      };
-    }),
-    ...(contactData || []).map((item: any) => {
-      const clientObj = Array.isArray(item.client) ? item.client[0] : item.client;
-      const hasRead = item.admin_contact_reads?.some((read: any) => String(read.admin_id) === String(userId)) || false;
-
-      return {
-        ...item,
-        type: 'contact',
-        is_read: hasRead,
-        title: item["type of inquiry"],
-        name: `${clientObj?.first_name || ''} ${clientObj?.last_name || ''}`.trim(),
-        client_email: clientObj?.email,
-        client_phone: clientObj?.phone_number
-      };
-    })
-  ];
-
-  combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  return combined;
+async function requireNotificationAccess() {
+  const adminId = await getCustomSession();
+  if (!adminId) throw new Error('Unauthorized');
+  const profile = await getRBACProfile();
+  const allowed = profile?.permissions === 'SUPER_ADMIN' ||
+    (typeof profile?.permissions === 'object' && profile.permissions?.notifications_code?.can_view === true);
+  if (!allowed) throw new Error('You do not have permission to view customer messages.');
+  // Read state always belongs to the authenticated admin, never a browser-supplied ID.
+  return adminId;
 }
 
-export async function toggleNotificationReadAction(userId: number | string, notifId: number | string, type: string, newStatus: boolean) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
-
-  if (type === 'inquiry') {
-    if (newStatus) {
-      await supabaseAdmin.from('admin_inquire_reads').insert({ admin_id: userId, inquire_id: notifId });
-    } else {
-      await supabaseAdmin.from('admin_inquire_reads').delete().match({ admin_id: userId, inquire_id: notifId });
-    }
-  } else {
-    if (newStatus) {
-      await supabaseAdmin.from('admin_contact_reads').insert({ admin_id: userId, contact_id: notifId });
-    } else {
-      await supabaseAdmin.from('admin_contact_reads').delete().match({ admin_id: userId, contact_id: notifId });
-    }
+async function fetchInboxSource<T extends { id: number | string }>(
+  table: 'inquire' | 'contact' | 'loan_preapp', selection: string,
+  adminId: string, readRelation?: 'admin_inquire_reads' | 'admin_contact_reads',
+): Promise<T[]> {
+  const pageSize = 500;
+  const rows = new Map<string, T>();
+  let offset = 0;
+  let total: number | null = null;
+  // Page each joined source instead of silently truncating the full inbox to the
+  // bell's old 50-row limit or PostgREST's default response limit. No per-row queries.
+  while (true) {
+    let query = supabaseAdmin.from(table)
+      .select(selection, offset === 0 ? { count: 'exact' } : {})
+      .order('created_at', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: false })
+      .range(offset, offset + pageSize - 1);
+    if (readRelation) query = query.eq(`${readRelation}.admin_id`, adminId);
+    const { data, error, count } = await query.returns<T[]>();
+    if (error) throw new Error(`Could not load ${table} customer messages.`);
+    if (offset === 0) total = count;
+    const batch = data ?? [];
+    for (const row of batch) rows.set(String(row.id), row);
+    offset += batch.length;
+    if (!batch.length || (total !== null ? offset >= total : batch.length < pageSize)) break;
   }
+  return [...rows.values()];
+}
+
+export async function fetchNotificationsAction(): Promise<CustomerInboxItem[]> {
+  const adminId = await requireNotificationAccess();
+  // Foreign-key hints match the inspected loan_preapp metadata: client_id,
+  // project_id and banks_id. Existing reads are left joins scoped to this admin.
+  const [inquiries, support, loans] = await Promise.all([
+    fetchInboxSource<InquiryInboxRow>('inquire',
+      'id, created_at, client!client_id(first_name, last_name, email, phone_number), project_table!project_id(title), admin_inquire_reads(admin_id)',
+      adminId, 'admin_inquire_reads'),
+    fetchInboxSource<SupportInboxRow>('contact',
+      'id, created_at, "type of inquiry", message, client!client_id(first_name, last_name, email, phone_number), admin_contact_reads(admin_id)',
+      adminId, 'admin_contact_reads'),
+    fetchInboxSource<LoanInboxRow>('loan_preapp',
+      'id, created_at, tower, unit_no, floor_no, co_buyer_name, is_agreed, client!client_id(first_name, last_name, email, phone_number), project_table!project_id(title), banks!banks_id(bank_name)',
+      adminId),
+  ]);
+  return normalizeCustomerInbox(inquiries, support, loans, adminId);
+}
+
+export async function toggleNotificationReadAction(
+  notifId: number | string, type: CustomerInboxItemType, newStatus: boolean,
+) {
+  const adminId = await requireNotificationAccess();
+  if ((typeof notifId !== 'number' && typeof notifId !== 'string') ||
+      !Number.isSafeInteger(Number(notifId)) || Number(notifId) <= 0 ||
+      typeof newStatus !== 'boolean') throw new Error('Invalid read-status request.');
+
+  let table: 'admin_inquire_reads' | 'admin_contact_reads';
+  let column: 'inquire_id' | 'contact_id';
+  switch (type) {
+    case 'inquiry': table = 'admin_inquire_reads'; column = 'inquire_id'; break;
+    case 'customer_support': table = 'admin_contact_reads'; column = 'contact_id'; break;
+    case 'loan_application':
+      throw new Error('Loan applications currently have no persisted per-admin read/unread mechanism.');
+    default: throw new Error('Unsupported customer message type.');
+  }
+  const values = { admin_id: adminId, [column]: Number(notifId) };
+  const { error } = newStatus
+    ? await supabaseAdmin.from(table).upsert(values, { onConflict: `admin_id,${column}`, ignoreDuplicates: true })
+    : await supabaseAdmin.from(table).delete().match(values);
+  if (error) throw new Error('Could not save notification read status.');
   return { success: true };
 }
 
