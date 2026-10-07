@@ -4,7 +4,6 @@ import { useSearchParams } from 'next/navigation';
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import Navbar from '@/app/components/navbar';
 import Footer from '@/app/components/footer';
 import BackToTop from '@/app/components/backtotop';
@@ -14,31 +13,15 @@ import { ArrowRight, AlertCircle } from 'lucide-react';
 import Lenis from 'lenis';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { createClient } from '@/lib/supabase/client'; 
+import { submitLoanPreApplicationAction } from '@/app/actions/loan';
+import { loanSchema, type LoanFormData } from '@/lib/validations/loan';
 
 // --- REGISTER GSAP ---
 if (typeof window !== 'undefined') {
   gsap.registerPlugin(ScrollTrigger);
 }
 
-// --- SCHEMAS AND INTERFACES ---
-const loanSchema = z.object({
-  condo: z.string().min(1, "Please select a project"),
-  bank: z.string().min(1, "Please select a preferred bank"),
-  tower: z.string().min(1, "Please select a tower"),
-  unit: z.string().min(1, "Unit is required"),
-  floor: z.string().min(1, "Floor number is required"),
-  buyerName: z.string().min(2, "Please enter a valid full name"),
-  coBuyerName: z.string().min(1, "Co-buyer name is required (or NA)"),
-  email: z.string().email("Please enter a valid email address"),
-  phone: z.string().regex(/^(09|\+639)\d{9}$/, "Enter a valid PH mobile number"),
-  isAgreed: z.boolean().refine((val) => val === true, {
-    message: "You must agree to the Terms and Conditions",
-  }),
-});
-
-type LoanFormData = z.infer<typeof loanSchema>;
-
+// --- INTERFACES ---
 interface Project { id: number; title: string; status: string; }
 interface Bank { id: number; bank_name: string; max_loan: string; terms: string; short_description: string; image: string; }
 interface ProjectBank { project_id: number; banks_id: number; }
@@ -53,8 +36,6 @@ interface PartnerBanksClientProps {
 // INNER COMPONENT
 // ==========================================
 function PartnerBanksContent({ initialProjects, initialBanks, initialMappings }: PartnerBanksClientProps) {
-  // Requires a client-side instance to submit form data securely
-  const supabase = createClient();
   const searchParams = useSearchParams();
   const lenisRef = useRef<any>(null); 
   
@@ -101,44 +82,18 @@ function PartnerBanksContent({ initialProjects, initialBanks, initialMappings }:
 
   const onSubmit = async (data: LoanFormData) => {
     try {
-      const nameParts = data.buyerName.trim().split(' ');
-      const firstName = nameParts[0];
-      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'N/A';
-
-      const { data: clientResult, error: clientErr } = await supabase
-        .from('client')
-        .insert({
-          first_name: firstName,
-          last_name: lastName,
-          email: data.email,
-          phone_number: data.phone
-        })
-        .select()
-        .single();
-
-      if (clientErr) throw clientErr;
-
-      const { error: loanErr } = await supabase
-        .from('loan_preapp')
-        .insert({
-          client_id: clientResult.id,
-          project_id: parseInt(data.condo), 
-          banks_id: parseInt(data.bank),  
-          tower: data.tower,
-          unit_no: parseInt(data.unit) || 0,
-          floor_no: parseInt(data.floor) || 0,
-          co_buyer_name: data.coBuyerName,
-          is_agreed: data.isAgreed
-        });
-
-      if (loanErr) throw loanErr;
+      const result = await submitLoanPreApplicationAction(data);
+      if (!result.success) {
+        alert(result.error);
+        return;
+      }
 
       alert("Application submitted successfully!");
       reset();
       setIsModalOpen(false);
-    } catch (err: any) {
-      console.error("Submission Error:", err);
-      alert(`Error submitting application: ${err.message}`);
+    } catch (error: unknown) {
+      if (process.env.NODE_ENV === 'development') console.error("Submission Error:", error);
+      alert("We couldn't submit your application. Please try again.");
     }
   };
 

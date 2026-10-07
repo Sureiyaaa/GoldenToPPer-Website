@@ -209,25 +209,51 @@ export async function permanentlyDeleteArchivedProjectAction(
   throw new Error('Permanent project deletion is disabled. Use archive and restore instead.');
 }
 
-async function getNextNavigationDisplayOrder() {
-  const { data, error } = await supabaseAdmin
-    .from('navbar_projects')
-    .select('display_order')
-    .order('display_order', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+// Only these deliberate messages may be returned to the creation form.
+class ProjectCreationError extends Error {}
 
-  if (error) {
-    throw new Error(
-      `Unable to determine navigation order: ${error.message}`
+async function cleanupFailedProjectCreation(projectId: number | string) {
+  try {
+    // navbar_projects_project_id_fkey uses ON DELETE CASCADE, so the
+    // trigger-created navigation row is removed with this new project.
+    const { error } = await supabaseAdmin
+      .from('project_table')
+      .delete()
+      .eq('id', projectId);
+
+    if (error) throw error;
+    return;
+  } catch (cleanupError) {
+    console.error('[createBasicProjectAction] Project cleanup failed:', {
+      projectId,
+      error: cleanupError,
+    });
+  }
+
+  try {
+    // A restrictive reference or another delete failure must not silently
+    // leave an incomplete project in the active list or reserve its slug.
+    const { error } = await supabaseAdmin
+      .from('project_table')
+      .update({ is_active: false, deleted_at: new Date().toISOString() })
+      .eq('id', projectId)
+      .select('id')
+      .single();
+
+    if (error) throw error;
+  } catch (archiveError) {
+    console.error('[createBasicProjectAction] Incomplete project archive failed:', {
+      projectId,
+      error: archiveError,
+    });
+    throw new ProjectCreationError(
+      `Project setup failed and cleanup could not finish. Review project ${projectId} in Projects before trying again.`
     );
   }
 
-  const currentMax = Number(data?.display_order);
-
-  return Number.isFinite(currentMax) && currentMax > 0
-    ? currentMax + 1
-    : 1;
+  throw new ProjectCreationError(
+    'Project setup failed. The incomplete project was archived. Review it in Archived Projects before trying again.'
+  );
 }
 
 export async function createBasicProjectAction(input: {
@@ -244,7 +270,7 @@ export async function createBasicProjectAction(input: {
     const session = await getCustomSession();
 
     if (!session) {
-      throw new Error('Unauthorized: Please log in.');
+      throw new ProjectCreationError('Unauthorized: Please log in.');
     }
 
     const title = input.title.trim();
@@ -255,19 +281,19 @@ export async function createBasicProjectAction(input: {
     const country = input.country.trim() || 'Philippines';
 
     if (!title) {
-      throw new Error('Project title is required.');
+      throw new ProjectCreationError('Project title is required.');
     }
 
     if (!slug || !slug.startsWith('/')) {
-      throw new Error('URL slug must start with "/".');
+      throw new ProjectCreationError('URL slug must start with "/".');
     }
 
     if (!status) {
-      throw new Error('Project status is required.');
+      throw new ProjectCreationError('Project status is required.');
     }
 
     if (!address || !city || !country) {
-      throw new Error('Project location is required.');
+      throw new ProjectCreationError('Project location is required.');
     }
 
     // Prevent duplicate public URLs.
@@ -284,7 +310,7 @@ export async function createBasicProjectAction(input: {
     }
 
     if (existingSlug) {
-      throw new Error(
+      throw new ProjectCreationError(
         'That URL slug is already being used by another project.'
       );
     }
@@ -321,47 +347,49 @@ export async function createBasicProjectAction(input: {
       throw new Error('Project was created but no project ID was returned.');
     }
 
-    // Every project owns one navigation item.
-    // Keep it hidden until the project/navigation content is ready.
+    // on_project_created / auto_insert_navbar_project() owns row creation
+    // and assigns the next display_order in the project insert transaction.
+    // Its row is visible as soon as that insert completes; no retry is needed.
     try {
-      const displayOrder = await getNextNavigationDisplayOrder();
+      const { data: navigationRow, error: navigationReadError } =
+        await supabaseAdmin
+          .from('navbar_projects')
+          .select('id')
+          .eq('project_id', data.id)
+          .single();
+
+      // single() rejects both a missing relationship and multiple rows.
+      if (navigationReadError) throw navigationReadError;
+      if (!navigationRow) throw new Error('Expected one project navigation row.');
 
       const { error: navigationError } = await supabaseAdmin
         .from('navbar_projects')
-        .insert({
-          project_id: data.id,
+        .update({
           nav_title: title,
           tagline: '',
           nav_image_url: null,
-          display_order: displayOrder,
           // This stores the admin's navigation preference.
           // The public navbar still remains hidden while the project itself
           // is hidden, so a brand-new project is not published prematurely.
           is_active: true,
-        });
+        })
+        .eq('id', navigationRow.id)
+        .eq('project_id', data.id)
+        .select('id')
+        .single();
 
       if (navigationError) {
         throw navigationError;
       }
-    } catch (navigationError: any) {
-      // Avoid leaving behind an orphan project if its required navigation
-      // item could not be created.
-      const { error: cleanupError } = await supabaseAdmin
-        .from('project_table')
-        .delete()
-        .eq('id', data.id);
+    } catch (navigationError) {
+      console.error('[createBasicProjectAction] Navigation setup failed:', {
+        projectId: data.id,
+        error: navigationError,
+      });
+      await cleanupFailedProjectCreation(data.id);
 
-      if (cleanupError) {
-        console.error(
-          '[createBasicProjectAction] Navigation creation failed and project cleanup also failed:',
-          cleanupError
-        );
-      }
-
-      throw new Error(
-        `Project could not be created with its navigation item: ${
-          navigationError?.message || 'Unknown navigation error.'
-        }`
+      throw new ProjectCreationError(
+        'Project could not be created with its navigation item. Please try again.'
       );
     }
 
@@ -369,12 +397,14 @@ export async function createBasicProjectAction(input: {
       success: true,
       projectId: data.id,
     };
-  } catch (error: any) {
+  } catch (error) {
     console.error('[createBasicProjectAction]', error);
 
     return {
       success: false,
-      error: error?.message || 'Failed to create project.',
+      error: error instanceof ProjectCreationError
+        ? error.message
+        : 'Failed to create project. Please try again.',
     };
   }
 }
