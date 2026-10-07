@@ -4209,6 +4209,16 @@ function AdminMainDashboardContent() {
     return () => { cancelled = true; };
   }, [router, supabase, signOutAndRedirect]);
 
+  const navigateToSection = (section: string) => {
+    setActiveTab(section);
+    setFilterCategory('');
+    setSearchQuery('');
+    setProjectsMenuOpen(false);
+    setIsSidebarOpen(false);
+    // Update URL without full page reload
+    router.push(section === 'Home' ? '/admin/dashboard' : `/admin/dashboard?section=${encodeURIComponent(section)}`);
+  };
+
   const handleSignOut = async () => { localStorage.clear(); await signOutAndRedirect(); };
 
   const confirmArchive = async () => {
@@ -4542,11 +4552,8 @@ function AdminMainDashboardContent() {
                         type="button"
                         title={!sidebarExpanded ? 'Projects' : undefined}
                         onClick={() => {
-                          setActiveTab('Projects');
-                          setFilterCategory('');
-                          setSearchQuery('');
+                          navigateToSection('Projects');
                           setProjectsMenuOpen(true);
-                          setIsSidebarOpen(false);
                         }}
                         className={`
                         w-full
@@ -4625,12 +4632,7 @@ function AdminMainDashboardContent() {
                         >
                           <button
                             type="button"
-                            onClick={() => {
-                              setActiveTab('Projects');
-                              setFilterCategory('');
-                              setSearchQuery('');
-                              setIsSidebarOpen(false);
-                            }}
+                            onClick={() => navigateToSection('Projects')}
                             className={`
                             w-full
                             text-left
@@ -4651,12 +4653,7 @@ function AdminMainDashboardContent() {
 
                           <button
                             type="button"
-                            onClick={() => {
-                              setActiveTab('Navbar Setup');
-                              setFilterCategory('');
-                              setSearchQuery('');
-                              setIsSidebarOpen(false);
-                            }}
+                            onClick={() => navigateToSection('Navbar Setup')}
                             className={`
                             w-full
                             text-left
@@ -4677,12 +4674,7 @@ function AdminMainDashboardContent() {
 
                           <button
                             type="button"
-                            onClick={() => {
-                              setActiveTab('Archived Projects');
-                              setFilterCategory('');
-                              setSearchQuery('');
-                              setIsSidebarOpen(false);
-                            }}
+                            onClick={() => navigateToSection('Archived Projects')}
                             className={`
                             w-full
                             text-left
@@ -4721,13 +4713,7 @@ function AdminMainDashboardContent() {
                     key={item.name}
                     type="button"
                     title={!sidebarExpanded ? item.name : undefined}
-                    onClick={() => {
-                      setActiveTab(item.name);
-                      setFilterCategory('');
-                      setSearchQuery('');
-                      setProjectsMenuOpen(false);
-                      setIsSidebarOpen(false);
-                    }}
+                    onClick={() => navigateToSection(item.name)}
                     className={`
                     w-full
                     h-12
@@ -4955,7 +4941,7 @@ function AdminMainDashboardContent() {
             </div>
           </header>
 
-          <div className={`min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] ${activeTab === 'Home' || activeTab === 'Customer Inbox' ? 'px-4 py-4 sm:px-6 sm:py-5 xl:px-8' : 'p-8'}`}>
+          <div className={`min-h-0 flex-1 [scrollbar-gutter:stable] ${activeTab === 'Customer Inbox' ? 'overflow-hidden' : 'overflow-y-auto'} ${activeTab === 'Home' || activeTab === 'Customer Inbox' ? 'px-4 py-4 sm:px-6 sm:py-5 xl:px-8' : 'p-8'}`}>
             {contentArchiveSection && (
               <div className="mx-auto w-full max-w-6xl">
                 <ContentArchiveTabs
@@ -4968,11 +4954,7 @@ function AdminMainDashboardContent() {
             {activeTab === 'Home' ? (
               <HomeDashboard
                 checkPerm={checkPerm}
-                onOpenSection={(section) => {
-                  setActiveTab(section);
-                  setFilterCategory('');
-                  setSearchQuery('');
-                }}
+                onOpenSection={navigateToSection}
               />
             ) : allowedMenuItems.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-32 text-center"><div className="w-20 h-20 bg-brand-blue/5 rounded-full flex justify-center items-center mb-6"><ShieldAlert size={32} className="text-brand-blue/40" /></div><h2 className="text-2xl font-serif text-brand-blue mb-3">No Access</h2><p className="text-gray-500 text-sm">Please contact your Super Admin to request access.</p></div>
