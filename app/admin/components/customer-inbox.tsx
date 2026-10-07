@@ -260,42 +260,41 @@ export function CustomerInboxManager() {
   const typeId = useId();
   const readId = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Compare contents, rather than the fetch/loading cycle: an unchanged refresh
+  // should preserve the reader's position; changed records should start at the top.
+  const recordsSnapshot = JSON.stringify(items);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
-  }, [search, type, read]);
-
-  useEffect(() => {
-    if (!isLoading && scrollRef.current) scrollRef.current.scrollTop = 0;
-  }, [isLoading]);
+  }, [search, type, read, recordsSnapshot]);
   const openButton = (item: CustomerInboxItem) => (
     <button type="button" onClick={() => openItem(item)} aria-label={`Open ${customerInboxTypeLabels[item.type]} from ${item.name}`}
       className={`rounded-lg bg-brand-blue px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-brand-blue/80 ${focusStyle}`}>Open</button>
   );
   return (
-    <section className="mx-auto flex w-full max-w-6xl flex-col animate-in fade-in duration-300" style={{ minHeight: 0 }} aria-labelledby="customer-inbox-title">
-      <div className="mb-7 shrink-0 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <div className="max-w-2xl">
+    <section className="mx-auto flex min-h-0 w-full max-w-6xl flex-col animate-in fade-in duration-300 lg:h-full [@media(max-height:767px)]:h-auto" aria-labelledby="customer-inbox-title">
+      <div className="mb-5 flex shrink-0 flex-col gap-5 lg:mb-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0 flex-1">
           <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-brand-gold">Customer · Communications</p>
-          <h2 id="customer-inbox-title" className="mt-2 font-serif text-4xl leading-none text-brand-blue">Customer Inbox</h2>
-          <p className="mt-3 text-sm leading-relaxed text-gray-500">Review property inquiries, loan applications, and customer support messages received from the website.</p>
+          <h2 id="customer-inbox-title" className="mt-2 font-serif text-4xl leading-none text-brand-blue lg:text-3xl">Customer Inbox</h2>
+          <p className="mt-3 text-sm leading-relaxed text-gray-500 lg:mt-2 lg:leading-normal">Review property inquiries, loan applications, and customer support messages received from the website.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest" aria-live="polite">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest" aria-live="polite">
           <span className="rounded-full border border-gray-200 bg-white px-3 py-2 text-gray-500">{items.length} Total records</span>
           <span className="rounded-full border border-brand-gold/30 bg-brand-gold/10 px-3 py-2 text-brand-blue">{unreadCount} Unread</span>
         </div>
       </div>
-      <div className="mb-5 shrink-0 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="mb-5 shrink-0 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm lg:mb-3 lg:px-3 lg:py-2.5">
         <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
           <div className="min-w-0 flex-1 sm:min-w-52">
-            <label htmlFor={searchId} className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-gray-500">Search messages</label>
+            <label htmlFor={searchId} className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-gray-500 lg:mb-1">Search messages</label>
             <div className="relative"><Search size={16} className="absolute left-3 top-3 text-gray-400" aria-hidden="true" />
               <input id={searchId} type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Name, email, project, bank or message"
                 className={`w-full rounded-lg border border-gray-200 py-2.5 pl-9 pr-3 text-sm text-gray-700 ${focusStyle}`} />
             </div>
           </div>
           <div>
-            <label htmlFor={typeId} className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-gray-500">Type</label>
+            <label htmlFor={typeId} className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-gray-500 lg:mb-1">Type</label>
             <select id={typeId} value={type} onChange={event => setType(event.target.value as CustomerInboxItemType | 'all')}
               className={`w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 ${focusStyle}`}>
               <option value="all">All types</option>
@@ -303,7 +302,7 @@ export function CustomerInboxManager() {
             </select>
           </div>
           <div>
-            <label htmlFor={readId} className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-gray-500">Read status</label>
+            <label htmlFor={readId} className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-gray-500 lg:mb-1">Read status</label>
             <select id={readId} value={read} onChange={event => setRead(event.target.value as CustomerInboxReadFilter)}
               className={`w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 ${focusStyle}`}>
               <option value="all">All statuses</option><option value="unread">Unread</option><option value="read">Read</option>
@@ -315,16 +314,16 @@ export function CustomerInboxManager() {
           </button>
         </div>
       </div>
-      <div className="mb-4 shrink-0 space-y-3">
+      {(error || readError || liveUnavailable) && <div data-inbox-notice className="mb-4 shrink-0 space-y-3">
         {error && <InboxError message={error} onRetry={() => void refresh()} />}
         {readError && <InboxError message={readError} />}
         {liveUnavailable && <p role="status" className="text-xs text-gray-500">Live updates are unavailable. Use Refresh to check for new messages.</p>}
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm" aria-busy={isLoading}>
+      </div>}
+      <div className="flex min-h-0 shrink-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm" aria-busy={isLoading}>
         {isLoading && items.length === 0 ? (
           <div role="status" className="flex items-center justify-center gap-3 p-12 text-sm text-brand-blue"><Loader2 size={22} className="animate-spin" /> Loading customer messages...</div>
         ) : filtered.length === 0 ? (
-          <div role="status" className="flex flex-1 items-center justify-center px-6 py-16 text-center">
+          <div role="status" className="flex items-center justify-center px-6 py-16 text-center">
             <div>
               <Mail size={32} className="mx-auto mb-4 text-brand-blue/30" />
               <h3 className="font-serif text-xl text-brand-blue">{error && items.length === 0 ? 'Customer messages unavailable' : items.length === 0 ? 'No customer messages yet' : 'No matching messages'}</h3>
@@ -332,22 +331,25 @@ export function CustomerInboxManager() {
             </div>
           </div>
         ) : (
-          <div ref={scrollRef} className="max-h-[28rem] overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
-            <table className="hidden w-full table-fixed text-left lg:table">
+          // Desktop: 48px header + five 72px rows. Cells bound long content so
+          // native table minimum sizes cannot increase a row's height.
+          <div ref={scrollRef} role="region" aria-label="Customer message records" tabIndex={0}
+            className="max-h-[min(28rem,60dvh)] shrink-0 overflow-y-auto overscroll-contain lg:h-[408px] lg:max-h-none lg:scroll-pt-12 [&::-webkit-scrollbar]:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-gold" style={{ scrollbarWidth: 'none' }}>
+            <table className="hidden w-full table-fixed border-separate border-spacing-0 text-left lg:table">
               <caption className="sr-only">Customer messages, newest first</caption>
               <colgroup><col className="w-[23%]" /><col className="w-[15%]" /><col className="w-[23%]" /><col className="w-[17%]" /><col className="w-[14%]" /><col className="w-[8%]" /></colgroup>
-              <thead className="sticky top-0 border-b border-gray-100 bg-gray-50/70 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                <tr>{['Sender', 'Type', 'Subject / Context', 'Received', 'Status', 'Action'].map(label => <th key={label} scope="col" className="px-4 py-4">{label}</th>)}</tr>
+              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                <tr className="h-12">{['Sender', 'Type', 'Subject / Context', 'Received', 'Status', 'Action'].map(label => <th key={label} scope="col" className="whitespace-nowrap border-b border-gray-100 px-4 py-3">{label}</th>)}</tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody>
                 {filtered.map(item => (
-                  <tr key={customerInboxKey(item)} className={item.is_read ? '' : 'bg-brand-blue/[0.02]'}>
-                    <td className="break-words px-4 py-5"><p className={`text-sm text-brand-blue ${item.is_read ? 'font-medium' : 'font-bold'}`}>{item.name}</p><p className="mt-1 break-all text-xs text-gray-500">{item.client_email || 'Email not provided'}</p></td>
-                    <td className="px-4 py-5"><TypeBadge item={item} /></td>
-                    <td className="break-words px-4 py-5"><p className={`text-sm text-gray-700 ${item.is_read ? '' : 'font-semibold'}`}>{customerInboxContext(item)}</p></td>
-                    <td className="px-4 py-5 text-xs leading-relaxed text-gray-500">{formatCustomerInboxDate(item.created_at)}</td>
-                    <td className="px-4 py-5"><ReadBadge item={item} /></td>
-                    <td className="px-2 py-5">{openButton(item)}</td>
+                  <tr key={customerInboxKey(item)} className={`h-[72px] ${item.is_read ? '' : 'bg-brand-blue/[0.02]'}`}>
+                    <td className="border-b border-gray-100 px-4 py-3"><p title={item.name} className={`truncate text-sm text-brand-blue ${item.is_read ? 'font-medium' : 'font-bold'}`}>{item.name}</p><p title={item.client_email || 'Email not provided'} className="mt-1 truncate text-xs text-gray-500">{item.client_email || 'Email not provided'}</p></td>
+                    <td className="border-b border-gray-100 px-4 py-3"><TypeBadge item={item} /></td>
+                    <td className="border-b border-gray-100 px-4 py-3"><p title={customerInboxContext(item)} className={`line-clamp-2 break-words text-sm text-gray-700 ${item.is_read ? '' : 'font-semibold'}`}>{customerInboxContext(item)}</p></td>
+                    <td className="border-b border-gray-100 px-4 py-3 text-xs leading-relaxed text-gray-500"><p className="line-clamp-2">{formatCustomerInboxDate(item.created_at)}</p></td>
+                    <td className="border-b border-gray-100 px-4 py-3"><ReadBadge item={item} /></td>
+                    <td className="border-b border-gray-100 px-2 py-3">{openButton(item)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -364,7 +366,6 @@ export function CustomerInboxManager() {
           </div>
         )}
       </div>
-      <p role="status" className="mt-3 shrink-0 text-xs text-gray-400">Showing {filtered.length} of {items.length} records · Newest first · Times in Manila</p>
     </section>
   );
 }

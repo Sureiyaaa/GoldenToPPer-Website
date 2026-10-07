@@ -4941,7 +4941,7 @@ function AdminMainDashboardContent() {
             </div>
           </header>
 
-          <div className={`min-h-0 flex-1 [scrollbar-gutter:stable] ${activeTab === 'Customer Inbox' ? 'overflow-hidden' : 'overflow-y-auto'} ${activeTab === 'Home' || activeTab === 'Customer Inbox' ? 'px-4 py-4 sm:px-6 sm:py-5 xl:px-8' : 'p-8'}`}>
+          <div className={`min-h-0 flex-1 [scrollbar-gutter:stable] ${activeTab === 'Customer Inbox' ? 'overflow-y-auto lg:overflow-hidden lg:has-[[data-inbox-notice]]:overflow-y-auto [@media(max-height:767px)]:overflow-y-auto' : 'overflow-y-auto'} ${activeTab === 'Home' || activeTab === 'Customer Inbox' ? 'px-4 py-4 sm:px-6 sm:py-5 xl:px-8' : 'p-8'}`}>
             {contentArchiveSection && (
               <div className="mx-auto w-full max-w-6xl">
                 <ContentArchiveTabs
