@@ -16,7 +16,7 @@ const model = loadTs('lib/customer-inbox.ts');
 const client = { first_name: 'Juan', last_name: 'Dela Cruz', email: 'juan@example.com', phone_number: '09171234567' };
 const inquiry = { id: 1, created_at: '2026-10-05T08:00:00Z', client, project_table: { title: 'City Clou' }, admin_inquire_reads: [] };
 const support = { id: 1, created_at: '2026-10-04T08:00:00Z', client: [{ ...client, first_name: 'John', last_name: 'Reyes' }], 'type of inquiry': 'Payment & billing', message: 'Please help with my receipt.', admin_contact_reads: [{ admin_id: 'admin-a' }] };
-const loan = { id: 1, created_at: '2026-10-05T09:00:00Z', client: { ...client, first_name: 'Maria', last_name: 'Santos' }, project_table: [{ title: 'Park One' }], banks: { bank_name: 'BDO' }, tower: 'Tower A', unit_no: 0, floor_no: 12, co_buyer_name: 'Pedro Santos', is_agreed: true };
+const loan = { id: 1, created_at: '2026-10-05T09:00:00Z', client: { ...client, first_name: 'Maria', last_name: 'Santos' }, project_table: [{ title: 'Park One' }], banks: { bank_name: 'BDO' }, tower: 'Tower A', unit_no: 0, floor_no: 12, co_buyer_name: 'Pedro Santos', is_agreed: true, admin_loan_preapp_reads: [{ admin_id: 'admin-a' }] };
 const normalized = () => model.normalizeCustomerInbox([inquiry], [support], [loan], 'admin-a');
 
 function serverHarness(options = {}) {
@@ -64,12 +64,12 @@ test('three sources retain their own detail fields and sort together, with colli
   assert.equal(items[2].message, support.message);
 });
 
-test('read state is scoped per admin and loans never report persisted read state', () => {
-  assert.equal(normalized()[2].is_read, true);
+test('read state is scoped per admin, including loans with per-admin persistence', () => {
+  assert.equal(normalized()[0].is_read, true);
+  assert.equal(normalized()[0].can_mark_read, true);
   const other = model.normalizeCustomerInbox([inquiry], [support], [loan], 'admin-b');
-  assert.equal(other[2].is_read, false);
   assert.equal(other[0].is_read, false);
-  assert.equal(other[0].can_mark_read, false);
+  assert.equal(other[0].can_mark_read, true);
 });
 
 test('search matches sender, email, project, bank and actual support message', () => {
@@ -79,11 +79,11 @@ test('search matches sender, email, project, bank and actual support message', (
   assert.equal(model.filterCustomerInbox(normalized(), 'does not exist', 'all', 'all').length, 0);
 });
 
-test('all type/read filters work together, including untracked loans', () => {
+test('all type/read filters work together, including tracked loans', () => {
   for (const type of Object.keys(model.customerInboxTypeLabels)) assert.equal(model.filterCustomerInbox(normalized(), '', type, 'all').length, 1);
-  assert.equal(model.filterCustomerInbox(normalized(), '', 'all', 'read').length, 1);
-  assert.equal(model.filterCustomerInbox(normalized(), '', 'all', 'unread').length, 2);
-  assert.equal(model.filterCustomerInbox(normalized(), '', 'loan_application', 'read').length, 0);
+  assert.equal(model.filterCustomerInbox(normalized(), '', 'all', 'read').length, 2);
+  assert.equal(model.filterCustomerInbox(normalized(), '', 'all', 'unread').length, 1);
+  assert.equal(model.filterCustomerInbox(normalized(), '', 'loan_application', 'read').length, 1);
 });
 
 test('nullable joins and dates render honestly, and zero-valued loan fields survive', () => {
@@ -111,7 +111,8 @@ test('fetch uses three joined queries and current-admin read filters', async () 
   assert.equal(items.length, 3);
   assert.equal(harness.calls.length, 3);
   assert.match(harness.calls.find(call => call.table === 'loan_preapp').selection, /banks!banks_id\(bank_name\)/);
-  for (const call of harness.calls.filter(call => call.table !== 'loan_preapp')) assert.equal(call.filters[0][1], 'admin-a');
+  assert.match(harness.calls.find(call => call.table === 'loan_preapp').selection, /admin_loan_preapp_reads\(admin_id\)/);
+  for (const call of harness.calls) assert.equal(call.filters[0][1], 'admin-a');
 });
 
 test('full fetch loads beyond 50 and beyond server response caps without per-record queries', async () => {
@@ -144,7 +145,7 @@ test('Super Admin retains notification access', async () => {
 
 test('read/unread targets the explicit junction and authenticated identity with idempotent insert', async () => {
   const harness = serverHarness();
-  for (const [type, table, column] of [['inquiry', 'admin_inquire_reads', 'inquire_id'], ['customer_support', 'admin_contact_reads', 'contact_id']]) {
+  for (const [type, table, column] of [['inquiry', 'admin_inquire_reads', 'inquire_id'], ['customer_support', 'admin_contact_reads', 'contact_id'], ['loan_application', 'admin_loan_preapp_reads', 'loan_preapp_id']]) {
     await harness.actions.toggleNotificationReadAction('1', type, true);
     await harness.actions.toggleNotificationReadAction(1, type, false);
     const [mark, unmark] = harness.calls.slice(-2);
@@ -156,9 +157,9 @@ test('read/unread targets the explicit junction and authenticated identity with 
   }
 });
 
-test('loan, unknown type and malformed mutations never fall through to contact', async () => {
+test('unknown type and malformed mutations never fall through', async () => {
   const harness = serverHarness();
-  for (const args of [[1, 'loan_application', true], [1, 'unknown', true], [1, 'contact', true], [-1, 'inquiry', true], [true, 'inquiry', true], [[1], 'inquiry', true], [{}, 'inquiry', true], [1, 'inquiry', 'yes']]) {
+  for (const args of [[1, 'unknown', true], [1, 'contact', true], [-1, 'inquiry', true], [true, 'inquiry', true], [[1], 'inquiry', true], [{}, 'inquiry', true], [1, 'inquiry', 'yes']]) {
     await assert.rejects(harness.actions.toggleNotificationReadAction(...args));
   }
   assert.equal(harness.calls.length, 0);

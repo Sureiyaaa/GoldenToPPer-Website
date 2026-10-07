@@ -98,17 +98,17 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
   const [projectToArchive, setProjectToArchive] = useState<{ id: number, title: string } | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
-    const openProject = (id: number) => {
-          router.push(`/admin/projects?edit=${id}`);
-        };
+  const openProject = (id: number) => {
+    router.push(`/admin/projects?edit=${id}`);
+  };
 
-        const openNavigationSetup = () => {
-          router.push('/admin/dashboard?section=Navbar%20Setup');
-        };
+  const openNavigationSetup = () => {
+    router.push('/admin/dashboard?section=Navbar%20Setup');
+  };
 
-        const openArchivedProjects = () => {
-          router.push('/admin/dashboard?section=Archived%20Projects');
-        };
+  const openArchivedProjects = () => {
+    router.push('/admin/dashboard?section=Archived%20Projects');
+  };
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -300,9 +300,9 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
           className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm"
         >
 
-  {/* TABLE HEADER */}
-  <div
-    className="
+          {/* TABLE HEADER */}
+          <div
+            className="
       hidden md:grid
       grid-cols-12
       gap-4
@@ -315,33 +315,33 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
       tracking-widest
       text-gray-400
     "
-  >
-    <div className="col-span-4">
-      Project
-    </div>
+          >
+            <div className="col-span-4">
+              Project
+            </div>
 
-    <div className="col-span-3">
-      Location
-    </div>
+            <div className="col-span-3">
+              Location
+            </div>
 
-    <div className="col-span-2">
-      Project Status
-    </div>
+            <div className="col-span-2">
+              Project Status
+            </div>
 
-    <div className="col-span-2">
-      Website Visibility
-    </div>
+            <div className="col-span-2">
+              Website Visibility
+            </div>
 
-    <div className="col-span-1 text-right">
-      Actions
-    </div>
-  </div>
+            <div className="col-span-1 text-right">
+              Actions
+            </div>
+          </div>
 
 
-  {/* EMPTY STATE */}
-  {filteredProjects.length === 0 ? (
-    <div
-      className="
+          {/* EMPTY STATE */}
+          {filteredProjects.length === 0 ? (
+            <div
+              className="
         flex flex-col
         items-center
         justify-center
@@ -349,9 +349,9 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
         px-6
         text-center
       "
-    >
-      <div
-        className="
+            >
+              <div
+                className="
           w-12 h-12
           rounded-xl
           bg-brand-blue/5
@@ -359,51 +359,51 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
           flex items-center justify-center
           mb-4
         "
-      >
-        <Building2 size={22} />
-      </div>
+              >
+                <Building2 size={22} />
+              </div>
 
-      <p className="text-sm font-bold text-brand-blue">
-        No projects found
-      </p>
+              <p className="text-sm font-bold text-brand-blue">
+                No projects found
+              </p>
 
-      <p className="text-xs text-gray-400 mt-1">
-        Try another search term.
-      </p>
-    </div>
-  ) : (
+              <p className="text-xs text-gray-400 mt-1">
+                Try another search term.
+              </p>
+            </div>
+          ) : (
 
-    <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-gray-100">
 
-      {filteredProjects.map((proj) => (
+              {filteredProjects.map((proj) => (
 
-        <div
-          key={proj.id}
-          role={
-            checkPerm('edit_project', 'can_edit')
-              ? 'button'
-              : undefined
-          }
-          tabIndex={
-            checkPerm('edit_project', 'can_edit')
-              ? 0
-              : -1
-          }
-          onClick={() => {
-            if (checkPerm('edit_project', 'can_edit')) {
-              openProject(proj.id);
-            }
-          }}
-          onKeyDown={(e) => {
-            if (
-              checkPerm('edit_project', 'can_edit') &&
-              (e.key === 'Enter' || e.key === ' ')
-            ) {
-              e.preventDefault();
-              openProject(proj.id);
-            }
-          }}
-          className={`
+                <div
+                  key={proj.id}
+                  role={
+                    checkPerm('edit_project', 'can_edit')
+                      ? 'button'
+                      : undefined
+                  }
+                  tabIndex={
+                    checkPerm('edit_project', 'can_edit')
+                      ? 0
+                      : -1
+                  }
+                  onClick={() => {
+                    if (checkPerm('edit_project', 'can_edit')) {
+                      openProject(proj.id);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (
+                      checkPerm('edit_project', 'can_edit') &&
+                      (e.key === 'Enter' || e.key === ' ')
+                    ) {
+                      e.preventDefault();
+                      openProject(proj.id);
+                    }
+                  }}
+                  className={`
             group
             grid grid-cols-1 md:grid-cols-12
             gap-4
@@ -411,25 +411,24 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
             items-center
             transition-colors
 
-            ${
-              checkPerm('edit_project', 'can_edit')
-                ? 'cursor-pointer hover:bg-gray-50/80'
-                : ''
-            }
+            ${checkPerm('edit_project', 'can_edit')
+                      ? 'cursor-pointer hover:bg-gray-50/80'
+                      : ''
+                    }
           `}
-        >
+                >
 
-          {/* PROJECT */}
-          <div
-            className="
+                  {/* PROJECT */}
+                  <div
+                    className="
               md:col-span-4
               flex items-center
               gap-4
               min-w-0
             "
-          >
-            <div
-              className="
+                  >
+                    <div
+                      className="
                 w-12 h-12
                 rounded-xl
                 bg-gray-100
@@ -437,21 +436,21 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
                 shrink-0
                 border border-gray-100
               "
-            >
-              <img
-                src={
-                  proj.image ||
-                  'https://via.placeholder.com/150?text=No+Image'
-                }
-                alt={proj.title}
-                className="w-full h-full object-cover"
-              />
-            </div>
+                    >
+                      <img
+                        src={
+                          proj.image ||
+                          'https://via.placeholder.com/150?text=No+Image'
+                        }
+                        alt={proj.title}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
 
-            <div className="min-w-0">
+                    <div className="min-w-0">
 
-              <div
-                className="
+                      <div
+                        className="
                   text-sm
                   font-bold
                   text-brand-blue
@@ -459,36 +458,36 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
                   group-hover:text-brand-gold
                   transition-colors
                 "
-              >
-                {proj.title}
-              </div>
+                      >
+                        {proj.title}
+                      </div>
 
-              <div className="md:hidden text-xs text-gray-400 mt-1">
-                {proj.city}
-              </div>
+                      <div className="md:hidden text-xs text-gray-400 mt-1">
+                        {proj.city}
+                      </div>
 
-            </div>
-          </div>
+                    </div>
+                  </div>
 
 
-          {/* LOCATION */}
-          <div
-            className="
+                  {/* LOCATION */}
+                  <div
+                    className="
               hidden md:block
               md:col-span-3
               text-sm
               text-gray-500
               truncate
             "
-          >
-            {proj.city || '—'}
-          </div>
+                  >
+                    {proj.city || '—'}
+                  </div>
 
 
-          {/* BUSINESS / PROJECT STATUS */}
-          <div className="md:col-span-2">
-            <span
-              className="
+                  {/* BUSINESS / PROJECT STATUS */}
+                  <div className="md:col-span-2">
+                    <span
+                      className="
                 inline-flex
                 items-center
                 px-2.5 py-1.5
@@ -500,27 +499,27 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
                 uppercase
                 tracking-wider
               "
-            >
-              {proj.status || 'No status'}
-            </span>
-          </div>
+                    >
+                      {proj.status || 'No status'}
+                    </span>
+                  </div>
 
 
-          {/* WEBSITE VISIBILITY */}
-          <div className="md:col-span-2">
-            <button
-              type="button"
-              disabled={!checkPerm('edit_project', 'can_edit')}
-              onClick={(e) => {
-                e.stopPropagation();
+                  {/* WEBSITE VISIBILITY */}
+                  <div className="md:col-span-2">
+                    <button
+                      type="button"
+                      disabled={!checkPerm('edit_project', 'can_edit')}
+                      onClick={(e) => {
+                        e.stopPropagation();
 
-                handleToggleProject(
-                  proj.id,
-                  proj.is_active,
-                  proj.title
-                );
-              }}
-              className={`
+                        handleToggleProject(
+                          proj.id,
+                          proj.is_active,
+                          proj.title
+                        );
+                      }}
+                      className={`
                 inline-flex
                 items-center
                 gap-2.5
@@ -531,44 +530,42 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
                 uppercase
                 tracking-wider
                 transition-colors
-                ${
-                  checkPerm('edit_project', 'can_edit')
-                    ? 'cursor-pointer'
-                    : 'cursor-not-allowed opacity-60'
-                }
+                ${checkPerm('edit_project', 'can_edit')
+                          ? 'cursor-pointer'
+                          : 'cursor-not-allowed opacity-60'
+                        }
               `}
-              title={
-                proj.is_active
-                  ? 'Click to hide this project from the website'
-                  : 'Click to make this project visible on the website'
-              }
-              aria-pressed={Boolean(proj.is_active)}
-              aria-label={`${proj.is_active ? 'Hide' : 'Show'} ${proj.title} on the website`}
-            >
-              <span
-                className={`
+                      title={
+                        proj.is_active
+                          ? 'Click to hide this project from the website'
+                          : 'Click to make this project visible on the website'
+                      }
+                      aria-pressed={Boolean(proj.is_active)}
+                      aria-label={`${proj.is_active ? 'Hide' : 'Show'} ${proj.title} on the website`}
+                    >
+                      <span
+                        className={`
                   ${proj.is_active ? 'text-green-600' : 'text-gray-400'}
                 `}
-              >
-                {proj.is_active ? 'Visible' : 'Hidden'}
-              </span>
+                      >
+                        {proj.is_active ? 'Visible' : 'Hidden'}
+                      </span>
 
-              <span
-                className={`
+                      <span
+                        className={`
                   relative
                   h-7 w-12
                   shrink-0
                   rounded-full
                   transition-colors
-                  ${
-                    proj.is_active
-                      ? 'bg-green-500 hover:bg-green-600'
-                      : 'bg-gray-300 hover:bg-gray-400'
-                  }
+                  ${proj.is_active
+                            ? 'bg-green-500 hover:bg-green-600'
+                            : 'bg-gray-300 hover:bg-gray-400'
+                          }
                 `}
-              >
-                <span
-                  className={`
+                      >
+                        <span
+                          className={`
                     absolute top-1
                     h-5 w-5
                     rounded-full
@@ -577,34 +574,34 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
                     transition-all
                     ${proj.is_active ? 'left-6' : 'left-1'}
                   `}
-                />
-              </span>
-            </button>
-          </div>
+                        />
+                      </span>
+                    </button>
+                  </div>
 
 
-          {/* ARCHIVE */}
-          <div
-            className="
+                  {/* ARCHIVE */}
+                  <div
+                    className="
               md:col-span-1
               flex md:justify-end
             "
-          >
-            {checkPerm(
-              'edit_project',
-              'can_delete'
-            ) && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
+                  >
+                    {checkPerm(
+                      'edit_project',
+                      'can_delete'
+                    ) && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
 
-                  handleArchiveClick(
-                    proj.id,
-                    proj.title
-                  );
-                }}
-                className="
+                            handleArchiveClick(
+                              proj.id,
+                              proj.title
+                            );
+                          }}
+                          className="
                   p-2
                   rounded-lg
                   text-gray-300
@@ -612,22 +609,22 @@ function ProjectsManager({ checkPerm }: ManagerProps) {
                   hover:bg-red-50
                   transition-colors
                 "
-                title={`Archive ${proj.title}`}
-                aria-label={`Archive ${proj.title}`}
-              >
-                <Archive size={16} />
-              </button>
-            )}
-          </div>
+                          title={`Archive ${proj.title}`}
+                          aria-label={`Archive ${proj.title}`}
+                        >
+                          <Archive size={16} />
+                        </button>
+                      )}
+                  </div>
+
+                </div>
+
+              ))}
+
+            </div>
+          )}
 
         </div>
-
-      ))}
-
-    </div>
-  )}
-
-</div>
       </div>
     </div>
   );
@@ -1001,9 +998,8 @@ function VirtualToursManager({ checkPerm }: ManagerProps) {
                           openProjectTours(tour.project_id);
                         }
                       }}
-                      className={`group grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-4 items-center transition-colors ${
-                        canEdit ? 'cursor-pointer hover:bg-gray-50/80 focus:outline-none focus:bg-gray-50/80' : ''
-                      }`}
+                      className={`group grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-4 items-center transition-colors ${canEdit ? 'cursor-pointer hover:bg-gray-50/80 focus:outline-none focus:bg-gray-50/80' : ''
+                        }`}
                     >
                       <div className="md:col-span-4 flex items-center gap-4 min-w-0">
                         <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden shrink-0 border border-gray-100 flex items-center justify-center">
@@ -1412,11 +1408,10 @@ function PromotionsManager({ checkPerm }: ManagerProps) {
                           openPromotion(promo.id);
                         }
                       }}
-                      className={`group grid grid-cols-1 items-center gap-4 px-6 py-4 transition-colors md:grid-cols-12 ${
-                        canEdit
+                      className={`group grid grid-cols-1 items-center gap-4 px-6 py-4 transition-colors md:grid-cols-12 ${canEdit
                           ? 'cursor-pointer hover:bg-gray-50/80 focus:bg-gray-50/80 focus:outline-none'
                           : ''
-                      }`}
+                        }`}
                     >
                       <div className="flex min-w-0 items-center gap-4 md:col-span-4">
                         <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50 shadow-sm">
@@ -1467,11 +1462,10 @@ function PromotionsManager({ checkPerm }: ManagerProps) {
                               promo.title || 'Untitled Promotion'
                             );
                           }}
-                          className={`inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider transition-all ${
-                            canEdit
+                          className={`inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider transition-all ${canEdit
                               ? 'cursor-pointer'
                               : 'cursor-not-allowed opacity-60'
-                          }`}
+                            }`}
                           title={
                             promo.is_active
                               ? 'Hide this promotion from the website'
@@ -1483,17 +1477,15 @@ function PromotionsManager({ checkPerm }: ManagerProps) {
                           </span>
 
                           <span
-                            className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${
-                              promo.is_active ? 'bg-green-500' : 'bg-gray-300'
-                            } ${canEdit ? 'hover:ring-4 hover:ring-brand-blue/5' : ''}`}
+                            className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${promo.is_active ? 'bg-green-500' : 'bg-gray-300'
+                              } ${canEdit ? 'hover:ring-4 hover:ring-brand-blue/5' : ''}`}
                             aria-hidden="true"
                           >
                             <span
-                              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
-                                promo.is_active
+                              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${promo.is_active
                                   ? 'translate-x-5'
                                   : 'translate-x-0.5'
-                              }`}
+                                }`}
                             />
                           </span>
                         </button>
@@ -1810,11 +1802,10 @@ function PartnerBanksManager({ checkPerm }: ManagerProps) {
                           openBank(bank.id);
                         }
                       }}
-                      className={`group grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-4 items-center transition-colors ${
-                        canEdit
+                      className={`group grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-4 items-center transition-colors ${canEdit
                           ? 'cursor-pointer hover:bg-gray-50/80 focus:outline-none focus:bg-gray-50/80'
                           : ''
-                      }`}
+                        }`}
                     >
                       <div className="md:col-span-4 flex items-center gap-4 min-w-0">
                         <div className="w-12 h-12 rounded-xl bg-white overflow-hidden shrink-0 border border-gray-100 shadow-sm flex items-center justify-center p-1.5">
@@ -1858,9 +1849,8 @@ function PartnerBanksManager({ checkPerm }: ManagerProps) {
                             e.stopPropagation();
                             handleToggleBank(bank.id, bank.is_active, bank.bank_name);
                           }}
-                          className={`inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider transition-all ${
-                            canEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
-                          }`}
+                          className={`inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider transition-all ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
+                            }`}
                           title={
                             bank.is_active
                               ? 'Hide this bank from the website'
@@ -1872,15 +1862,13 @@ function PartnerBanksManager({ checkPerm }: ManagerProps) {
                           </span>
 
                           <span
-                            className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${
-                              bank.is_active ? 'bg-green-500' : 'bg-gray-300'
-                            } ${canEdit ? 'hover:ring-4 hover:ring-brand-blue/5' : ''}`}
+                            className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${bank.is_active ? 'bg-green-500' : 'bg-gray-300'
+                              } ${canEdit ? 'hover:ring-4 hover:ring-brand-blue/5' : ''}`}
                             aria-hidden="true"
                           >
                             <span
-                              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
-                                bank.is_active ? 'translate-x-5' : 'translate-x-0.5'
-                              }`}
+                              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${bank.is_active ? 'translate-x-5' : 'translate-x-0.5'
+                                }`}
                             />
                           </span>
                         </button>
@@ -2590,8 +2578,7 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
           syncError
         );
         showError(
-          `Some projects could not be linked to navigation automatically: ${
-            syncError?.message || 'Unknown error.'
+          `Some projects could not be linked to navigation automatically: ${syncError?.message || 'Unknown error.'
           }`
         );
       }
@@ -2660,12 +2647,12 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
         prev.map(item =>
           item.id === editingData.id
             ? {
-                ...item,
-                nav_title: trimmedTitle,
-                tagline: String(editingData.tagline || '').trim(),
-                nav_image_url: editingData.nav_image_url || null,
-                is_active: Boolean(editingData.is_active),
-              }
+              ...item,
+              nav_title: trimmedTitle,
+              tagline: String(editingData.tagline || '').trim(),
+              nav_image_url: editingData.nav_image_url || null,
+              is_active: Boolean(editingData.is_active),
+            }
             : item
         )
       );
@@ -2870,11 +2857,10 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
               <div>
                 <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-gray-500">Navigation Logo</label>
                 <div
-                  className={`relative flex min-h-52 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed text-center transition-all duration-200 ${
-                    isDragging
+                  className={`relative flex min-h-52 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed text-center transition-all duration-200 ${isDragging
                       ? 'border-brand-gold bg-brand-gold/5'
                       : 'border-gray-200 hover:border-brand-blue/40 hover:bg-gray-50'
-                  }`}
+                    }`}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
@@ -2975,15 +2961,13 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                           });
                         }}
                         disabled={!projectIsVisible}
-                        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
-                          projectIsVisible
+                        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${projectIsVisible
                             ? 'cursor-pointer'
                             : 'cursor-not-allowed'
-                        } ${
-                          effectiveVisible
+                          } ${effectiveVisible
                             ? 'bg-green-500 hover:bg-green-600'
                             : 'bg-gray-300 hover:bg-gray-400'
-                        } disabled:opacity-70`}
+                          } disabled:opacity-70`}
                         aria-pressed={effectiveVisible}
                         aria-label="Toggle navigation visibility"
                         title={
@@ -2993,9 +2977,8 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                         }
                       >
                         <span
-                          className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-all ${
-                            effectiveVisible ? 'left-6' : 'left-1'
-                          }`}
+                          className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-all ${effectiveVisible ? 'left-6' : 'left-1'
+                            }`}
                         />
                       </button>
                     </div>
@@ -3173,21 +3156,19 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                     event.preventDefault();
                     handleDropOnItem(item.id);
                   }}
-                  className={`group grid grid-cols-[auto_1fr] gap-3 rounded-2xl border px-3 py-3 transition-all sm:grid-cols-[auto_80px_1fr_auto] sm:items-center sm:gap-4 sm:px-4 ${
-                    isBeingDragged
+                  className={`group grid grid-cols-[auto_1fr] gap-3 rounded-2xl border px-3 py-3 transition-all sm:grid-cols-[auto_80px_1fr_auto] sm:items-center sm:gap-4 sm:px-4 ${isBeingDragged
                       ? 'border-brand-gold bg-brand-gold/5 opacity-60'
                       : canEdit
                         ? 'cursor-pointer border-gray-100 bg-[#fbfbfc] hover:border-brand-blue/20 hover:bg-white hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-gold/20'
                         : 'border-gray-100 bg-[#fbfbfc]'
-                  }`}
+                    }`}
                 >
                   <div className="row-span-2 flex items-center gap-2 sm:row-span-1">
                     <button
                       type="button"
                       onClick={(event) => event.stopPropagation()}
-                      className={`flex h-10 w-8 items-center justify-center rounded-lg text-gray-300 transition-colors ${
-                        canEdit ? 'cursor-grab hover:bg-white hover:text-brand-gold active:cursor-grabbing' : 'cursor-default'
-                      }`}
+                      className={`flex h-10 w-8 items-center justify-center rounded-lg text-gray-300 transition-colors ${canEdit ? 'cursor-grab hover:bg-white hover:text-brand-gold active:cursor-grabbing' : 'cursor-default'
+                        }`}
                       aria-label={`Drag ${item.nav_title} to reorder`}
                       tabIndex={-1}
                     >
@@ -3218,11 +3199,10 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                         {item.nav_title || item.project_table?.title || 'Untitled Project'}
                       </h3>
                       {!effectiveVisible && (
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
-                          !projectIsVisible && item.is_active
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${!projectIsVisible && item.is_active
                             ? 'bg-brand-gold/10 text-brand-gold'
                             : 'bg-gray-200 text-gray-500'
-                        }`}>
+                          }`}>
                           {!projectIsVisible && item.is_active
                             ? 'Hidden with project'
                             : 'Hidden'}
@@ -3239,13 +3219,12 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
 
                   <div className="col-start-2 flex items-center justify-between gap-3 sm:col-start-auto sm:justify-end">
                     <div className="flex items-center gap-2">
-                      <span className={`hidden text-[10px] font-bold uppercase tracking-wider md:inline ${
-                        effectiveVisible
+                      <span className={`hidden text-[10px] font-bold uppercase tracking-wider md:inline ${effectiveVisible
                           ? 'text-green-600'
                           : !projectIsVisible && item.is_active
                             ? 'text-brand-gold'
                             : 'text-gray-400'
-                      }`}>
+                        }`}>
                         {effectiveVisible
                           ? 'Visible'
                           : !projectIsVisible && item.is_active
@@ -3264,15 +3243,13 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                           );
                         }}
                         disabled={!canEdit || !projectIsVisible}
-                        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
-                          canEdit && projectIsVisible
+                        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${canEdit && projectIsVisible
                             ? 'cursor-pointer'
                             : 'cursor-not-allowed'
-                        } ${
-                          effectiveVisible
+                          } ${effectiveVisible
                             ? 'bg-green-500 hover:bg-green-600'
                             : 'bg-gray-300 hover:bg-gray-400'
-                        } ${!canEdit ? 'opacity-50' : ''}`}
+                          } ${!canEdit ? 'opacity-50' : ''}`}
                         aria-pressed={effectiveVisible}
                         aria-label={
                           projectIsVisible
@@ -3290,9 +3267,8 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
                         }
                       >
                         <span
-                          className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-all ${
-                            effectiveVisible ? 'left-6' : 'left-1'
-                          }`}
+                          className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-all ${effectiveVisible ? 'left-6' : 'left-1'
+                            }`}
                         />
                       </button>
                     </div>
@@ -3365,183 +3341,183 @@ function HomeDashboard({
     };
   }, []);
 
-      useEffect(() => {
-      let isMounted = true;
+  useEffect(() => {
+    let isMounted = true;
 
-      const loadSectionStates = async () => {
-        try {
-          const data = await fetchWebsiteSectionStatesAction();
+    const loadSectionStates = async () => {
+      try {
+        const data = await fetchWebsiteSectionStatesAction();
 
-          if (!isMounted) return;
+        if (!isMounted) return;
 
-          setSectionStates(data);
-          setOriginalSectionStates(data);
-        } catch (error) {
-          console.error('Failed to load website section states:', error);
-        } finally {
-          if (isMounted) {
-            setIsLoadingSections(false);
-          }
+        setSectionStates(data);
+        setOriginalSectionStates(data);
+      } catch (error) {
+        console.error('Failed to load website section states:', error);
+      } finally {
+        if (isMounted) {
+          setIsLoadingSections(false);
         }
-      };
+      }
+    };
 
-      loadSectionStates();
+    loadSectionStates();
 
-      return () => {
-        isMounted = false;
-      };
-    }, []);
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
-      const sectionCards = [
-      {
-        label: 'Homepage',
-        description: 'Hero, features, and featured content',
-        tab: 'Homepage',
-        moduleCode: 'homepage_manage',
-        moduleName: 'HOMEPAGE',
-        icon: House,
-      },
-      {
-        label: 'Our Story',
-        description: 'Milestones and company history',
-        tab: 'our story',
-        moduleCode: 'our_story',
-        moduleName: 'OUR STORY',
-        icon: BookOpen,
-      },
-      {
-        label: 'Projects',
-        description: 'Project pages and developments',
-        tab: 'Projects',
-        moduleCode: 'edit_project',
-        moduleName: 'PROJECTS',
-        icon: Building2,
-      },
-      {
-        label: 'Virtual Tours',
-        description: 'Towers, units, and 360° views',
-        tab: 'Virtual Tours',
-        moduleCode: 'virtual_tours',
-        moduleName: 'VIRTUAL TOURS',
-        icon: Move3d,
-      },
-      {
-        label: 'Partner Banks',
-        description: 'Financing partners and offers',
-        tab: 'Partner Banks',
-        moduleCode: 'edit_banks',
-        moduleName: 'BANKS',
-        icon: Landmark,
-      },
-      {
-        label: 'News & Updates',
-        description: 'Articles and announcements',
-        tab: 'News & Updates',
-        moduleCode: 'edit_news',
-        moduleName: 'NEWS AND UPDATES',
-        icon: Newspaper,
-      },
-      {
-        label: 'Promotions',
-        description: 'Current offers and promotions',
-        tab: 'Promotions',
-        moduleCode: 'promotion_code',
-        moduleName: 'PROMOTION',
-        icon: Megaphone,
-      },
+  const sectionCards = [
+    {
+      label: 'Homepage',
+      description: 'Hero, features, and featured content',
+      tab: 'Homepage',
+      moduleCode: 'homepage_manage',
+      moduleName: 'HOMEPAGE',
+      icon: House,
+    },
+    {
+      label: 'Our Story',
+      description: 'Milestones and company history',
+      tab: 'our story',
+      moduleCode: 'our_story',
+      moduleName: 'OUR STORY',
+      icon: BookOpen,
+    },
+    {
+      label: 'Projects',
+      description: 'Project pages and developments',
+      tab: 'Projects',
+      moduleCode: 'edit_project',
+      moduleName: 'PROJECTS',
+      icon: Building2,
+    },
+    {
+      label: 'Virtual Tours',
+      description: 'Towers, units, and 360° views',
+      tab: 'Virtual Tours',
+      moduleCode: 'virtual_tours',
+      moduleName: 'VIRTUAL TOURS',
+      icon: Move3d,
+    },
+    {
+      label: 'Partner Banks',
+      description: 'Financing partners and offers',
+      tab: 'Partner Banks',
+      moduleCode: 'edit_banks',
+      moduleName: 'BANKS',
+      icon: Landmark,
+    },
+    {
+      label: 'News & Updates',
+      description: 'Articles and announcements',
+      tab: 'News & Updates',
+      moduleCode: 'edit_news',
+      moduleName: 'NEWS AND UPDATES',
+      icon: Newspaper,
+    },
+    {
+      label: 'Promotions',
+      description: 'Current offers and promotions',
+      tab: 'Promotions',
+      moduleCode: 'promotion_code',
+      moduleName: 'PROMOTION',
+      icon: Megaphone,
+    },
 
-    ];
+  ];
 
   const visibleCards = sectionCards.filter((card) =>
     checkPerm(card.moduleCode, 'can_view')
   );
 
-const normalizeModuleName = (value: string) =>
-  value
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, 'and')
-    .replace(/\s+/g, ' ');
+  const normalizeModuleName = (value: string) =>
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/&/g, 'and')
+      .replace(/\s+/g, ' ');
 
 
-const getModuleForCard = (moduleCode: string) => {
-  return sectionStates.find(
-    (section) => section.module_code === moduleCode
-  );
-};
+  const getModuleForCard = (moduleCode: string) => {
+    return sectionStates.find(
+      (section) => section.module_code === moduleCode
+    );
+  };
 
 
-const getOriginalModule = (id: number) => {
-  return originalSectionStates.find((section) => section.id === id);
-};
+  const getOriginalModule = (id: number) => {
+    return originalSectionStates.find((section) => section.id === id);
+  };
 
 
-const pendingSectionChanges = sectionStates.filter((section) => {
-  const original = getOriginalModule(section.id);
+  const pendingSectionChanges = sectionStates.filter((section) => {
+    const original = getOriginalModule(section.id);
 
-  if (!original) return false;
+    if (!original) return false;
 
-  return original.is_active !== section.is_active;
-});
-
-
-const hasPendingSectionChanges = pendingSectionChanges.length > 0;
+    return original.is_active !== section.is_active;
+  });
 
 
-const handleSectionVisibilityToggle = (
-  e: React.MouseEvent,
-  moduleId: number
-) => {
-  e.stopPropagation();
+  const hasPendingSectionChanges = pendingSectionChanges.length > 0;
 
-  setSectionStates((current) =>
-    current.map((section) =>
-      section.id === moduleId
-        ? {
+
+  const handleSectionVisibilityToggle = (
+    e: React.MouseEvent,
+    moduleId: number
+  ) => {
+    e.stopPropagation();
+
+    setSectionStates((current) =>
+      current.map((section) =>
+        section.id === moduleId
+          ? {
             ...section,
             is_active: !section.is_active,
           }
-        : section
-    )
-  );
-
-  setSectionSaveSuccess(false);
-  setSectionSaveError('');
-};
-
-
-const handleResetSectionChanges = () => {
-  setSectionStates(
-    originalSectionStates.map((section) => ({ ...section }))
-  );
-
-  setSectionSaveSuccess(false);
-  setSectionSaveError('');
-};
-
-
-const handleSaveSectionChanges = async () => {
-  if (pendingSectionChanges.length === 0) {
-    return;
-  }
-
-  setIsSavingSections(true);
-
-  try {
-    await saveWebsiteSectionStatesAction(
-  pendingSectionChanges.map((section) => {
-    const matchingCard = sectionCards.find(
-      (card) => card.moduleCode === section.module_code
+          : section
+      )
     );
 
-    return {
-      id: section.id,
-      is_active: section.is_active,
-      module_name: section.module_name,
-      display_name: matchingCard?.label || section.module_name,
-    };
-  })
-);
+    setSectionSaveSuccess(false);
+    setSectionSaveError('');
+  };
+
+
+  const handleResetSectionChanges = () => {
+    setSectionStates(
+      originalSectionStates.map((section) => ({ ...section }))
+    );
+
+    setSectionSaveSuccess(false);
+    setSectionSaveError('');
+  };
+
+
+  const handleSaveSectionChanges = async () => {
+    if (pendingSectionChanges.length === 0) {
+      return;
+    }
+
+    setIsSavingSections(true);
+
+    try {
+      await saveWebsiteSectionStatesAction(
+        pendingSectionChanges.map((section) => {
+          const matchingCard = sectionCards.find(
+            (card) => card.moduleCode === section.module_code
+          );
+
+          return {
+            id: section.id,
+            is_active: section.is_active,
+            module_name: section.module_name,
+            display_name: matchingCard?.label || section.module_name,
+          };
+        })
+      );
 
       setOriginalSectionStates(
         sectionStates.map((section) => ({ ...section }))
@@ -3590,59 +3566,58 @@ const handleSaveSectionChanges = async () => {
   return (
     <div className="mx-auto w-full max-w-[1280px]">
 
-        {showSaveConfirmation && (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/55 backdrop-blur-sm p-4">
+      {showSaveConfirmation && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/55 backdrop-blur-sm p-4">
 
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
 
-        <div className="p-6 border-b border-gray-100">
-          <h2 className="text-xl font-serif text-brand-blue mb-2">
-            Update website visibility?
-          </h2>
+            <div className="p-6 border-b border-gray-100">
+              <h2 className="text-xl font-serif text-brand-blue mb-2">
+                Update website visibility?
+              </h2>
 
-          <p className="text-sm text-gray-500 leading-relaxed">
-            These changes will take effect on the live website immediately after saving.
-          </p>
-        </div>
+              <p className="text-sm text-gray-500 leading-relaxed">
+                These changes will take effect on the live website immediately after saving.
+              </p>
+            </div>
 
-        <div className="p-6 space-y-3 max-h-[300px] overflow-y-auto">
-          {pendingSectionChanges.map((section) => (
-            <div
-              key={section.id}
-              className="flex items-center justify-between gap-4 py-2"
-            >
-              <span className="text-sm font-medium text-brand-blue">
-                {sectionCards.find((card) => card.moduleCode === section.module_code)?.label || section.module_name}
-              </span>
+            <div className="p-6 space-y-3 max-h-[300px] overflow-y-auto">
+              {pendingSectionChanges.map((section) => (
+                <div
+                  key={section.id}
+                  className="flex items-center justify-between gap-4 py-2"
+                >
+                  <span className="text-sm font-medium text-brand-blue">
+                    {sectionCards.find((card) => card.moduleCode === section.module_code)?.label || section.module_name}
+                  </span>
 
-              <span
-                className={`
+                  <span
+                    className={`
                   text-[10px]
                   font-bold
                   px-2.5 py-1
                   rounded-md
-                  ${
-                    section.is_active
-                      ? 'bg-green-50 text-green-700'
-                      : 'bg-gray-100 text-gray-600'
-                  }
+                  ${section.is_active
+                        ? 'bg-green-50 text-green-700'
+                        : 'bg-gray-100 text-gray-600'
+                      }
                 `}
-              >
-                {section.is_active
-                  ? 'Shown on website'
-                  : 'Hidden from website'}
-              </span>
+                  >
+                    {section.is_active
+                      ? 'Shown on website'
+                      : 'Hidden from website'}
+                  </span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        <div className="px-6 py-5 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
+            <div className="px-6 py-5 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
 
-          <button
-            type="button"
-            disabled={isSavingSections}
-            onClick={() => setShowSaveConfirmation(false)}
-            className="
+              <button
+                type="button"
+                disabled={isSavingSections}
+                onClick={() => setShowSaveConfirmation(false)}
+                className="
               px-4 py-2.5
               rounded-lg
               text-xs font-bold
@@ -3650,15 +3625,15 @@ const handleSaveSectionChanges = async () => {
               hover:bg-gray-200
               transition-colors
             "
-          >
-            Cancel
-          </button>
+              >
+                Cancel
+              </button>
 
-          <button
-            type="button"
-            disabled={isSavingSections}
-            onClick={handleSaveSectionChanges}
-            className="
+              <button
+                type="button"
+                disabled={isSavingSections}
+                onClick={handleSaveSectionChanges}
+                className="
               min-w-[120px]
               px-5 py-2.5
               rounded-lg
@@ -3670,24 +3645,24 @@ const handleSaveSectionChanges = async () => {
               flex items-center justify-center gap-2
               disabled:opacity-60
             "
-          >
-            {isSavingSections ? (
-              <>
-                <Loader2
-                  size={14}
-                  className="animate-spin"
-                />
-                Saving...
-              </>
-            ) : (
-              'Save changes'
-            )}
-          </button>
+              >
+                {isSavingSections ? (
+                  <>
+                    <Loader2
+                      size={14}
+                      className="animate-spin"
+                    />
+                    Saving...
+                  </>
+                ) : (
+                  'Save changes'
+                )}
+              </button>
 
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-  )}
+      )}
 
       {/* PENDING WEBSITE CHANGES */}
       {hasPendingSectionChanges && (
@@ -3927,10 +3902,9 @@ const handleSaveSectionChanges = async () => {
                     last:border-b-0
                     text-left
                     transition-colors
-                    ${
-                      destination
-                        ? 'hover:bg-gray-50 cursor-pointer'
-                        : 'cursor-default'
+                    ${destination
+                      ? 'hover:bg-gray-50 cursor-pointer'
+                      : 'cursor-default'
                     }
                   `}
                 >
@@ -3954,10 +3928,9 @@ const handleSaveSectionChanges = async () => {
                         tracking-wider
                         px-2 py-1
                         rounded-md
-                        ${
-                          log.action_type === 'DELETE'
-                            ? 'bg-red-50 text-red-600'
-                            : log.action_type === 'CREATE'
+                        ${log.action_type === 'DELETE'
+                          ? 'bg-red-50 text-red-600'
+                          : log.action_type === 'CREATE'
                             ? 'bg-green-50 text-green-600'
                             : 'bg-blue-50 text-blue-600'
                         }
@@ -4051,23 +4024,23 @@ function AdminMainDashboardContent() {
     () => (searchParams.get('section') === 'Homepage Content' ? 'Homepage' : searchParams.get('section')) || 'Home'
   );
   useEffect(() => {
-  const requestedSection = searchParams.get('section');
+    const requestedSection = searchParams.get('section');
 
-  if (requestedSection) {
-    setActiveTab(requestedSection === 'Homepage Content' ? 'Homepage' : requestedSection);
-  }
-}, [searchParams]);
+    if (requestedSection) {
+      setActiveTab(requestedSection === 'Homepage Content' ? 'Homepage' : requestedSection);
+    }
+  }, [searchParams]);
   const [searchQuery, setSearchQuery] = useState(() => {
-          if (typeof window === 'undefined') return '';
+    if (typeof window === 'undefined') return '';
 
-          return sessionStorage.getItem('admin-news-search') || '';
-        });
-        useEffect(() => {
-          sessionStorage.setItem(
-            'admin-news-search',
-            searchQuery
-          );
-        }, [searchQuery]);
+    return sessionStorage.getItem('admin-news-search') || '';
+  });
+  useEffect(() => {
+    sessionStorage.setItem(
+      'admin-news-search',
+      searchQuery
+    );
+  }, [searchQuery]);
   const [filterCategory, setFilterCategory] = useState('');
 
   const [articleToArchive, setArticleToArchive] = useState<{ id: string, title: string } | null>(null);
@@ -4107,62 +4080,62 @@ function AdminMainDashboardContent() {
     return perms[moduleCode][action] === true;
   };
 
-const ALL_MENU_ITEMS = [
-  {
-    name: 'Homepage',
-    icon: House,
-    moduleCode: 'homepage_manage'
-  },
-  {
-    name: 'our story',
-    icon: BookOpen,
-    moduleCode: 'our_story'
-  },
-  {
-    name: 'Projects',
-    icon: Building2,
-    moduleCode: 'edit_project'
-  },
-  {
-    name: 'Navbar Setup',
-    icon: LayoutDashboard,
-    moduleCode: 'edit_project'
-  },
-  {
-    name: 'Virtual Tours',
-    icon: Move3d,
-    moduleCode: 'virtual_tours'
-  },
-  {
-    name: 'Partner Banks',
-    icon: Landmark,
-    moduleCode: 'edit_banks'
-  },
-  {
-    name: 'News & Updates',
-    icon: Newspaper,
-    moduleCode: 'edit_news'
-  },
-  {
-    name: 'Promotions',
-    icon: Megaphone,
-    moduleCode: 'promotion_code'
-  },
-  { name: 'Customer Inbox', icon: Bell, moduleCode: 'notifications_code' },
-  // Kept internally even though they are no longer
-  // displayed as normal sidebar destinations.
-  {
-    name: 'Audit Logs',
-    icon: History,
-    moduleCode: 'audit_log'
-  },
-  {
-    name: 'Modules',
-    icon: Settings,
-    moduleCode: 'admin_manage'
-  },
+  const ALL_MENU_ITEMS = [
+    {
+      name: 'Homepage',
+      icon: House,
+      moduleCode: 'homepage_manage'
+    },
+    {
+      name: 'our story',
+      icon: BookOpen,
+      moduleCode: 'our_story'
+    },
+    {
+      name: 'Projects',
+      icon: Building2,
+      moduleCode: 'edit_project'
+    },
+    {
+      name: 'Navbar Setup',
+      icon: LayoutDashboard,
+      moduleCode: 'edit_project'
+    },
+    {
+      name: 'Virtual Tours',
+      icon: Move3d,
+      moduleCode: 'virtual_tours'
+    },
+    {
+      name: 'Partner Banks',
+      icon: Landmark,
+      moduleCode: 'edit_banks'
+    },
+    {
+      name: 'News & Updates',
+      icon: Newspaper,
+      moduleCode: 'edit_news'
+    },
+    {
+      name: 'Promotions',
+      icon: Megaphone,
+      moduleCode: 'promotion_code'
+    },
+    { name: 'Customer Inbox', icon: Bell, moduleCode: 'notifications_code' },
+    // Kept internally even though they are no longer
+    // displayed as normal sidebar destinations.
+    {
+      name: 'Audit Logs',
+      icon: History,
+      moduleCode: 'audit_log'
+    },
+    {
+      name: 'Modules',
+      icon: Settings,
+      moduleCode: 'admin_manage'
+    },
 
-];
+  ];
 
   const allowedMenuItems = ALL_MENU_ITEMS.filter(item => checkPerm(item.moduleCode, 'can_view'));
 
@@ -4193,23 +4166,23 @@ const ALL_MENU_ITEMS = [
 
         const rbac = await withTimeout(getRBACProfile(), 'Loading your permissions');
         if (cancelled) return;
-        if (!rbac) { setUserPermissions({}); setCurrentUserRole('viewer'); } 
+        if (!rbac) { setUserPermissions({}); setCurrentUserRole('viewer'); }
         else {
-           if (rbac.permissions === 'SUPER_ADMIN') setUserPermissions('SUPER_ADMIN');
-           else setUserPermissions(rbac.permissions as Record<string, any>);
-           setCurrentUserRole(rbac.role);
+          if (rbac.permissions === 'SUPER_ADMIN') setUserPermissions('SUPER_ADMIN');
+          else setUserPermissions(rbac.permissions as Record<string, any>);
+          setCurrentUserRole(rbac.role);
 
-           if (rbac.permissions !== 'SUPER_ADMIN') {
-             const perms = rbac.permissions as Record<string, any>; 
-             setActiveTab(currentTab => {
-               const currentTabModule = ALL_MENU_ITEMS.find(item => item.name === currentTab)?.moduleCode;
-               if (currentTabModule && !perms[currentTabModule]?.can_view) {
-                 const firstAllowedTab = ALL_MENU_ITEMS.find(item => perms[item.moduleCode]?.can_view === true);
-                 return firstAllowedTab ? firstAllowedTab.name : currentTab;
-               }
-               return currentTab;
-             });
-           }
+          if (rbac.permissions !== 'SUPER_ADMIN') {
+            const perms = rbac.permissions as Record<string, any>;
+            setActiveTab(currentTab => {
+              const currentTabModule = ALL_MENU_ITEMS.find(item => item.name === currentTab)?.moduleCode;
+              if (currentTabModule && !perms[currentTabModule]?.can_view) {
+                const firstAllowedTab = ALL_MENU_ITEMS.find(item => perms[item.moduleCode]?.can_view === true);
+                return firstAllowedTab ? firstAllowedTab.name : currentTab;
+              }
+              return currentTab;
+            });
+          }
         }
         try {
           const { data, error: newsLoadError } = await withTimeout(
@@ -4219,7 +4192,7 @@ const ALL_MENU_ITEMS = [
           if (cancelled) return;
           if (newsLoadError) throw newsLoadError;
           if (data) {
-          setNewsList(z.array(NewsArticleSchema).parse(data));
+            setNewsList(z.array(NewsArticleSchema).parse(data));
           }
         } catch (error) {
           console.error('Failed to read News & Updates:', error);
@@ -4353,10 +4326,10 @@ const ALL_MENU_ITEMS = [
     </div>
   );
 
-const contentMenuItems = allowedMenuItems.filter(
-  item =>
-    !['Audit Logs', 'Modules', 'Navbar Setup'].includes(item.name)
-);
+  const contentMenuItems = allowedMenuItems.filter(
+    item =>
+      !['Audit Logs', 'Modules', 'Navbar Setup'].includes(item.name)
+  );
   // Keep the active and archived tabs together for every archivable content module.
   const contentArchiveSection = (Object.keys(archiveSections) as ArchivedContentSection[])
     .find(section => section === activeTab || archiveSections[section].label === activeTab ||
@@ -4365,22 +4338,22 @@ const contentMenuItems = allowedMenuItems.filter(
 
   return (
     <CustomerInboxProvider enabled={checkPerm('notifications_code', 'can_view')}>
-    <div className="flex h-screen bg-[#F8F9FA] text-gray-900 font-sans overflow-hidden relative">
-      {isSidebarOpen && <div className="fixed inset-0 bg-brand-blue/40 backdrop-blur-sm z-30 md:hidden" onClick={() => setIsSidebarOpen(false)} />}
+      <div className="flex h-screen bg-[#F8F9FA] text-gray-900 font-sans overflow-hidden relative">
+        {isSidebarOpen && <div className="fixed inset-0 bg-brand-blue/40 backdrop-blur-sm z-30 md:hidden" onClick={() => setIsSidebarOpen(false)} />}
 
-      <aside
-        onMouseEnter={() => setIsSidebarHovered(true)}
-        onMouseLeave={() => {
-          setIsSidebarHovered(false);
+        <aside
+          onMouseEnter={() => setIsSidebarHovered(true)}
+          onMouseLeave={() => {
+            setIsSidebarHovered(false);
 
-          if (
-            activeTab !== 'Projects' &&
-            activeTab !== 'Navbar Setup'
-          ) {
-            setProjectsMenuOpen(false);
-          }
-        }}
-        className={`
+            if (
+              activeTab !== 'Projects' &&
+              activeTab !== 'Navbar Setup'
+            ) {
+              setProjectsMenuOpen(false);
+            }
+          }}
+          className={`
           fixed inset-y-0 left-0
           bg-brand-blue
           text-white
@@ -4393,28 +4366,26 @@ const contentMenuItems = allowedMenuItems.filter(
           duration-300
           ease-in-out
 
-          ${
-            sidebarExpanded
+          ${sidebarExpanded
               ? 'w-64'
               : 'w-20'
-          }
+            }
 
-          ${
-            isSidebarOpen
+          ${isSidebarOpen
               ? 'translate-x-0'
               : '-translate-x-full'
-          }
+            }
 
           md:translate-x-0
         `}
-      >
+        >
 
-        {/* ===================================== */}
-        {/* LOGO */}
-        {/* ===================================== */}
+          {/* ===================================== */}
+          {/* LOGO */}
+          {/* ===================================== */}
 
-        <div
-          className="
+          <div
+            className="
             h-20
             flex items-center
             border-b border-white/10
@@ -4422,63 +4393,62 @@ const contentMenuItems = allowedMenuItems.filter(
             shrink-0
             overflow-hidden
           "
-        >
-          {sidebarExpanded ? (
-            <img
-              src="/images/navigation/GoldenTopperlogo.svg"
-              alt="Golden ToPPer"
-              className="h-10 w-auto object-contain ml-7"
-            />
-          ) : (
-            <div className="w-20 flex justify-center">
-              <div className="w-10 overflow-hidden">
-                <img
-                  src="/images/navigation/GoldenTopperlogo.svg"
-                  alt="Golden ToPPer"
-                  className="
+          >
+            {sidebarExpanded ? (
+              <img
+                src="/images/navigation/GoldenTopperlogo.svg"
+                alt="Golden ToPPer"
+                className="h-10 w-auto object-contain ml-7"
+              />
+            ) : (
+              <div className="w-20 flex justify-center">
+                <div className="w-10 overflow-hidden">
+                  <img
+                    src="/images/navigation/GoldenTopperlogo.svg"
+                    alt="Golden ToPPer"
+                    className="
                     h-10
                     w-auto
                     max-w-none
                     object-left
                   "
-                />
+                  />
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
 
-        {/* ===================================== */}
-        {/* MAIN NAVIGATION */}
-        {/* ===================================== */}
+          {/* ===================================== */}
+          {/* MAIN NAVIGATION */}
+          {/* ===================================== */}
 
-        <nav
-          className={`
+          <nav
+            className={`
             flex-1
             py-6
             overflow-y-auto
             overflow-x-hidden
 
-            ${
-              sidebarExpanded
+            ${sidebarExpanded
                 ? 'px-4'
                 : 'px-3'
-            }
+              }
           `}
-        >
+          >
 
-          {/* HOME */}
-          <button
-            type="button"
-            title={!sidebarExpanded ? 'Home' : undefined}
-            onClick={() => {
-              setActiveTab('Home');
-              setFilterCategory('');
-              setSearchQuery('');
-              setProjectsMenuOpen(false);
-              setIsSidebarOpen(false);
-            }}
-            className={`
+            {/* HOME */}
+            <button
+              type="button"
+              title={!sidebarExpanded ? 'Home' : undefined}
+              onClick={() => {
+                setActiveTab('Home');
+                setFilterCategory('');
+                setSearchQuery('');
+                setProjectsMenuOpen(false);
+                setIsSidebarOpen(false);
+              }}
+              className={`
               w-full
               h-12
               flex items-center
@@ -4489,51 +4459,48 @@ const contentMenuItems = allowedMenuItems.filter(
               outline-none
               mb-6
 
-              ${
-                sidebarExpanded
+              ${sidebarExpanded
                   ? 'gap-4 px-4'
                   : 'justify-center'
-              }
+                }
 
-              ${
-                activeTab === 'Home'
+              ${activeTab === 'Home'
                   ? 'bg-white/5 text-brand-gold font-bold shadow-lg'
                   : 'text-gray-300 hover:bg-white/5 hover:text-white'
-              }
+                }
             `}
-          >
-            <LayoutDashboard
-              size={20}
-              className={`
+            >
+              <LayoutDashboard
+                size={20}
+                className={`
                 shrink-0
-                ${
-                  activeTab === 'Home'
+                ${activeTab === 'Home'
                     ? 'text-brand-gold'
                     : 'text-gray-400 group-hover:text-white'
-                }
+                  }
               `}
-            />
+              />
 
-            {sidebarExpanded && (
-              <span
-                className="
+              {sidebarExpanded && (
+                <span
+                  className="
                   whitespace-nowrap
                   text-[13px]
                   font-bold
                   tracking-widest
                   uppercase
                 "
-              >
-                Dashboard
-              </span>
-            )}
-          </button>
+                >
+                  Dashboard
+                </span>
+              )}
+            </button>
 
 
-          {/* SECTION LABEL */}
-          {sidebarExpanded && (
-            <div
-              className="
+            {/* SECTION LABEL */}
+            {sidebarExpanded && (
+              <div
+                className="
                 px-4
                 mb-3
                 text-[10px]
@@ -4543,45 +4510,45 @@ const contentMenuItems = allowedMenuItems.filter(
                 text-brand-gold/70
                 whitespace-nowrap
               "
-            >
-              Content Management
-            </div>
-          )}
+              >
+                Content Management
+              </div>
+            )}
 
 
-          {/* CONTENT ITEMS */}
-          <div className="space-y-2">
-            {contentMenuItems.map((item) => {
-              const Icon = item.icon;
+            {/* CONTENT ITEMS */}
+            <div className="space-y-2">
+              {contentMenuItems.map((item) => {
+                const Icon = item.icon;
 
-              /* ===================================== */
-              /* PROJECTS + SUBMENU */
-              /* ===================================== */
+                /* ===================================== */
+                /* PROJECTS + SUBMENU */
+                /* ===================================== */
 
-              if (item.name === 'Projects') {
-                const isProjectSection =
-                  activeTab === 'Projects' ||
-                  activeTab === 'Navbar Setup' ||
-                  activeTab === 'Archived Projects';
+                if (item.name === 'Projects') {
+                  const isProjectSection =
+                    activeTab === 'Projects' ||
+                    activeTab === 'Navbar Setup' ||
+                    activeTab === 'Archived Projects';
 
-                const showProjectMenu =
-                  sidebarExpanded &&
-                  (projectsMenuOpen || isProjectSection);
+                  const showProjectMenu =
+                    sidebarExpanded &&
+                    (projectsMenuOpen || isProjectSection);
 
-                return (
-                  <div key={item.name}>
+                  return (
+                    <div key={item.name}>
 
-                    <button
-                      type="button"
-                      title={!sidebarExpanded ? 'Projects' : undefined}
-                      onClick={() => {
-                        setActiveTab('Projects');
-                        setFilterCategory('');
-                        setSearchQuery('');
-                        setProjectsMenuOpen(true);
-                        setIsSidebarOpen(false);
-                      }}
-                      className={`
+                      <button
+                        type="button"
+                        title={!sidebarExpanded ? 'Projects' : undefined}
+                        onClick={() => {
+                          setActiveTab('Projects');
+                          setFilterCategory('');
+                          setSearchQuery('');
+                          setProjectsMenuOpen(true);
+                          setIsSidebarOpen(false);
+                        }}
+                        className={`
                         w-full
                         h-12
                         flex items-center
@@ -4591,35 +4558,32 @@ const contentMenuItems = allowedMenuItems.filter(
                         group
                         outline-none
 
-                        ${
-                          sidebarExpanded
+                        ${sidebarExpanded
                             ? 'gap-4 px-4'
                             : 'justify-center'
-                        }
+                          }
 
-                        ${
-                          isProjectSection
+                        ${isProjectSection
                             ? 'bg-white/5 text-brand-gold font-bold'
                             : 'text-gray-300 hover:bg-white/5 hover:text-white'
-                        }
+                          }
                       `}
-                    >
-                      <Building2
-                        size={20}
-                        className={`
+                      >
+                        <Building2
+                          size={20}
+                          className={`
                           shrink-0
-                          ${
-                            isProjectSection
+                          ${isProjectSection
                               ? 'text-brand-gold'
                               : 'text-gray-400 group-hover:text-white'
-                          }
+                            }
                         `}
-                      />
+                        />
 
-                      {sidebarExpanded && (
-                        <>
-                          <span
-                            className="
+                        {sidebarExpanded && (
+                          <>
+                            <span
+                              className="
                               flex-1
                               text-left
                               whitespace-nowrap
@@ -4628,30 +4592,29 @@ const contentMenuItems = allowedMenuItems.filter(
                               tracking-widest
                               uppercase
                             "
-                          >
-                            Projects
-                          </span>
+                            >
+                              Projects
+                            </span>
 
-                          <ChevronDown
-                            size={15}
-                            className={`
+                            <ChevronDown
+                              size={15}
+                              className={`
                               transition-transform duration-200
-                              ${
-                                showProjectMenu
+                              ${showProjectMenu
                                   ? 'rotate-180'
                                   : ''
-                              }
+                                }
                             `}
-                          />
-                        </>
-                      )}
-                    </button>
+                            />
+                          </>
+                        )}
+                      </button>
 
 
-                    {/* PROJECT SUBMENU */}
-                    {showProjectMenu && (
-                      <div
-                        className="
+                      {/* PROJECT SUBMENU */}
+                      {showProjectMenu && (
+                        <div
+                          className="
                           ml-6
                           mt-1
                           pl-5
@@ -4659,16 +4622,16 @@ const contentMenuItems = allowedMenuItems.filter(
                           border-white/10
                           space-y-1
                         "
-                      >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveTab('Projects');
-                            setFilterCategory('');
-                            setSearchQuery('');
-                            setIsSidebarOpen(false);
-                          }}
-                          className={`
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTab('Projects');
+                              setFilterCategory('');
+                              setSearchQuery('');
+                              setIsSidebarOpen(false);
+                            }}
+                            className={`
                             w-full
                             text-left
                             px-3 py-2.5
@@ -4677,25 +4640,24 @@ const contentMenuItems = allowedMenuItems.filter(
                             font-medium
                             transition-colors
 
-                            ${
-                              activeTab === 'Projects'
+                            ${activeTab === 'Projects'
                                 ? 'text-brand-gold bg-white/5'
                                 : 'text-gray-400 hover:text-white hover:bg-white/5'
-                            }
+                              }
                           `}
-                        >
-                          Manage Projects
-                        </button>
+                          >
+                            Manage Projects
+                          </button>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveTab('Navbar Setup');
-                            setFilterCategory('');
-                            setSearchQuery('');
-                            setIsSidebarOpen(false);
-                          }}
-                          className={`
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTab('Navbar Setup');
+                              setFilterCategory('');
+                              setSearchQuery('');
+                              setIsSidebarOpen(false);
+                            }}
+                            className={`
                             w-full
                             text-left
                             px-3 py-2.5
@@ -4704,25 +4666,24 @@ const contentMenuItems = allowedMenuItems.filter(
                             font-medium
                             transition-colors
 
-                            ${
-                              activeTab === 'Navbar Setup'
+                            ${activeTab === 'Navbar Setup'
                                 ? 'text-brand-gold bg-white/5'
                                 : 'text-gray-400 hover:text-white hover:bg-white/5'
-                            }
+                              }
                           `}
-                        >
-                          Navigation Setup
-                        </button>
+                          >
+                            Navigation Setup
+                          </button>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveTab('Archived Projects');
-                            setFilterCategory('');
-                            setSearchQuery('');
-                            setIsSidebarOpen(false);
-                          }}
-                          className={`
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTab('Archived Projects');
+                              setFilterCategory('');
+                              setSearchQuery('');
+                              setIsSidebarOpen(false);
+                            }}
+                            className={`
                             w-full
                             text-left
                             px-3 py-2.5
@@ -4731,44 +4692,43 @@ const contentMenuItems = allowedMenuItems.filter(
                             font-medium
                             transition-colors
 
-                            ${
-                              activeTab === 'Archived Projects'
+                            ${activeTab === 'Archived Projects'
                                 ? 'text-brand-gold bg-white/5'
                                 : 'text-gray-400 hover:text-white hover:bg-white/5'
-                            }
+                              }
                           `}
-                        >
-                          Archived Projects
-                        </button>
-                      </div>
-                    )}
+                          >
+                            Archived Projects
+                          </button>
+                        </div>
+                      )}
 
-                  </div>
-                );
-              }
+                    </div>
+                  );
+                }
 
 
-              /* ===================================== */
-              /* NORMAL MENU ITEMS */
-              /* ===================================== */
+                /* ===================================== */
+                /* NORMAL MENU ITEMS */
+                /* ===================================== */
 
-              const isActive = activeTab === item.name ||
-                activeTab === `Archived ${item.name}` ||
-                (activeTab === 'Archived Our Story' && item.name === 'our story');
+                const isActive = activeTab === item.name ||
+                  activeTab === `Archived ${item.name}` ||
+                  (activeTab === 'Archived Our Story' && item.name === 'our story');
 
-              return (
-                <button
-                  key={item.name}
-                  type="button"
-                  title={!sidebarExpanded ? item.name : undefined}
-                  onClick={() => {
-                    setActiveTab(item.name);
-                    setFilterCategory('');
-                    setSearchQuery('');
-                    setProjectsMenuOpen(false);
-                    setIsSidebarOpen(false);
-                  }}
-                  className={`
+                return (
+                  <button
+                    key={item.name}
+                    type="button"
+                    title={!sidebarExpanded ? item.name : undefined}
+                    onClick={() => {
+                      setActiveTab(item.name);
+                      setFilterCategory('');
+                      setSearchQuery('');
+                      setProjectsMenuOpen(false);
+                      setIsSidebarOpen(false);
+                    }}
+                    className={`
                     w-full
                     h-12
                     flex items-center
@@ -4779,76 +4739,72 @@ const contentMenuItems = allowedMenuItems.filter(
                     outline-none
                     ${item.name === 'Customer Inbox' ? 'focus-visible:ring-2 focus-visible:ring-brand-gold' : ''}
 
-                    ${
-                      sidebarExpanded
+                    ${sidebarExpanded
                         ? 'gap-4 px-4'
                         : 'justify-center'
-                    }
+                      }
 
-                    ${
-                      isActive
+                    ${isActive
                         ? 'bg-white/5 text-brand-gold font-bold'
                         : 'text-gray-300 hover:bg-white/5 hover:text-white'
-                    }
+                      }
                   `}
-                >
-                  <Icon
-                    size={20}
-                    className={`
+                  >
+                    <Icon
+                      size={20}
+                      className={`
                       shrink-0
 
-                      ${
-                        isActive
+                      ${isActive
                           ? 'text-brand-gold'
                           : 'text-gray-400 group-hover:text-white'
-                      }
+                        }
                     `}
-                  />
+                    />
 
-                  {sidebarExpanded && (
-                    <span
-                      className="
+                    {sidebarExpanded && (
+                      <span
+                        className="
                         whitespace-nowrap
                         text-[13px]
                         font-bold
                         tracking-widest
                         uppercase
                       "
-                    >
-                      {item.name === 'our story'
-                        ? 'Our Story'
-                        : item.name}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </nav>
+                      >
+                        {item.name === 'our story'
+                          ? 'Our Story'
+                          : item.name}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
 
 
-        {/* ===================================== */}
-        {/* BOTTOM ACTIONS */}
-        {/* ===================================== */}
+          {/* ===================================== */}
+          {/* BOTTOM ACTIONS */}
+          {/* ===================================== */}
 
-        <div
-          className={`
+          <div
+            className={`
             py-4
             border-t border-white/10
             bg-[#0f1d40]/50
 
-            ${
-              sidebarExpanded
+            ${sidebarExpanded
                 ? 'px-4'
                 : 'px-3'
-            }
+              }
           `}
-        >
-          <button
-            type="button"
-            title={!sidebarExpanded ? 'Sign Out' : undefined}
-            onClick={handleSignOut}
-            className={`
+          >
+            <button
+              type="button"
+              title={!sidebarExpanded ? 'Sign Out' : undefined}
+              onClick={handleSignOut}
+              className={`
               w-full
               h-12
               flex items-center
@@ -4859,432 +4815,427 @@ const contentMenuItems = allowedMenuItems.filter(
               transition-colors
               outline-none
 
-              ${
-                sidebarExpanded
+              ${sidebarExpanded
                   ? 'gap-4 px-4'
                   : 'justify-center'
-              }
+                }
             `}
-          >
-            <LogOut
-              size={18}
-              className="shrink-0"
-            />
+            >
+              <LogOut
+                size={18}
+                className="shrink-0"
+              />
 
-            {sidebarExpanded && (
-              <span
-                className="
+              {sidebarExpanded && (
+                <span
+                  className="
                   text-xs
                   font-bold
                   uppercase
                   tracking-widest
                   whitespace-nowrap
                 "
-              >
-                Sign Out
-              </span>
-            )}
-          </button>
-        </div>
-      </aside>
-
-      <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden md:ml-20">
-        {articleToArchive && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 p-4 backdrop-blur-sm">
-            <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-3xl bg-white p-8 shadow-2xl">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-500 shadow-inner">
-                <AlertCircle size={32} />
-              </div>
-
-              <h2 className="text-center font-serif text-2xl font-bold text-brand-blue">
-                Archive Article?
-              </h2>
-
-              <p className="text-center text-sm leading-relaxed text-gray-500">
-                <strong className="text-brand-blue">
-                  {articleToArchive.title}
-                </strong>{' '}
-                will be removed from the active News & Updates list and from the public website.
-              </p>
-
-              <div className="mt-3 flex w-full gap-3">
-                <button
-                  type="button"
-                  onClick={() => setArticleToArchive(null)}
-                  disabled={isArchiving}
-                  className="flex-1 rounded-xl bg-gray-100 py-3 text-xs font-bold uppercase tracking-widest text-gray-700 hover:bg-gray-200 disabled:opacity-60"
                 >
-                  Cancel
-                </button>
-
-                <button
-                  type="button"
-                  onClick={confirmArchive}
-                  disabled={isArchiving}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 py-3 text-xs font-bold uppercase tracking-widest text-white hover:bg-red-700 disabled:opacity-60"
-                >
-                  {isArchiving ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : (
-                    'Archive'
-                  )}
-                </button>
-              </div>
-            </div>
+                  Sign Out
+                </span>
+              )}
+            </button>
           </div>
-        )}
+        </aside>
 
-        {successMessage && (
-          <div className="fixed top-24 right-6 z-[120] max-w-sm rounded-2xl border border-green-100 bg-white px-4 py-3 shadow-xl">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-50 text-green-600">
-                <CheckCircle2 size={17} />
-              </div>
+        <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden md:ml-20">
+          {articleToArchive && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-blue/60 p-4 backdrop-blur-sm">
+              <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-3xl bg-white p-8 shadow-2xl">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-500 shadow-inner">
+                  <AlertCircle size={32} />
+                </div>
 
-              <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-green-700">
-                  Updated
+                <h2 className="text-center font-serif text-2xl font-bold text-brand-blue">
+                  Archive Article?
+                </h2>
+
+                <p className="text-center text-sm leading-relaxed text-gray-500">
+                  <strong className="text-brand-blue">
+                    {articleToArchive.title}
+                  </strong>{' '}
+                  will be removed from the active News & Updates list and from the public website.
                 </p>
-                <p className="mt-1 text-sm text-gray-600">
-                  {successMessage}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
 
-        {newsErrorMessage && (
-          <div className="fixed top-24 right-6 z-[120] max-w-sm rounded-2xl border border-red-100 bg-white px-4 py-3 shadow-xl">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-500">
-                <AlertCircle size={17} />
-              </div>
+                <div className="mt-3 flex w-full gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setArticleToArchive(null)}
+                    disabled={isArchiving}
+                    className="flex-1 rounded-xl bg-gray-100 py-3 text-xs font-bold uppercase tracking-widest text-gray-700 hover:bg-gray-200 disabled:opacity-60"
+                  >
+                    Cancel
+                  </button>
 
-              <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-red-600">
-                  Could not update
-                </p>
-                <p className="mt-1 text-sm text-gray-600">
-                  {newsErrorMessage}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <header className="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0 shadow-sm">
-          <div className="flex items-center gap-6 min-w-0">
-            <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 text-brand-blue"><Menu size={24} /></button>
-            <h1 className="text-2xl md:text-3xl font-serif text-brand-blue truncate">
-              {activeTab === 'Home'
-                ? 'Dashboard'
-                : activeTab === 'our story'
-                ? 'Our Story'
-                : activeTab === 'Navbar Setup'
-                ? 'Navigation Setup'
-                : activeTab === 'Archived Projects'
-                ? 'Projects'
-                : Object.prototype.hasOwnProperty.call(archiveSections, activeTab)
-                ? archiveSections[activeTab as ArchivedContentSection].label
-                : activeTab}
-            </h1>
-            {activeTab === 'Projects' && checkPerm('edit_project', 'can_create') && <button onClick={() => router.push('/admin/projects')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Project</button>}
-            {activeTab === 'Promotions' && checkPerm('promotion_code', 'can_create') && <button onClick={() => router.push('/admin/promotions')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Promo</button>}
-            {activeTab === 'Partner Banks' && checkPerm('edit_banks', 'can_create') && <button onClick={() => router.push('/admin/partnerbanks')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Bank</button>}
-            {activeTab === 'our story' && checkPerm('our_story', 'can_create') && <button onClick={() => router.push('/admin/story')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Milestone</button>}
-            {activeTab === 'News & Updates' && checkPerm('edit_news', 'can_create') && <Link href="/admin/news" className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Article</Link>}
-          </div>
-          <div className="flex items-center gap-4 shrink-0">
-            {checkPerm('notifications_code', 'can_view') && <NotificationCenter />}
-            {currentUserRole === 'admin' && <><div className="w-px h-6 bg-gray-200"></div><button onClick={() => router.push('/admin/users')} className="flex items-center gap-2 p-2 text-brand-blue hover:bg-gray-100 rounded-lg"><UserCircle2 size={24} /><span className="text-[10px] font-bold uppercase tracking-widest">Admin</span></button></>}
-          </div>
-        </header>
-
-                <div className={`min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] ${activeTab === 'Home' || activeTab === 'Customer Inbox' ? 'px-4 py-4 sm:px-6 sm:py-5 xl:px-8' : 'p-8'}`}>
-          {contentArchiveSection && (
-            <div className="mx-auto w-full max-w-6xl">
-              <ContentArchiveTabs
-                section={contentArchiveSection}
-                archived={activeTab === contentArchiveSection}
-                checkPerm={checkPerm}
-              />
-            </div>
-          )}
-          {activeTab === 'Home' ? (
-            <HomeDashboard
-              checkPerm={checkPerm}
-              onOpenSection={(section) => {
-                setActiveTab(section);
-                setFilterCategory('');
-                setSearchQuery('');
-              }}
-            />
-          ) : allowedMenuItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-32 text-center"><div className="w-20 h-20 bg-brand-blue/5 rounded-full flex justify-center items-center mb-6"><ShieldAlert size={32} className="text-brand-blue/40" /></div><h2 className="text-2xl font-serif text-brand-blue mb-3">No Access</h2><p className="text-gray-500 text-sm">Please contact your Super Admin to request access.</p></div>
-        ): activeTab === 'Customer Inbox' ? (
-            checkPerm('notifications_code', 'can_view') ? <CustomerInboxManager /> : (
-              <div className="py-24 text-center"><ShieldAlert className="mx-auto mb-4 text-brand-blue/40" size={32} /><h2 className="font-serif text-2xl text-brand-blue">No Access</h2><p className="mt-3 text-sm text-gray-500">Please contact your Super Admin to request access.</p></div>
-            )
-          ) : activeTab === 'Modules' ? <SystemModulesManager />
-          : activeTab === 'Homepage' ? <HomepageManager checkPerm={checkPerm} />
-          : activeTab === 'Projects' ? <ProjectsManager checkPerm={checkPerm} />
-          : activeTab === 'Virtual Tours' ? <VirtualToursManager checkPerm={checkPerm} />
-          : activeTab === 'Navbar Setup' ? <NavbarProjectsManager checkPerm={checkPerm} />
-          : activeTab === 'Archived Projects' ? <ArchivedProjectsManager checkPerm={checkPerm} />
-          : activeTab === 'Promotions' ? <PromotionsManager checkPerm={checkPerm} />
-          : activeTab === 'Partner Banks' ? <PartnerBanksManager checkPerm={checkPerm} />
-          : activeTab === 'our story' ? <OurStoryManager checkPerm={checkPerm} />
-          : activeTab === 'Audit Logs' ? <AuditLogsManager checkPerm={checkPerm} canDelete={userPermissions === 'SUPER_ADMIN'} />
-          : Object.prototype.hasOwnProperty.call(archiveSections, activeTab) ? <ArchivedContentManager section={activeTab as ArchivedContentSection} checkPerm={checkPerm} />
-          : (
-            <div className="mx-auto w-full max-w-6xl animate-in fade-in duration-300">
-              <div className="mb-7">
-                <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-                  <div className="max-w-2xl">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-brand-gold">
-                      Content · News & Updates
-                    </p>
-
-                    <h2 className="mt-2 font-serif text-4xl leading-none text-brand-blue">
-                      News & Updates
-                    </h2>
-
-                    <p className="mt-3 text-sm leading-relaxed text-gray-500">
-                      Manage published company news and updates, including article content,
-                      publication details, featured images, and website visibility.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                    <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-                      {newsList.length} {newsList.length === 1 ? 'article' : 'articles'}
-                    </span>
-
-                    <span className="inline-flex items-center rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-green-700">
-                      {visibleNewsCount} visible
-                    </span>
-
-                    {hiddenNewsCount > 0 && (
-                      <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-                        {hiddenNewsCount} hidden
-                      </span>
+                  <button
+                    type="button"
+                    onClick={confirmArchive}
+                    disabled={isArchiving}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 py-3 text-xs font-bold uppercase tracking-widest text-white hover:bg-red-700 disabled:opacity-60"
+                  >
+                    {isArchiving ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      'Archive'
                     )}
-                  </div>
+                  </button>
                 </div>
-
-                <div className="mt-7 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <div className="text-sm font-bold text-brand-blue">
-                      Showing {filteredNews.length} of {newsList.length}
-                    </div>
-                    <p className="mt-1 text-xs text-gray-400">
-                      Select an article row to edit its content.
-                    </p>
-                  </div>
-
-                  <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto">
-                    <div className="relative w-full sm:w-48">
-                      <Filter
-                        size={16}
-                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
-                      />
-                      <select
-                        value={filterCategory}
-                        onChange={(event) => setFilterCategory(event.target.value)}
-                        className="w-full appearance-none rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-blue shadow-sm outline-none transition-all focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/10"
-                      >
-                        <option value="">All categories</option>
-                        <option value="News">News</option>
-                        <option value="Updates">Updates</option>
-                      </select>
-                    </div>
-
-                    <div className="relative w-full sm:w-80">
-                      <Search
-                        size={16}
-                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Search articles..."
-                        value={searchQuery}
-                        onChange={(event) => setSearchQuery(event.target.value)}
-                        className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-blue shadow-sm outline-none transition-all focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/10"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="w-full overflow-x-auto pb-4">
-                <div className="min-w-[900px] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-                  <div className="grid grid-cols-12 gap-4 border-b border-gray-100 bg-gray-50/70 px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                    <div className="col-span-4">Article</div>
-                    <div className="col-span-2">Category</div>
-                    <div className="col-span-2">Published</div>
-                    <div className="col-span-3">Website Visibility</div>
-                    <div className="col-span-1 text-right">Archive</div>
-                  </div>
-
-                  {filteredNews.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-                      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-blue/5 text-brand-blue/40">
-                        <Newspaper size={22} />
-                      </div>
-                      <p className="text-sm font-bold text-brand-blue">
-                        {newsList.length === 0 ? 'No articles yet' : 'No articles found'}
-                      </p>
-                      <p className="mt-1 text-xs text-gray-400">
-                        {newsList.length === 0
-                          ? 'Use Add Article to create the first News & Updates entry.'
-                          : 'Try another search term or category.'}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-gray-100">
-                      {filteredNews.map((article) => {
-                        const canEditNews = checkPerm('edit_news', 'can_edit');
-                        const isVisible = article.is_active === true;
-
-                        return (
-                          <div
-                            key={article.id}
-                            role={canEditNews ? 'button' : undefined}
-                            tabIndex={canEditNews ? 0 : -1}
-                            onClick={() => {
-                              if (canEditNews) openNewsArticle(article.id);
-                            }}
-                            onKeyDown={(event) => {
-                              if (!canEditNews) return;
-                              if (event.target !== event.currentTarget) return;
-                              if (event.key === 'Enter' || event.key === ' ') {
-                                event.preventDefault();
-                                openNewsArticle(article.id);
-                              }
-                            }}
-                            className={`group grid grid-cols-12 items-center gap-4 px-6 py-4 transition-colors ${
-                              canEditNews
-                                ? 'cursor-pointer hover:bg-gray-50/80 focus:bg-gray-50/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-gold/60'
-                                : ''
-                            }`}
-                          >
-                            <div className="col-span-4 flex min-w-0 items-center gap-4">
-                              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50 shadow-sm">
-                                {article.image ? (
-                                  <img
-                                    src={article.image}
-                                    alt=""
-                                    className="h-full w-full object-cover"
-                                    onError={(event) => {
-                                      event.currentTarget.style.display = 'none';
-                                    }}
-                                  />
-                                ) : (
-                                  <LayoutDashboard size={18} className="text-gray-300" />
-                                )}
-                              </div>
-
-                              <div className="min-w-0">
-                                <div className="truncate text-sm font-bold text-brand-blue transition-colors group-hover:text-brand-gold">
-                                  {article.title}
-                                </div>
-                                <div className="mt-1 truncate text-[10px] text-gray-400">
-                                  /{article.slug}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="col-span-2">
-                              <span className="inline-flex rounded-lg bg-brand-gold/10 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-wider text-brand-gold">
-                                {article.category || 'News'}
-                              </span>
-                            </div>
-
-                            <div className="col-span-2 text-xs font-medium text-gray-500">
-                              {formatNewsDate(article.date)}
-                            </div>
-
-                            <div className="col-span-3">
-                              <button
-                                type="button"
-                                disabled={!canEditNews || pendingNewsStatusId !== null}
-                                aria-pressed={isVisible}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleToggleNewsStatus(
-                                    article.id,
-                                    isVisible,
-                                    article.title
-                                  );
-                                }}
-                                className={`inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider ${
-                                  canEditNews
-                                    ? 'cursor-pointer'
-                                    : 'cursor-not-allowed opacity-60'
-                                }`}
-                                title={
-                                  isVisible
-                                    ? 'Hide this article from the website'
-                                    : 'Show this article on the website'
-                                }
-                              >
-                                <span className={isVisible ? 'text-green-700' : 'text-gray-400'}>
-                                  {isVisible ? 'Visible' : 'Hidden'}
-                                </span>
-
-                                <span
-                                  className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${
-                                    isVisible ? 'bg-green-500' : 'bg-gray-300'
-                                  } ${canEditNews ? 'hover:ring-4 hover:ring-brand-blue/5' : ''}`}
-                                  aria-hidden="true"
-                                >
-                                  <span
-                                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
-                                      isVisible ? 'translate-x-5' : 'translate-x-0.5'
-                                    }`}
-                                  />
-                                </span>
-                              </button>
-                            </div>
-
-                            <div className="col-span-1 flex justify-end">
-                              {checkPerm('edit_news', 'can_delete') && (
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleArchiveClick(article.id, article.title);
-                                  }}
-                                  className="rounded-lg p-2 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500"
-                                  title={`Archive ${article.title}`}
-                                  aria-label={`Archive ${article.title}`}
-                                >
-                                  <Archive size={16} />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue/60">
-                  Visibility & archiving
-                </p>
-                <p className="mt-1 text-xs leading-relaxed text-gray-500">
-                  Hiding an article keeps it available in the CMS while removing it from the public website.
-                  Archiving removes it from the active News & Updates list.
-                </p>
               </div>
             </div>
           )}
-        </div>
-      </main>
-    </div>
+
+          {successMessage && (
+            <div className="fixed top-24 right-6 z-[120] max-w-sm rounded-2xl border border-green-100 bg-white px-4 py-3 shadow-xl">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-50 text-green-600">
+                  <CheckCircle2 size={17} />
+                </div>
+
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-green-700">
+                    Updated
+                  </p>
+                  <p className="mt-1 text-sm text-gray-600">
+                    {successMessage}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {newsErrorMessage && (
+            <div className="fixed top-24 right-6 z-[120] max-w-sm rounded-2xl border border-red-100 bg-white px-4 py-3 shadow-xl">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-500">
+                  <AlertCircle size={17} />
+                </div>
+
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-red-600">
+                    Could not update
+                  </p>
+                  <p className="mt-1 text-sm text-gray-600">
+                    {newsErrorMessage}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <header className="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0 shadow-sm">
+            <div className="flex items-center gap-6 min-w-0">
+              <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 text-brand-blue"><Menu size={24} /></button>
+              <h1 className="text-2xl md:text-3xl font-serif text-brand-blue truncate">
+                {activeTab === 'Home'
+                  ? 'Dashboard'
+                  : activeTab === 'our story'
+                    ? 'Our Story'
+                    : activeTab === 'Navbar Setup'
+                      ? 'Navigation Setup'
+                      : activeTab === 'Archived Projects'
+                        ? 'Projects'
+                        : Object.prototype.hasOwnProperty.call(archiveSections, activeTab)
+                          ? archiveSections[activeTab as ArchivedContentSection].label
+                          : activeTab}
+              </h1>
+              {activeTab === 'Projects' && checkPerm('edit_project', 'can_create') && <button onClick={() => router.push('/admin/projects')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Project</button>}
+              {activeTab === 'Promotions' && checkPerm('promotion_code', 'can_create') && <button onClick={() => router.push('/admin/promotions')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Promo</button>}
+              {activeTab === 'Partner Banks' && checkPerm('edit_banks', 'can_create') && <button onClick={() => router.push('/admin/partnerbanks')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Bank</button>}
+              {activeTab === 'our story' && checkPerm('our_story', 'can_create') && <button onClick={() => router.push('/admin/story')} className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Milestone</button>}
+              {activeTab === 'News & Updates' && checkPerm('edit_news', 'can_create') && <Link href="/admin/news" className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white text-[10px] font-bold uppercase rounded-lg hover:bg-brand-gold"><Plus size={14} /> Add Article</Link>}
+            </div>
+            <div className="flex items-center gap-4 shrink-0">
+              {checkPerm('notifications_code', 'can_view') && <NotificationCenter />}
+              {currentUserRole === 'admin' && <><div className="w-px h-6 bg-gray-200"></div><button onClick={() => router.push('/admin/users')} className="flex items-center gap-2 p-2 text-brand-blue hover:bg-gray-100 rounded-lg"><UserCircle2 size={24} /><span className="text-[10px] font-bold uppercase tracking-widest">Admin</span></button></>}
+            </div>
+          </header>
+
+          <div className={`min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] ${activeTab === 'Home' || activeTab === 'Customer Inbox' ? 'px-4 py-4 sm:px-6 sm:py-5 xl:px-8' : 'p-8'}`}>
+            {contentArchiveSection && (
+              <div className="mx-auto w-full max-w-6xl">
+                <ContentArchiveTabs
+                  section={contentArchiveSection}
+                  archived={activeTab === contentArchiveSection}
+                  checkPerm={checkPerm}
+                />
+              </div>
+            )}
+            {activeTab === 'Home' ? (
+              <HomeDashboard
+                checkPerm={checkPerm}
+                onOpenSection={(section) => {
+                  setActiveTab(section);
+                  setFilterCategory('');
+                  setSearchQuery('');
+                }}
+              />
+            ) : allowedMenuItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-32 text-center"><div className="w-20 h-20 bg-brand-blue/5 rounded-full flex justify-center items-center mb-6"><ShieldAlert size={32} className="text-brand-blue/40" /></div><h2 className="text-2xl font-serif text-brand-blue mb-3">No Access</h2><p className="text-gray-500 text-sm">Please contact your Super Admin to request access.</p></div>
+            ) : activeTab === 'Customer Inbox' ? (
+              checkPerm('notifications_code', 'can_view') ? <CustomerInboxManager /> : (
+                <div className="py-24 text-center"><ShieldAlert className="mx-auto mb-4 text-brand-blue/40" size={32} /><h2 className="font-serif text-2xl text-brand-blue">No Access</h2><p className="mt-3 text-sm text-gray-500">Please contact your Super Admin to request access.</p></div>
+              )
+            ) : activeTab === 'Modules' ? <SystemModulesManager />
+              : activeTab === 'Homepage' ? <HomepageManager checkPerm={checkPerm} />
+                : activeTab === 'Projects' ? <ProjectsManager checkPerm={checkPerm} />
+                  : activeTab === 'Virtual Tours' ? <VirtualToursManager checkPerm={checkPerm} />
+                    : activeTab === 'Navbar Setup' ? <NavbarProjectsManager checkPerm={checkPerm} />
+                      : activeTab === 'Archived Projects' ? <ArchivedProjectsManager checkPerm={checkPerm} />
+                        : activeTab === 'Promotions' ? <PromotionsManager checkPerm={checkPerm} />
+                          : activeTab === 'Partner Banks' ? <PartnerBanksManager checkPerm={checkPerm} />
+                            : activeTab === 'our story' ? <OurStoryManager checkPerm={checkPerm} />
+                              : activeTab === 'Audit Logs' ? <AuditLogsManager checkPerm={checkPerm} canDelete={userPermissions === 'SUPER_ADMIN'} />
+                                : Object.prototype.hasOwnProperty.call(archiveSections, activeTab) ? <ArchivedContentManager section={activeTab as ArchivedContentSection} checkPerm={checkPerm} />
+                                  : (
+                                    <div className="mx-auto w-full max-w-6xl animate-in fade-in duration-300">
+                                      <div className="mb-7">
+                                        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                                          <div className="max-w-2xl">
+                                            <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-brand-gold">
+                                              Content · News & Updates
+                                            </p>
+
+                                            <h2 className="mt-2 font-serif text-4xl leading-none text-brand-blue">
+                                              News & Updates
+                                            </h2>
+
+                                            <p className="mt-3 text-sm leading-relaxed text-gray-500">
+                                              Manage published company news and updates, including article content,
+                                              publication details, featured images, and website visibility.
+                                            </p>
+                                          </div>
+
+                                          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                                            <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                                              {newsList.length} {newsList.length === 1 ? 'article' : 'articles'}
+                                            </span>
+
+                                            <span className="inline-flex items-center rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-green-700">
+                                              {visibleNewsCount} visible
+                                            </span>
+
+                                            {hiddenNewsCount > 0 && (
+                                              <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                                                {hiddenNewsCount} hidden
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        <div className="mt-7 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                                          <div>
+                                            <div className="text-sm font-bold text-brand-blue">
+                                              Showing {filteredNews.length} of {newsList.length}
+                                            </div>
+                                            <p className="mt-1 text-xs text-gray-400">
+                                              Select an article row to edit its content.
+                                            </p>
+                                          </div>
+
+                                          <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto">
+                                            <div className="relative w-full sm:w-48">
+                                              <Filter
+                                                size={16}
+                                                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                                              />
+                                              <select
+                                                value={filterCategory}
+                                                onChange={(event) => setFilterCategory(event.target.value)}
+                                                className="w-full appearance-none rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-blue shadow-sm outline-none transition-all focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/10"
+                                              >
+                                                <option value="">All categories</option>
+                                                <option value="News">News</option>
+                                                <option value="Updates">Updates</option>
+                                              </select>
+                                            </div>
+
+                                            <div className="relative w-full sm:w-80">
+                                              <Search
+                                                size={16}
+                                                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                                              />
+                                              <input
+                                                type="text"
+                                                placeholder="Search articles..."
+                                                value={searchQuery}
+                                                onChange={(event) => setSearchQuery(event.target.value)}
+                                                className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-blue shadow-sm outline-none transition-all focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/10"
+                                              />
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <div className="w-full overflow-x-auto pb-4">
+                                        <div className="min-w-[900px] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                                          <div className="grid grid-cols-12 gap-4 border-b border-gray-100 bg-gray-50/70 px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                                            <div className="col-span-4">Article</div>
+                                            <div className="col-span-2">Category</div>
+                                            <div className="col-span-2">Published</div>
+                                            <div className="col-span-3">Website Visibility</div>
+                                            <div className="col-span-1 text-right">Archive</div>
+                                          </div>
+
+                                          {filteredNews.length === 0 ? (
+                                            <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+                                              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-blue/5 text-brand-blue/40">
+                                                <Newspaper size={22} />
+                                              </div>
+                                              <p className="text-sm font-bold text-brand-blue">
+                                                {newsList.length === 0 ? 'No articles yet' : 'No articles found'}
+                                              </p>
+                                              <p className="mt-1 text-xs text-gray-400">
+                                                {newsList.length === 0
+                                                  ? 'Use Add Article to create the first News & Updates entry.'
+                                                  : 'Try another search term or category.'}
+                                              </p>
+                                            </div>
+                                          ) : (
+                                            <div className="divide-y divide-gray-100">
+                                              {filteredNews.map((article) => {
+                                                const canEditNews = checkPerm('edit_news', 'can_edit');
+                                                const isVisible = article.is_active === true;
+
+                                                return (
+                                                  <div
+                                                    key={article.id}
+                                                    role={canEditNews ? 'button' : undefined}
+                                                    tabIndex={canEditNews ? 0 : -1}
+                                                    onClick={() => {
+                                                      if (canEditNews) openNewsArticle(article.id);
+                                                    }}
+                                                    onKeyDown={(event) => {
+                                                      if (!canEditNews) return;
+                                                      if (event.target !== event.currentTarget) return;
+                                                      if (event.key === 'Enter' || event.key === ' ') {
+                                                        event.preventDefault();
+                                                        openNewsArticle(article.id);
+                                                      }
+                                                    }}
+                                                    className={`group grid grid-cols-12 items-center gap-4 px-6 py-4 transition-colors ${canEditNews
+                                                        ? 'cursor-pointer hover:bg-gray-50/80 focus:bg-gray-50/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-gold/60'
+                                                        : ''
+                                                      }`}
+                                                  >
+                                                    <div className="col-span-4 flex min-w-0 items-center gap-4">
+                                                      <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50 shadow-sm">
+                                                        {article.image ? (
+                                                          <img
+                                                            src={article.image}
+                                                            alt=""
+                                                            className="h-full w-full object-cover"
+                                                            onError={(event) => {
+                                                              event.currentTarget.style.display = 'none';
+                                                            }}
+                                                          />
+                                                        ) : (
+                                                          <LayoutDashboard size={18} className="text-gray-300" />
+                                                        )}
+                                                      </div>
+
+                                                      <div className="min-w-0">
+                                                        <div className="truncate text-sm font-bold text-brand-blue transition-colors group-hover:text-brand-gold">
+                                                          {article.title}
+                                                        </div>
+                                                        <div className="mt-1 truncate text-[10px] text-gray-400">
+                                                          /{article.slug}
+                                                        </div>
+                                                      </div>
+                                                    </div>
+
+                                                    <div className="col-span-2">
+                                                      <span className="inline-flex rounded-lg bg-brand-gold/10 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-wider text-brand-gold">
+                                                        {article.category || 'News'}
+                                                      </span>
+                                                    </div>
+
+                                                    <div className="col-span-2 text-xs font-medium text-gray-500">
+                                                      {formatNewsDate(article.date)}
+                                                    </div>
+
+                                                    <div className="col-span-3">
+                                                      <button
+                                                        type="button"
+                                                        disabled={!canEditNews || pendingNewsStatusId !== null}
+                                                        aria-pressed={isVisible}
+                                                        onClick={(event) => {
+                                                          event.stopPropagation();
+                                                          handleToggleNewsStatus(
+                                                            article.id,
+                                                            isVisible,
+                                                            article.title
+                                                          );
+                                                        }}
+                                                        className={`inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider ${canEditNews
+                                                            ? 'cursor-pointer'
+                                                            : 'cursor-not-allowed opacity-60'
+                                                          }`}
+                                                        title={
+                                                          isVisible
+                                                            ? 'Hide this article from the website'
+                                                            : 'Show this article on the website'
+                                                        }
+                                                      >
+                                                        <span className={isVisible ? 'text-green-700' : 'text-gray-400'}>
+                                                          {isVisible ? 'Visible' : 'Hidden'}
+                                                        </span>
+
+                                                        <span
+                                                          className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${isVisible ? 'bg-green-500' : 'bg-gray-300'
+                                                            } ${canEditNews ? 'hover:ring-4 hover:ring-brand-blue/5' : ''}`}
+                                                          aria-hidden="true"
+                                                        >
+                                                          <span
+                                                            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${isVisible ? 'translate-x-5' : 'translate-x-0.5'
+                                                              }`}
+                                                          />
+                                                        </span>
+                                                      </button>
+                                                    </div>
+
+                                                    <div className="col-span-1 flex justify-end">
+                                                      {checkPerm('edit_news', 'can_delete') && (
+                                                        <button
+                                                          type="button"
+                                                          onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            handleArchiveClick(article.id, article.title);
+                                                          }}
+                                                          className="rounded-lg p-2 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500"
+                                                          title={`Archive ${article.title}`}
+                                                          aria-label={`Archive ${article.title}`}
+                                                        >
+                                                          <Archive size={16} />
+                                                        </button>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      <div className="mt-4 rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-brand-blue/60">
+                                          Visibility & archiving
+                                        </p>
+                                        <p className="mt-1 text-xs leading-relaxed text-gray-500">
+                                          Hiding an article keeps it available in the CMS while removing it from the public website.
+                                          Archiving removes it from the active News & Updates list.
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )}
+          </div>
+        </main>
+      </div>
     </CustomerInboxProvider>
   );
 }

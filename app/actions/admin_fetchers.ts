@@ -740,7 +740,7 @@ async function fetchInboxSource<T extends { id: number | string }>(
 export async function fetchNotificationsAction(): Promise<CustomerInboxItem[]> {
   const adminId = await requireNotificationAccess();
   // Foreign-key hints match the inspected loan_preapp metadata: client_id,
-  // project_id and banks_id. Existing reads are left joins scoped to this admin.
+  // project_id and banks_id. Reads are left joins scoped to this admin.
   const [inquiries, support, loans] = await Promise.all([
     fetchInboxSource<InquiryInboxRow>('inquire',
       'id, created_at, client!client_id(first_name, last_name, email, phone_number), project_table!project_id(title), admin_inquire_reads(admin_id)',
@@ -749,8 +749,8 @@ export async function fetchNotificationsAction(): Promise<CustomerInboxItem[]> {
       'id, created_at, "type of inquiry", message, client!client_id(first_name, last_name, email, phone_number), admin_contact_reads(admin_id)',
       adminId, 'admin_contact_reads'),
     fetchInboxSource<LoanInboxRow>('loan_preapp',
-      'id, created_at, tower, unit_no, floor_no, co_buyer_name, is_agreed, client!client_id(first_name, last_name, email, phone_number), project_table!project_id(title), banks!banks_id(bank_name)',
-      adminId),
+      'id, created_at, tower, unit_no, floor_no, co_buyer_name, is_agreed, client!client_id(first_name, last_name, email, phone_number), project_table!project_id(title), banks!banks_id(bank_name), admin_loan_preapp_reads(admin_id)',
+      adminId, 'admin_loan_preapp_reads'),
   ]);
   return normalizeCustomerInbox(inquiries, support, loans, adminId);
 }
@@ -763,13 +763,12 @@ export async function toggleNotificationReadAction(
       !Number.isSafeInteger(Number(notifId)) || Number(notifId) <= 0 ||
       typeof newStatus !== 'boolean') throw new Error('Invalid read-status request.');
 
-  let table: 'admin_inquire_reads' | 'admin_contact_reads';
-  let column: 'inquire_id' | 'contact_id';
+  let table: 'admin_inquire_reads' | 'admin_contact_reads' | 'admin_loan_preapp_reads';
+  let column: 'inquire_id' | 'contact_id' | 'loan_preapp_id';
   switch (type) {
     case 'inquiry': table = 'admin_inquire_reads'; column = 'inquire_id'; break;
     case 'customer_support': table = 'admin_contact_reads'; column = 'contact_id'; break;
-    case 'loan_application':
-      throw new Error('Loan applications currently have no persisted per-admin read/unread mechanism.');
+    case 'loan_application': table = 'admin_loan_preapp_reads'; column = 'loan_preapp_id'; break;
     default: throw new Error('Unsupported customer message type.');
   }
   const values = { admin_id: adminId, [column]: Number(notifId) };

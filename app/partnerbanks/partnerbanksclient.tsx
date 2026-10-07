@@ -9,7 +9,7 @@ import Footer from '@/app/components/footer';
 import BackToTop from '@/app/components/backtotop';
 import PageTransition from '@/app/components/page-transitions';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, AlertCircle } from 'lucide-react';
+import { ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
 import Lenis from 'lenis';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -42,6 +42,8 @@ function PartnerBanksContent({ initialProjects, initialBanks, initialMappings }:
   const [activeTab, setActiveTab] = useState("City Clou");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formTab, setFormTab] = useState("Pre-Application");
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   const { register, handleSubmit, trigger, reset, formState: { errors, isSubmitting } } = useForm<LoanFormData>({
     resolver: zodResolver(loanSchema),
@@ -56,10 +58,26 @@ function PartnerBanksContent({ initialProjects, initialBanks, initialMappings }:
     if (searchParams.get('apply') === 'true') {
       const timer = setTimeout(() => {
         setIsModalOpen(true);
-      }, 500); 
+      }, 500);
       return () => clearTimeout(timer);
     }
   }, [searchParams]);
+
+  // Auto-dismiss success message
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => setSuccessMessage(''), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
+
+  // Auto-dismiss error message
+  useEffect(() => {
+    if (errorMessage) {
+      const timer = setTimeout(() => setErrorMessage(''), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [errorMessage]);
 
   // Derived state generated directly from server props
   const filteredBanks = activeTab === "All Projects" 
@@ -81,19 +99,21 @@ function PartnerBanksContent({ initialProjects, initialBanks, initialMappings }:
   };
 
   const onSubmit = async (data: LoanFormData) => {
+    setErrorMessage('');
+    setSuccessMessage('');
     try {
       const result = await submitLoanPreApplicationAction(data);
       if (!result.success) {
-        alert(result.error);
+        setErrorMessage(result.error);
         return;
       }
 
-      alert("Application submitted successfully!");
+      setSuccessMessage("Application submitted successfully!");
       reset();
-      setIsModalOpen(false);
+      setTimeout(() => setIsModalOpen(false), 1500);
     } catch (error: unknown) {
       if (process.env.NODE_ENV === 'development') console.error("Submission Error:", error);
-      alert("We couldn't submit your application. Please try again.");
+      setErrorMessage("We couldn't submit your application. Please try again.");
     }
   };
 
@@ -233,6 +253,22 @@ function PartnerBanksContent({ initialProjects, initialBanks, initialMappings }:
 
         <Footer />
         <BackToTop />
+
+        {/* FEEDBACK TOASTS */}
+        <AnimatePresence>
+          {successMessage && (
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="fixed top-24 right-6 z-[130] flex max-w-sm items-center gap-3 rounded-xl border border-green-100 bg-white px-4 py-3 text-sm shadow-xl">
+              <CheckCircle2 size={18} className="shrink-0 text-green-600" />
+              <span className="text-brand-blue font-medium">{successMessage}</span>
+            </motion.div>
+          )}
+          {errorMessage && (
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="fixed top-24 right-6 z-[130] flex max-w-sm items-center gap-3 rounded-xl border border-red-100 bg-white px-4 py-3 text-sm shadow-xl">
+              <AlertCircle size={18} className="shrink-0 text-red-500" />
+              <span className="text-red-600 font-medium">{errorMessage}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* MODAL */}
         <AnimatePresence>

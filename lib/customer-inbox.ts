@@ -44,6 +44,7 @@ export type LoanInboxRow = SourceBase & {
   banks: Relation<{ bank_name: string | null }>;
   tower: string | null; unit_no: number | null; floor_no: number | null;
   co_buyer_name: string | null; is_agreed: boolean | null;
+  admin_loan_preapp_reads: { admin_id: CustomerRecordId }[] | null;
 };
 
 export const customerInboxTypeLabels: Record<CustomerInboxItemType, string> = {
@@ -92,8 +93,8 @@ export function normalizeCustomerInbox(
         project_name, bank_name: related(row.banks)?.bank_name || 'Not provided',
         tower: row.tower, unit_no: row.unit_no, floor_no: row.floor_no,
         co_buyer_name: row.co_buyer_name, is_agreed: row.is_agreed,
-        // No loan read junction exists. Never pretend that opening a loan persists a read.
-        is_read: false, can_mark_read: false,
+        is_read: row.admin_loan_preapp_reads?.some(read => String(read.admin_id) === String(adminId)) ?? false,
+        can_mark_read: true,
       };
     }),
   ];
