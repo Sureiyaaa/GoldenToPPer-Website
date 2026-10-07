@@ -259,6 +259,15 @@ export function CustomerInboxManager() {
   const searchId = useId();
   const typeId = useId();
   const readId = useId();
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [search, type, read]);
+
+  useEffect(() => {
+    if (!isLoading && scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [isLoading]);
   const openButton = (item: CustomerInboxItem) => (
     <button type="button" onClick={() => openItem(item)} aria-label={`Open ${customerInboxTypeLabels[item.type]} from ${item.name}`}
       className={`rounded-lg bg-brand-blue px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-brand-blue/80 ${focusStyle}`}>Open</button>
@@ -323,7 +332,7 @@ export function CustomerInboxManager() {
             </div>
           </div>
         ) : (
-          <div className="overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
+          <div ref={scrollRef} className="max-h-[28rem] overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
             <table className="hidden w-full table-fixed text-left lg:table">
               <caption className="sr-only">Customer messages, newest first</caption>
               <colgroup><col className="w-[23%]" /><col className="w-[15%]" /><col className="w-[23%]" /><col className="w-[17%]" /><col className="w-[14%]" /><col className="w-[8%]" /></colgroup>
