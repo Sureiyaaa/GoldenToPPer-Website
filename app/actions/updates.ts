@@ -43,12 +43,18 @@ export async function toggleActiveStatus(table: string, id: string | number, cur
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const { error } = await supabaseAdmin
+  // Phase 2.4B: Detect zero-row UPDATE
+  const { data: updated, error } = await supabaseAdmin
     .from(table)
     .update({ is_active: !currentStatus })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id')
+    .single();
 
   if (error) throw error;
+  if (!updated) {
+    throw new Error(`Record not found in ${table} with id ${id}.`);
+  }
   return true;
 }
 
@@ -74,11 +80,17 @@ export async function archiveRecord(table: string, id: string | number, archiveC
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const { error } = await supabaseAdmin
+  // Phase 2.4B: Detect zero-row UPDATE
+  const { data: updated, error } = await supabaseAdmin
     .from(table)
     .update({ [archiveColumn]: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id')
+    .single();
 
   if (error) throw error;
+  if (!updated) {
+    throw new Error(`Record not found in ${table} with id ${id}.`);
+  }
   return true;
 }
