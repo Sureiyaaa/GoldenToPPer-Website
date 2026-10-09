@@ -361,3 +361,29 @@ export async function getRBACProfile() {
 
   return { role: 'editor', permissions: permsMap };
 }
+
+export async function requireSuperAdmin() {
+  const userId = await getCustomSession();
+  if (!userId) throw new Error("Unauthorized: Session expired.");
+
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const { data: user } = await supabaseAdmin
+    .from('admin_users')
+    .select('is_super_admin, is_active')
+    .eq('id', userId)
+    .single();
+
+  if (!user || user.is_active !== true) {
+    throw new Error("Unauthorized: Account is inactive or not found.");
+  }
+
+  if (user.is_super_admin !== true) {
+    throw new Error("Unauthorized: This operation requires super administrator privileges.");
+  }
+
+  return userId;
+}

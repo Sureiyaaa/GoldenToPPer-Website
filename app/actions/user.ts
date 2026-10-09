@@ -2,18 +2,14 @@
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
-import { getCustomSession } from './auth';
-
-// Look Ma, no bcrypt!
+import { requireSuperAdmin } from './auth';
 
 export async function createUserAction(formData: any) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
-
   try {
+    await requireSuperAdmin();
+
     const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-    
-    // Call the database function to handle the creation and hashing
+
     const { error } = await supabaseAdmin.rpc('create_admin_user', {
       new_username: formData.username,
       plain_password: formData.password,
@@ -29,13 +25,11 @@ export async function createUserAction(formData: any) {
 }
 
 export async function updateUserAction(formData: any) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
-
   try {
+    await requireSuperAdmin();
+
     const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-    
-    // Call the database function to handle the update and optional password hashing
+
     const { error } = await supabaseAdmin.rpc('update_admin_user', {
       target_user_id: formData.id,
       new_is_super: formData.is_super_admin,
@@ -51,10 +45,9 @@ export async function updateUserAction(formData: any) {
 }
 
 export async function toggleUserStatusAction(userId: string, newStatus: boolean) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
-
   try {
+    await requireSuperAdmin();
+
     const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
     const { error } = await supabaseAdmin.from('admin_users').update({ is_active: newStatus }).eq('id', userId);
     if (error) throw new Error(error.message);
@@ -65,10 +58,9 @@ export async function toggleUserStatusAction(userId: string, newStatus: boolean)
 }
 
 export async function toggleGroupStatusAction(groupId: string | number, newStatus: boolean) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
-
   try {
+    await requireSuperAdmin();
+
     const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
     const { error } = await supabaseAdmin.from('groups').update({ is_active: newStatus }).eq('id', groupId);
     if (error) throw new Error(error.message);
@@ -79,12 +71,11 @@ export async function toggleGroupStatusAction(groupId: string | number, newStatu
 }
 
 export async function createGroupAction(groupName: string, description: string, accessData: any[]) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
-
   try {
+    await requireSuperAdmin();
+
     const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-    
+
     const { data: newGroup, error: groupError } = await supabaseAdmin.from('groups').insert([{ group_name: groupName, description }]).select().single();
     if (groupError) throw new Error(groupError.message);
 

@@ -230,6 +230,13 @@ export default function AdminLogin() {
   const siteKey = process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY;
   const hasConfiguredTurnstile = siteKey && siteKey.trim().length > 0;
 
+  const canSubmit =
+    formData.username.trim().length > 0 &&
+    formData.password.trim().length > 0 &&
+    Boolean(captchaToken) &&
+    hasConfiguredTurnstile &&
+    !isLoading;
+
   return (
     <PageTransition>
       <div className="relative min-h-screen w-full flex items-center justify-center font-sans selection:bg-brand-blue selection:text-white px-4 sm:px-6 lg:px-8 overflow-hidden">
@@ -362,11 +369,11 @@ export default function AdminLogin() {
               <div className="pt-2">
                 <button
                   type="submit"
-                  disabled={isLoading || !hasConfiguredTurnstile || !captchaToken}
+                  disabled={!canSubmit}
                   className={`w-full flex justify-center py-3.5 px-4 border border-transparent rounded-lg shadow-md text-sm font-bold tracking-wider uppercase text-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-brand-blue ${
-                    isLoading || !hasConfiguredTurnstile || !captchaToken
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-brand-blue hover:bg-blue-700 active:bg-blue-800 cursor-pointer'
+                    canSubmit
+                      ? 'bg-brand-blue hover:bg-blue-700 active:bg-blue-800 cursor-pointer'
+                      : 'bg-gray-400 cursor-not-allowed'
                   }`}
                 >
                   {isLoading ? 'Authenticating...' : 'Sign In'}
