@@ -14,8 +14,41 @@ import {
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! 
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+// Phase 2.4A: Bank field allowlist
+const BANK_FIELDS = new Set(['bank_name', 'max_loan', 'terms', 'short_description', 'image']);
+
+function filterBankPayload(payload: any): Record<string, any> {
+  const filtered: Record<string, any> = {};
+  if (payload && typeof payload === 'object') {
+    for (const [key, value] of Object.entries(payload)) {
+      if (BANK_FIELDS.has(key)) {
+        filtered[key] = value;
+      }
+    }
+  }
+  return filtered;
+}
+
+async function authorizeBankOperation(operation: 'create' | 'edit') {
+  const profile = await getRBACProfile();
+  if (!profile) {
+    throw new Error("Unauthorized: Session expired.");
+  }
+
+  if (profile.permissions === 'SUPER_ADMIN') {
+    return;
+  }
+
+  const modulePerms = typeof profile.permissions === 'object' ? profile.permissions['edit_banks'] : null;
+  const requiredPermission = `can_${operation}`;
+
+  if (!modulePerms || modulePerms[requiredPermission] !== true) {
+    throw new Error(`Unauthorized: You don't have permission to ${operation} banks.`);
+  }
+}
 
 export async function fetchAdminVirtualToursList() {
   const session = await getCustomSession();
@@ -425,18 +458,66 @@ export async function fetchBankProjectLinksAction(bankId: string | number) {
 }
 
 export async function saveBankAction(payload: any, editId: string | null) {
+  // Phase 2.4A: Session validation
   const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
+  if (!session) throw new Error("Unauthorized: Please log in.");
+
+  // Phase 2.4A: Determine create vs edit using server-side verification
+  let isCreate = !editId;
 
   if (editId) {
-    const { error } = await supabaseAdmin.from('banks').update(payload).eq('id', editId);
+    // Verify the bank exists before proceeding with edit authorization
+    const { data: existingBank, error: bankLookupError } = await supabaseAdmin
+      .from('banks')
+      .select('id')
+      .eq('id', editId)
+      .maybeSingle();
+
+    if (bankLookupError) {
+      throw bankLookupError;
+    }
+
+    if (!existingBank) {
+      throw new Error('Bank not found.');
+    }
+
+    isCreate = false;
+  }
+
+  // Phase 2.4A: Enforce appropriate authorization based on operation type
+  const operation = isCreate ? 'create' : 'edit';
+  await authorizeBankOperation(operation);
+
+  // Phase 2.4A: Filter payload to allowed fields only
+  const filteredPayload = filterBankPayload(payload);
+
+  if (isCreate) {
+    // Force is_active to true on creation
+    const { data, error } = await supabaseAdmin
+      .from('banks')
+      .insert([{ ...filteredPayload, is_active: true }])
+      .select('id')
+      .single();
+
     if (error) throw error;
-    return { success: true, id: editId };
+    if (!data) throw new Error('Failed to create bank');
+
+    return { success: true, id: data.id };
   } else {
-    // Force is_active to true on creation, use limit(1) to avoid JSON coerce errors
-    const { data, error } = await supabaseAdmin.from('banks').insert([{ ...payload, is_active: true }]).select('id').limit(1);
+    // Phase 2.4A: UPDATE with zero-row detection
+    const { data: updated, error } = await supabaseAdmin
+      .from('banks')
+      .update(filteredPayload)
+      .eq('id', editId)
+      .select('id')
+      .single();
+
     if (error) throw error;
-    return { success: true, id: data?.[0]?.id };
+    if (!updated) {
+      throw new Error(`Bank ${editId} no longer exists or was deleted during save.`);
+    }
+
+    return { success: true, id: editId };
   }
 }
 
