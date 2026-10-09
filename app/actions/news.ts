@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
+import { getCustomSession } from './auth';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,8 +11,11 @@ const supabaseAdmin = createClient(
   }
 );
 
-// NEW: Securely bypass Storage RLS to upload the image
+// Securely bypass Storage RLS to upload the image
 export async function uploadImage(formData: FormData) {
+  const session = await getCustomSession();
+  if (!session) throw new Error("Unauthorized");
+
   const file = formData.get('file') as File;
   const fileName = formData.get('fileName') as string;
 
@@ -31,6 +35,9 @@ export async function uploadImage(formData: FormData) {
 }
 
 export async function saveArticleToDB(payload: any, editId: string | null) {
+  const session = await getCustomSession();
+  if (!session) throw new Error("Unauthorized");
+
   if (editId) {
     const { error } = await supabaseAdmin.from('news_updates').update(payload).eq('id', editId);
     if (error) throw new Error(error.message);
@@ -42,6 +49,9 @@ export async function saveArticleToDB(payload: any, editId: string | null) {
 }
 
 export async function deleteArticleFromDB(id: string) {
+  const session = await getCustomSession();
+  if (!session) throw new Error("Unauthorized");
+
   const { error } = await supabaseAdmin.from('news_updates').delete().eq('id', id);
   if (error) throw new Error(error.message);
   return { success: true };

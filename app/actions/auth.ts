@@ -6,6 +6,147 @@ import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
 import { createHmac, timingSafeEqual } from 'crypto';
 
+// Dummy hash used for timing-safe password checking with non-existent users
+// Ensures login attempts take similar time regardless of user existence
+const DUMMY_HASH_FOR_TIMING_SAFETY = bcrypt.hashSync('timing-safe-dummy', 10);
+
+// Cloudflare Turnstile verification response type
+interface TurnstileVerifyResponse {
+  success: boolean;
+  challenge_ts?: string;
+  hostname?: string;
+  'error-codes'?: string[];
+  action?: string;
+  cData?: string;
+}
+
+// Verify CAPTCHA token with Cloudflare Siteverify API
+async function verifyCaptchaToken(token: string): Promise<{ valid: boolean; error?: string }> {
+  // Validate token format before making API call
+  if (!token || typeof token !== 'string') {
+    return { valid: false, error: 'CAPTCHA token is required.' };
+  }
+
+  if (token.trim().length === 0) {
+    return { valid: false, error: 'CAPTCHA token is required.' };
+  }
+
+  // Cloudflare API has a maximum token length of 2048 characters
+  if (token.length > 2048) {
+    return { valid: false, error: 'CAPTCHA token is invalid.' };
+  }
+
+  // Get secret key from environment
+  const secretKey = process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY;
+  if (!secretKey) {
+    console.error('[AUTH] CAPTCHA_SECRET_KEY not configured');
+    return { valid: false, error: 'Security verification is not configured. Please contact support.' };
+  }
+
+  // Reject known Cloudflare test/dummy keys in production
+  if (process.env.NODE_ENV === 'production') {
+    const knownTestSecrets = [
+      '1x0000000000000000000000000000000AA',  // Always-pass
+      '2x0000000000000000000000000000000BB',  // Always-fail
+      '2x4d61696c626f7800000000',             // Always-challenge
+    ];
+    if (knownTestSecrets.includes(secretKey)) {
+      console.error('[AUTH] Cloudflare test credentials detected in production environment');
+      return { valid: false, error: 'Security verification is not configured. Please contact support.' };
+    }
+  }
+
+  try {
+    // Call Cloudflare Siteverify API
+    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        secret: secretKey,
+        response: token,
+      }),
+      signal: AbortSignal.timeout(10000), // 10 second timeout
+    });
+
+    if (!response.ok) {
+      console.error(`[AUTH] Siteverify API returned status ${response.status}`);
+      return { valid: false, error: 'Security verification service is unavailable. Please try again.' };
+    }
+
+    const data: TurnstileVerifyResponse = await response.json();
+
+    // Check for error codes from Cloudflare
+    if (data['error-codes'] && data['error-codes'].length > 0) {
+      const errorCode = data['error-codes'][0];
+      console.warn(`[AUTH] CAPTCHA verification failed with error: ${errorCode}`);
+
+      // Map specific error codes to user-friendly messages
+      if (errorCode === 'timeout-or-duplicate') {
+        return { valid: false, error: 'Security verification expired or was already used. Please try again.' };
+      }
+      if (errorCode === 'invalid-input-response') {
+        return { valid: false, error: 'Security verification failed. Please try again.' };
+      }
+      if (errorCode === 'invalid-input-secret') {
+        return { valid: false, error: 'Security verification is misconfigured. Please contact support.' };
+      }
+
+      return { valid: false, error: 'Security verification failed. Please try again.' };
+    }
+
+    // Verify success flag
+    if (!data.success) {
+      console.warn('[AUTH] CAPTCHA verification returned success: false');
+      return { valid: false, error: 'Security verification failed. Please try again.' };
+    }
+
+    // Validate hostname based on deployment environment
+    // Production: Validate against explicit allowlist (required)
+    // Preview/Staging: Only validate if explicitly enabled via environment config
+    // Local dev: Skip validation (NODE_ENV check)
+    const isProductionDeployment = process.env.VERCEL_ENV === 'production';
+    const isPreviewDeployment = process.env.VERCEL_ENV === 'preview';
+    const allowPreviewHostnames = process.env.ALLOW_PREVIEW_CAPTCHA_HOSTS === 'true';
+
+    if (data.hostname) {
+      // Production deployments: mandatory hostname validation
+      if (isProductionDeployment) {
+        const productionHosts = ['goldentopper.vercel.app', 'www.goldentopper.vercel.app'];
+        if (!productionHosts.includes(data.hostname)) {
+          console.warn(`[AUTH] CAPTCHA hostname mismatch in production: ${data.hostname}`);
+          return { valid: false, error: 'Security verification failed due to hostname mismatch.' };
+        }
+      }
+      // Preview deployments: optional validation (defaults to reject if not explicitly enabled)
+      else if (isPreviewDeployment && allowPreviewHostnames) {
+        // Preview URLs typically match pattern: *-git-*.vercel.app
+        // Must end with vercel.app to prevent spoofing
+        if (!data.hostname.endsWith('.vercel.app')) {
+          console.warn(`[AUTH] CAPTCHA hostname mismatch in preview: ${data.hostname}`);
+          return { valid: false, error: 'Security verification failed due to hostname mismatch.' };
+        }
+      } else if (isPreviewDeployment && !allowPreviewHostnames) {
+        // Preview authentication disabled by default (most secure)
+        console.warn(`[AUTH] CAPTCHA hostname validation failed: preview authentication not enabled`);
+        return { valid: false, error: 'Security verification is not configured for this deployment.' };
+      }
+      // Local dev (NODE_ENV !== production): validation skipped
+    }
+
+    // Token is valid
+    return { valid: true };
+  } catch (err: any) {
+    // Network errors, timeouts, JSON parse errors, etc.
+    if (err.name === 'AbortError') {
+      console.error('[AUTH] CAPTCHA verification timed out');
+      return { valid: false, error: 'Security verification timed out. Please try again.' };
+    }
+
+    console.error('[AUTH] CAPTCHA verification error:', err.message);
+    return { valid: false, error: 'Unable to verify security challenge. Please try again.' };
+  }
+}
+
 export async function loginAction(formData: FormData) {
   console.log("[AUTH] 1. Login Action Triggered!");
 
@@ -21,6 +162,18 @@ export async function loginAction(formData: FormData) {
     );
     console.log("[AUTH] 2. Supabase Admin Client Initialized");
 
+    // CAPTCHA verification happens FIRST, before any credential checks
+    console.log("[AUTH] 3. Verifying CAPTCHA token...");
+    const captchaToken = formData.get('captchaToken') as string;
+    const captchaVerification = await verifyCaptchaToken(captchaToken);
+
+    if (!captchaVerification.valid) {
+      console.log(`[AUTH] CAPTCHA verification failed: ${captchaVerification.error}`);
+      return { error: captchaVerification.error || "Security verification failed. Please try again." };
+    }
+
+    console.log("[AUTH] 4. CAPTCHA verification successful. Proceeding with credential validation...");
+
     const username = formData.get('username') as string;
     const password = formData.get('password') as string;
 
@@ -29,7 +182,7 @@ export async function loginAction(formData: FormData) {
     }
 
     const cleanUsername = username.trim().toLowerCase();
-    console.log(`[AUTH] 3. Searching DB for username: ${cleanUsername}`);
+    console.log(`[AUTH] 5. Searching DB for username: ${cleanUsername}`);
 
     // 1. DATABASE CHECK
     const { data: user, error } = await supabaseAdmin
@@ -40,32 +193,26 @@ export async function loginAction(formData: FormData) {
 
     if (error) {
       console.log("[AUTH] ERROR: DB Search Failed:", error.message);
-      return { error: "Invalid username." };
-    }
-    if (!user) {
-      console.log("[AUTH] ERROR: User not found in DB.");
-      return { error: "Invalid username." };
-    }
-    
-    console.log("[AUTH] 4. User found! Checking status...");
-
-    if (user.is_active === false) {
-      console.log("[AUTH] ERROR: Account is disabled.");
-      return { error: "Account disabled. Contact an admin." };
     }
 
-    console.log("[AUTH] 5. Checking password match via Bcrypt...");
-    
-    // 2. SECURE PASSWORD MATCH (Comparing plain text to hash)
-    // This replaces the old: user.password_hash !== password
-    const isMatch = await bcrypt.compare(password, user.password_hash);
+    // 2. TIMING-SAFE PASSWORD MATCH
+    // Use dummy hash for non-existent users to prevent timing attacks
+    // that could reveal whether a username exists
+    const hashToCheck = user?.password_hash || DUMMY_HASH_FOR_TIMING_SAFETY;
+    const isMatch = await bcrypt.compare(password, hashToCheck);
 
-    if (!isMatch) {
-      console.log("[AUTH] ERROR: Passwords do not match!");
-      return { error: "Invalid password." };
+    // 3. UNIFIED AUTHENTICATION ERROR
+    // Return same generic message for all credential failures:
+    // - User doesn't exist
+    // - User exists but password wrong
+    // - User exists but account disabled
+    // This prevents username enumeration and account-status disclosure
+    if (!user || user.is_active === false || !isMatch) {
+      console.log("[AUTH] ERROR: Authentication failed (credential mismatch or inactive account)");
+      return { error: "Unable to sign in. Check your username and password, then try again." };
     }
 
-    console.log("[AUTH] 6. Password matched! Setting cookie...");
+    console.log("[AUTH] 6. Credentials verified! Setting cookie...");
 
     // 3. Set the session cookie
     const cookieStore = await cookies();
@@ -86,7 +233,7 @@ export async function loginAction(formData: FormData) {
       maxAge: 60 * 60 * 24 * 7 // 1 week
     });
 
-    console.log("[AUTH] 7. Cookie set successfully. Login complete!");
+    console.log("[AUTH] 9. Cookie set successfully. Login complete!");
     return { success: true };
 
   } catch (err: any) {
@@ -115,6 +262,31 @@ export async function getCustomSession() {
   const expected = createHmac('sha256', key).update(`${version}.${id}.${expiry}`).digest();
   const actual = Buffer.from(signature, 'hex');
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null;
+
+  // Verify account still exists and is active (revocation check)
+  try {
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const { data: user, error } = await supabaseAdmin
+      .from('admin_users')
+      .select('id, is_active')
+      .eq('id', id)
+      .single();
+
+    // Account must exist and be explicitly active
+    // Reject if: query error, user not found, or is_active !== true
+    if (error || !user || user.is_active !== true) {
+      return null;
+    }
+  } catch (err: any) {
+    // Database errors → reject session (fail-closed)
+    console.error('[AUTH] Account status verification failed:', err.message);
+    return null;
+  }
+
   return id;
 }
 
