@@ -172,4 +172,13 @@
                    type="submit"[m
 [31m-                  disabled={isLoading || !hasConfiguredTurnstile || !captchaToken}[m
 [32m+[m[32m                  disabled={!canSubmit}[m
-                   className={`w-full flex justify-center py-3.5 px-4 border border-transparent rounded-lg shadow-md text-sm font-bold tracking-wider uppercase text-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-brand-bl
+                   className={`w-full flex justify-center py-3.5 px-4 border border-transparent rounded-lg shadow-md text-sm font-bold tracking-wider uppercase text-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-brand-blue ${[m
+[31m-                    isLoading || !hasConfiguredTurnstile || !captchaToken[m
+[31m-                      ? 'bg-gray-400 cursor-not-allowed'[m
+[31m-                      : 'bg-brand-blue hover:bg-blue-700 active:bg-blue-800 cursor-pointer'[m
+[32m+[m[32m                    canSubmit[m
+[32m+[m[32m                      ? 'bg-brand-blue hover:bg-blue-700 active:bg-blue-800 cursor-pointer'[m
+[32m+[m[32m                      : 'bg-gray-400 cursor-not-allowed'[m
+                   }`}[m
+                 >[m
+                   {isLoading ? 'Authenticating...' : 'Sign In'}[m
