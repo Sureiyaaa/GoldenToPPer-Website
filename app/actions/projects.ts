@@ -874,11 +874,34 @@ export async function saveProjectAction(payload: any) {
       throw new Error('Unauthorized: Please log in.');
     }
 
-    // TODO Phase 2.3B: Separate create (can_create) vs edit (can_edit) authorization
-    // For now, Phase 2.3A requires can_edit for all saves
-    await authorizeProjectOperation('edit');
-
     let { targetProjectId, cleanProjectData, finalData } = payload;
+
+    // 2. Determine create vs edit using server-side record verification
+    let isCreate = !targetProjectId;
+
+    if (targetProjectId) {
+      // Verify the project exists before proceeding with edit authorization
+      const { data: existingProject, error: projectLookupError } = await supabaseAdmin
+        .from('project_table')
+        .select('id')
+        .eq('id', targetProjectId)
+        .maybeSingle();
+
+      if (projectLookupError) {
+        throw projectLookupError;
+      }
+
+      if (!existingProject) {
+        throw new Error('Project not found.');
+      }
+
+      isCreate = false;
+    }
+
+    // 3. Enforce appropriate authorization based on operation type
+    const operation = isCreate ? 'create' : 'edit';
+    await authorizeProjectOperation(operation);
+
     const beforeAudit: ProjectSnapshot | null = targetProjectId
       ? await fetchProjectForEdit(targetProjectId)
       : null;
