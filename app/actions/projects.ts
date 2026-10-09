@@ -2,12 +2,30 @@
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
-import { getCustomSession, getCurrentUser } from './auth';
+import { getCustomSession, getCurrentUser, getRBACProfile } from './auth';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+async function authorizeProjectOperation(operation: 'create' | 'edit' | 'delete' | 'view') {
+  const profile = await getRBACProfile();
+  if (!profile) {
+    throw new Error("Unauthorized: Session expired.");
+  }
+
+  if (profile.permissions === 'SUPER_ADMIN') {
+    return;
+  }
+
+  const modulePerms = typeof profile.permissions === 'object' ? profile.permissions['edit_project'] : null;
+  const requiredPermission = `can_${operation}`;
+
+  if (!modulePerms || modulePerms[requiredPermission] !== true) {
+    throw new Error(`Unauthorized: You don't have permission to ${operation} projects.`);
+  }
+}
 
 /**
  * Fetches all projects for the admin dashboard, bypassing RLS to ensure
@@ -17,6 +35,8 @@ export async function fetchAdminProjectsList() {
   const session = await getCustomSession();
 
   if (!session) throw new Error('Unauthorized');
+
+  await authorizeProjectOperation('view');
 
   const { data, error } = await supabaseAdmin
     .from('project_table')
@@ -35,6 +55,8 @@ export async function fetchArchivedProjectsList() {
   if (!session) {
     throw new Error('Unauthorized');
   }
+
+  await authorizeProjectOperation('view');
 
   const { data, error } = await supabaseAdmin
     .from('project_table')
@@ -55,6 +77,8 @@ export async function archiveProjectAction(projectId: number | string) {
   if (!session) {
     throw new Error('Unauthorized');
   }
+
+  await authorizeProjectOperation('delete');
 
   const normalizedProjectId = Number(projectId);
   if (!Number.isFinite(normalizedProjectId)) {
@@ -132,6 +156,8 @@ export async function restoreArchivedProjectAction(projectId: number | string) {
   if (!session) {
     throw new Error('Unauthorized');
   }
+
+  await authorizeProjectOperation('edit');
 
   const normalizedProjectId = Number(projectId);
   if (!Number.isFinite(normalizedProjectId)) {
@@ -272,6 +298,8 @@ export async function createBasicProjectAction(input: {
     if (!session) {
       throw new ProjectCreationError('Unauthorized: Please log in.');
     }
+
+    await authorizeProjectOperation('create');
 
     const title = input.title.trim();
     const slug = input.slug.trim();
@@ -550,6 +578,8 @@ export async function ensureProjectNavigationEntriesAction() {
     throw new Error('Unauthorized');
   }
 
+  await authorizeProjectOperation('edit');
+
   // Repair any legacy or race-created duplicates before checking which
   // projects are missing a navigation row.
   const duplicatesRemovedBeforeInsert =
@@ -642,6 +672,8 @@ export async function hideProjectNavigationEntryAction(
     throw new Error('Unauthorized');
   }
 
+  await authorizeProjectOperation('edit');
+
   const { error } = await supabaseAdmin
     .from('navbar_projects')
     .update({ is_active: false })
@@ -677,6 +709,8 @@ export async function setProjectWebsiteVisibilityAction(
   if (!session) {
     throw new Error('Unauthorized');
   }
+
+  await authorizeProjectOperation('edit');
 
   const normalizedProjectId = Number(projectId);
 
@@ -839,6 +873,10 @@ export async function saveProjectAction(payload: any) {
     if (!userId) {
       throw new Error('Unauthorized: Please log in.');
     }
+
+    // TODO Phase 2.3B: Separate create (can_create) vs edit (can_edit) authorization
+    // For now, Phase 2.3A requires can_edit for all saves
+    await authorizeProjectOperation('edit');
 
     let { targetProjectId, cleanProjectData, finalData } = payload;
     const beforeAudit: ProjectSnapshot | null = targetProjectId
@@ -1764,6 +1802,8 @@ export async function getProjectTowerUsageAction(
     throw new Error('Unauthorized');
   }
 
+  await authorizeProjectOperation('view');
+
   const {
     data: tower,
     error: towerError,
@@ -1891,6 +1931,7 @@ export async function deleteProjectTowerAction({
     );
   }
 
+  await authorizeProjectOperation('delete');
 
   const {
     data: tower,
@@ -2324,6 +2365,8 @@ export async function fetchProjectForEdit(editId: string | number) {
   const session = await getCustomSession();
 
   if (!session) throw new Error('Unauthorized');
+
+  await authorizeProjectOperation('view');
 
       const [
       projRes,
