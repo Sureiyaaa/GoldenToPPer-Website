@@ -711,7 +711,7 @@ async function requireNotificationAccess() {
 
 async function fetchInboxSource<T extends { id: number | string }>(
   table: 'inquire' | 'contact' | 'loan_preapp', selection: string,
-  adminId: string, readRelation?: 'admin_inquire_reads' | 'admin_contact_reads',
+  adminId: string, readRelation?: 'admin_inquire_reads' | 'admin_contact_reads' | 'admin_loan_preapp_reads',
 ): Promise<T[]> {
   const pageSize = 500;
   const rows = new Map<string, T>();
