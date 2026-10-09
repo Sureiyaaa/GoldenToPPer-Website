@@ -996,12 +996,17 @@ export async function saveProjectAction(payload: any) {
 
     // 2. Base Project Table (Phase 2.3C: using filtered fields)
     if (targetProjectId) {
-      const { error } = await supabaseAdmin
+      const { data: updated, error } = await supabaseAdmin
         .from('project_table')
         .update(filteredCleanData)
-        .eq('id', targetProjectId);
+        .eq('id', targetProjectId)
+        .select('id')
+        .single();
 
       if (error) throw error;
+      if (!updated) {
+        throw new Error(`Project ${targetProjectId} no longer exists or was deleted during save.`);
+      }
     } else {
       const { data, error } = await supabaseAdmin
         .from('project_table')
@@ -1165,15 +1170,23 @@ export async function saveProjectAction(payload: any) {
         // Phase 2.3C: Validate the layout being edited belongs to this project
         await validateLayoutBelongsToProject(parsedId, targetProjectId);
 
-        const { error: updateLayoutError } = await supabaseAdmin
+        const { data: updated, error: updateLayoutError } = await supabaseAdmin
           .from('unit_layout')
           .update(layoutValues)
           .eq('project_id', targetProjectId)
-          .eq('id', parsedId);
+          .eq('id', parsedId)
+          .select('id')
+          .single();
 
         if (updateLayoutError) {
           throw new Error(
             `Layout update error (${parsedId}): ${updateLayoutError.message}`
+          );
+        }
+
+        if (!updated) {
+          throw new Error(
+            `Layout ${parsedId} no longer exists or was deleted during save.`
           );
         }
 
@@ -1358,15 +1371,19 @@ for (const item of amenities) {
       );
     }
 
+    if (!updatedAmenity) {
+      throw new Error(
+        `Amenity ${parsedId} no longer exists or was deleted during save.`
+      );
+    }
+
     retainedAmenityIds.add(
       parsedId
     );
 
-    if (updatedAmenity) {
-      savedAmenityData.push(
-        updatedAmenity
-      );
-    }
+    savedAmenityData.push(
+      updatedAmenity
+    );
   } else {
     const {
       data: insertedAmenity,
@@ -1660,6 +1677,7 @@ for (
 
             // Update the tower registry itself.
             const {
+              data: updatedTower,
               error: towerUpdateError,
             } = await supabaseAdmin
               .from('project_towers')
@@ -1680,11 +1698,19 @@ for (
               .eq(
                 'project_id',
                 targetProjectId
-              );
+              )
+              .select('id')
+              .single();
 
             if (towerUpdateError) {
               throw new Error(
                 `Tower update error: ${towerUpdateError.message}`
+              );
+            }
+
+            if (!updatedTower) {
+              throw new Error(
+                `Tower ${tower.id} no longer exists or was deleted during save.`
               );
             }
           }
