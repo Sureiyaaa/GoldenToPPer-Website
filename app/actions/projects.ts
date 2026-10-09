@@ -9,6 +9,73 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// Phase 2.3C: Server-controlled field allowlists (prevent arbitrary column modifications)
+const PROJECT_TABLE_FIELDS = new Set(['title', 'slug', 'status', 'address', 'city', 'country', 'sqm', 'unit_total', 'image', 'img_awards', 'map_icon']);
+const EXTENDED_DESCRIPTION_FIELDS = new Set(['editorial_title', 'editorial_long', 'editorial_img', 'editorial_title_color', 'editorial_desc_color', 'editorial_bg_color', 'amenities_title', 'amenities_title_gold', 'map_subtitle']);
+const UNIT_LAYOUT_FIELDS = new Set(['title', 'tower_name', 'description', 'thumbnail', 'min_sqm', 'max_sqm', 'bg_color', 'sort_order', 'show_on_map_card', 'map_card_order', 'show_on_project_page', 'project_page_order']);
+const AMENITY_FIELDS = new Set(['title', 'description', 'thumbnail', 'tower']);
+const TOWER_FIELDS = new Set(['name', 'sort_order']);
+const MARKER_FIELDS = new Set(['interest_name', 'address', 'phrase', 'distance_km', 'distance_drive', 'distance_walk', 'latitude', 'longitude', 'thumbnail']);
+const MARKER_TYPE_FIELDS = new Set(['icon', 'name']);
+const PARENT_MARKER_FIELDS = new Set(['latitude', 'longitude']);
+
+function filterObjectToAllowlist(obj: any, allowlist: Set<string>): Record<string, any> {
+  const filtered: Record<string, any> = {};
+  if (obj && typeof obj === 'object') {
+    for (const [key, value] of Object.entries(obj)) {
+      if (allowlist.has(key)) {
+        filtered[key] = value;
+      }
+    }
+  }
+  return filtered;
+}
+
+// Phase 2.3C: Validate child record belongs to target project
+async function validateLayoutBelongsToProject(layoutId: number, projectId: number) {
+  if (!layoutId || !projectId) return;
+  const { data, error } = await supabaseAdmin
+    .from('unit_layout')
+    .select('id, project_id')
+    .eq('id', layoutId)
+    .eq('project_id', projectId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    throw new Error(`Layout ${layoutId} does not belong to project ${projectId}.`);
+  }
+}
+
+// Phase 2.3C: Validate amenity belongs to target project
+async function validateAmenityBelongsToProject(amenityId: number, projectId: number) {
+  if (!amenityId || !projectId) return;
+  const { data, error } = await supabaseAdmin
+    .from('amenities')
+    .select('id, project_id')
+    .eq('id', amenityId)
+    .eq('project_id', projectId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    throw new Error(`Amenity ${amenityId} does not belong to project ${projectId}.`);
+  }
+}
+
+// Phase 2.3C: Validate tower exists in target project
+async function validateTowerExistsInProject(towerName: string, projectId: number) {
+  if (!towerName || !projectId) return;
+  const { data, error } = await supabaseAdmin
+    .from('project_towers')
+    .select('id')
+    .eq('project_id', projectId)
+    .ilike('name', towerName)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    throw new Error(`Tower "${towerName}" does not exist in project ${projectId}.`);
+  }
+}
+
 async function authorizeProjectOperation(operation: 'create' | 'edit' | 'delete' | 'view') {
   const profile = await getRBACProfile();
   if (!profile) {
@@ -902,6 +969,9 @@ export async function saveProjectAction(payload: any) {
     const operation = isCreate ? 'create' : 'edit';
     await authorizeProjectOperation(operation);
 
+    // Phase 2.3C: Filter cleanProjectData to allowed fields only
+    const filteredCleanData = filterObjectToAllowlist(cleanProjectData, PROJECT_TABLE_FIELDS);
+
     const beforeAudit: ProjectSnapshot | null = targetProjectId
       ? await fetchProjectForEdit(targetProjectId)
       : null;
@@ -924,18 +994,18 @@ export async function saveProjectAction(payload: any) {
         : typeof finalData?.tags,
     });
 
-    // 2. Base Project Table
+    // 2. Base Project Table (Phase 2.3C: using filtered fields)
     if (targetProjectId) {
       const { error } = await supabaseAdmin
         .from('project_table')
-        .update(cleanProjectData)
+        .update(filteredCleanData)
         .eq('id', targetProjectId);
 
       if (error) throw error;
     } else {
       const { data, error } = await supabaseAdmin
         .from('project_table')
-        .insert(cleanProjectData)
+        .insert(filteredCleanData)
         .select('id')
         .single();
 
@@ -945,10 +1015,9 @@ export async function saveProjectAction(payload: any) {
       targetProjectId = data.id;
     }
 
-    // 3. Extended Description
-    await supabaseAdmin.from('extended_description').upsert(
+    // 3. Extended Description (Phase 2.3C: field filtering)
+    const extendedDescData = filterObjectToAllowlist(
       {
-        project_id: targetProjectId,
         editorial_title: finalData.editorial_title,
         editorial_long: finalData.editorial_long,
         editorial_img: finalData.editorial_img,
@@ -958,6 +1027,14 @@ export async function saveProjectAction(payload: any) {
         amenities_title: finalData.amenities_title,
         amenities_title_gold: finalData.amenities_title_gold,
         map_subtitle: finalData.map_subtitle || null,
+      },
+      EXTENDED_DESCRIPTION_FIELDS
+    );
+
+    await supabaseAdmin.from('extended_description').upsert(
+      {
+        project_id: targetProjectId,
+        ...extendedDescData,
       },
       { onConflict: 'project_id' }
     );
@@ -1026,40 +1103,44 @@ export async function saveProjectAction(payload: any) {
     const retainedLayoutIds = new Set<number>();
     const newLayoutRows: any[] = [];
 
-    const buildLayoutValues = (item: any) => ({
-      tower_name:
-      typeof item.tower_name === 'string' && item.tower_name.trim()
-        ? item.tower_name.trim()
-        : 'Tower A - Residential',
-      bg_color: item.bg_color || '#051431',
-      title: item.title,
-      description: item.description || '',
-      thumbnail: item.thumbnail || '',
-      min_sqm: item.min_sqm ? parseFloat(item.min_sqm) : null,
-      max_sqm: item.max_sqm ? parseFloat(item.max_sqm) : null,
+    const buildLayoutValues = (item: any) => {
+      const values = {
+        tower_name:
+        typeof item.tower_name === 'string' && item.tower_name.trim()
+          ? item.tower_name.trim()
+          : 'Tower A - Residential',
+        bg_color: item.bg_color || '#051431',
+        title: item.title,
+        description: item.description || '',
+        thumbnail: item.thumbnail || '',
+        min_sqm: item.min_sqm ? parseFloat(item.min_sqm) : null,
+        max_sqm: item.max_sqm ? parseFloat(item.max_sqm) : null,
 
-      // Order inside the project's tower blueprint group
-      sort_order:
-        item.sort_order !== undefined &&
-        item.sort_order !== null &&
-        item.sort_order !== ''
-          ? parseInt(String(item.sort_order), 10)
-          : null,
+        // Order inside the project's tower blueprint group
+        sort_order:
+          item.sort_order !== undefined &&
+          item.sort_order !== null &&
+          item.sort_order !== ''
+            ? parseInt(String(item.sort_order), 10)
+            : null,
 
-      // Map popup placement
-      show_on_map_card: Boolean(item.show_on_map_card),
-      map_card_order:
-        item.show_on_map_card && item.map_card_order
-          ? parseInt(String(item.map_card_order), 10)
-          : null,
+        // Map popup placement
+        show_on_map_card: Boolean(item.show_on_map_card),
+        map_card_order:
+          item.show_on_map_card && item.map_card_order
+            ? parseInt(String(item.map_card_order), 10)
+            : null,
 
-      // /projects listing placement
-      show_on_project_page: Boolean(item.show_on_project_page),
-      project_page_order:
-        item.show_on_project_page && item.project_page_order
-          ? parseInt(String(item.project_page_order), 10)
-          : null,
-    });
+        // /projects listing placement
+        show_on_project_page: Boolean(item.show_on_project_page),
+        project_page_order:
+          item.show_on_project_page && item.project_page_order
+            ? parseInt(String(item.project_page_order), 10)
+            : null,
+      };
+      // Phase 2.3C: Filter to allowed fields only
+      return filterObjectToAllowlist(values, UNIT_LAYOUT_FIELDS);
+    };
 
     for (const item of unitLayouts) {
       const parsedId =
@@ -1072,10 +1153,21 @@ export async function saveProjectAction(payload: any) {
         Number.isInteger(parsedId) &&
         existingLayoutIds.has(parsedId);
 
+      // Phase 2.3C: Validate layout values
+      const layoutValues = buildLayoutValues(item);
+
+      // Validate tower_name reference if present
+      if (layoutValues.tower_name && layoutValues.tower_name !== 'Tower A - Residential') {
+        await validateTowerExistsInProject(layoutValues.tower_name, targetProjectId);
+      }
+
       if (isExistingLayout) {
+        // Phase 2.3C: Validate the layout being edited belongs to this project
+        await validateLayoutBelongsToProject(parsedId, targetProjectId);
+
         const { error: updateLayoutError } = await supabaseAdmin
           .from('unit_layout')
-          .update(buildLayoutValues(item))
+          .update(layoutValues)
           .eq('project_id', targetProjectId)
           .eq('id', parsedId);
 
@@ -1089,7 +1181,7 @@ export async function saveProjectAction(payload: any) {
       } else {
         newLayoutRows.push({
           project_id: targetProjectId,
-          ...buildLayoutValues(item),
+          ...layoutValues,
         });
       }
     }
@@ -1193,24 +1285,28 @@ const savedAmenityData: any[] = [];
 
 const buildAmenityValues = (
   item: any
-) => ({
-  title:
-    typeof item.title === 'string'
-      ? item.title.trim()
-      : '',
+) => {
+  const values = {
+    title:
+      typeof item.title === 'string'
+        ? item.title.trim()
+        : '',
 
-  description:
-    item.description || '',
+    description:
+      item.description || '',
 
-  thumbnail:
-    item.thumbnail || '',
+    thumbnail:
+      item.thumbnail || '',
 
-  tower:
-    typeof item.tower === 'string' &&
-    item.tower.trim()
-      ? item.tower.trim()
-      : null,
-});
+    tower:
+      typeof item.tower === 'string' &&
+      item.tower.trim()
+        ? item.tower.trim()
+        : null,
+  };
+  // Phase 2.3C: Filter to allowed fields only
+  return filterObjectToAllowlist(values, AMENITY_FIELDS);
+};
 
 for (const item of amenities) {
   const parsedId =
@@ -1228,7 +1324,15 @@ for (const item of amenities) {
   const amenityValues =
     buildAmenityValues(item);
 
+  // Phase 2.3C: Validate tower reference if present
+  if (amenityValues.tower) {
+    await validateTowerExistsInProject(amenityValues.tower, targetProjectId);
+  }
+
   if (isExistingAmenity) {
+    // Phase 2.3C: Validate the amenity being edited belongs to this project
+    await validateAmenityBelongsToProject(parsedId, targetProjectId);
+
     const {
       data: updatedAmenity,
       error: updateAmenityError,
@@ -1384,24 +1488,28 @@ for (
               (
                 tower: any,
                 index: number
-              ) => ({
-                id:
-                  tower?.id !== null &&
-                  tower?.id !== undefined &&
-                  !Number.isNaN(
-                    Number(tower.id)
-                  )
-                    ? Number(tower.id)
-                    : null,
+              ) => {
+                const towerData = {
+                  id:
+                    tower?.id !== null &&
+                    tower?.id !== undefined &&
+                    !Number.isNaN(
+                      Number(tower.id)
+                    )
+                      ? Number(tower.id)
+                      : null,
 
-                name:
-                  typeof tower?.name ===
-                  'string'
-                    ? tower.name.trim()
-                    : '',
+                  name:
+                    typeof tower?.name ===
+                    'string'
+                      ? tower.name.trim()
+                      : '',
 
-                sort_order: index + 1,
-              })
+                  sort_order: index + 1,
+                };
+                // Phase 2.3C: Filter tower name and sort_order
+                return filterObjectToAllowlist(towerData, TOWER_FIELDS);
+              }
             )
             .filter(
               (tower: any) =>
@@ -1643,11 +1751,19 @@ for (
 
 // 7. Map Markers
 if (finalData.map_latitude && finalData.map_longitude) {
+      // Phase 2.3C: Filter parent marker fields
+      const parentMarkerData = filterObjectToAllowlist(
+        {
+          latitude: finalData.map_latitude,
+          longitude: finalData.map_longitude,
+        },
+        PARENT_MARKER_FIELDS
+      );
+
       await supabaseAdmin.from('parent_marker').upsert(
         {
           project_id: targetProjectId,
-          latitude: finalData.map_latitude,
-          longitude: finalData.map_longitude,
+          ...parentMarkerData,
         },
         { onConflict: 'project_id' }
       );
@@ -1678,10 +1794,9 @@ if (finalData.map_latitude && finalData.map_longitude) {
 
     if (childMarkers.length > 0) {
       for (const marker of childMarkers) {
-        const { data: newMarker, error: markerErr } = await supabaseAdmin
-          .from('child_marker_table')
-          .insert({
-            project_id: targetProjectId,
+        // Phase 2.3C: Filter child marker fields
+        const markerData = filterObjectToAllowlist(
+          {
             interest_name: marker.interest_name || 'Landmark',
             address: marker.address || '',
             phrase: marker.phrase || '',
@@ -1691,6 +1806,15 @@ if (finalData.map_latitude && finalData.map_longitude) {
             latitude: marker.latitude || null,
             longitude: marker.longitude || null,
             thumbnail: marker.thumbnail,
+          },
+          MARKER_FIELDS
+        );
+
+        const { data: newMarker, error: markerErr } = await supabaseAdmin
+          .from('child_marker_table')
+          .insert({
+            project_id: targetProjectId,
+            ...markerData,
           })
           .select('id')
           .single();
@@ -1699,10 +1823,18 @@ if (finalData.map_latitude && finalData.map_longitude) {
         if (!newMarker) throw new Error('Failed to create marker');
 
         if (marker.marker_icon && marker.marker_type) {
+          // Phase 2.3C: Filter marker type fields
+          const markerTypeData = filterObjectToAllowlist(
+            {
+              icon: marker.marker_icon,
+              name: marker.marker_type,
+            },
+            MARKER_TYPE_FIELDS
+          );
+
           await supabaseAdmin.from('marker_type_table').insert({
             child_marker_id: newMarker.id,
-            icon: marker.marker_icon,
-            name: marker.marker_type,
+            ...markerTypeData,
           });
         }
       }
