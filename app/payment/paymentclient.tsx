@@ -1,14 +1,26 @@
 'use client';
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Navbar from "@/app/components/navbar";
-import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react"; 
+import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import PageTransition from "../components/page-transitions";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
+import { submitPaymentAction } from "@/app/actions/payment";
+
+declare global {
+  interface Window {
+    turnstile: {
+      render: (element: string | HTMLElement, options: Record<string, unknown>) => string;
+      reset: (widgetId?: string) => void;
+      remove: (widgetId?: string) => void;
+      getResponse: (widgetId?: string) => string;
+    };
+  }
+}
 
 const paymentSchema = z.object({
   paymentMethod: z.string().min(1, "Please select a payment method"),
@@ -55,6 +67,13 @@ export default function PaymentClient() {
   const marqueeTween = useRef<gsap.core.Tween | null>(null);
   const dragState = useRef({ isDragging: false, startX: 0, currentProgress: 0 });
 
+  // Turnstile state
+  const turnstileWidgetIdRef = useRef<string | undefined>(undefined);
+  const scriptLoadedRef = useRef(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaError, setCaptchaError] = useState('');
+  const [serverError, setServerError] = useState('');
+
   const {
     register,
     handleSubmit,
@@ -74,12 +93,63 @@ export default function PaymentClient() {
   const watchPaymentMethod = watch("paymentMethod");
 
   const onSubmit = async (data: PaymentFormData) => {
+    // Check CAPTCHA before submission
+    if (!captchaToken) {
+      setCaptchaError('Please complete the verification.');
+      return;
+    }
+
     try {
-      const finalData = { ...data, amount: parseFloat(data.amount) };
-      console.log("Validated Data:", finalData);
-      alert(`Redirecting to ${finalData.paymentMethod} payment gateway...`);
+      setServerError('');
+      console.log('[PAYMENT] Submitting payment with CAPTCHA token');
+
+      // Call server action with payment data and CAPTCHA token
+      const result = await submitPaymentAction(data, captchaToken);
+
+      if (result?.error) {
+        console.log(`[PAYMENT] Server returned error: ${result.error}`);
+        setServerError(result.error);
+
+        // Reset CAPTCHA widget for retry
+        if (turnstileWidgetIdRef.current && window.turnstile) {
+          try {
+            window.turnstile.reset(turnstileWidgetIdRef.current);
+          } catch (e) {
+            console.error('[CAPTCHA] Failed to reset widget:', e);
+          }
+        }
+        setCaptchaToken(null);
+      } else if (result?.success) {
+        // Successful payment (future - not yet implemented)
+        console.log('[PAYMENT] Payment successful');
+        alert('Payment processed successfully!');
+      } else {
+        // Unexpected response
+        setServerError('Unexpected response from server.');
+
+        // Reset CAPTCHA for retry
+        if (turnstileWidgetIdRef.current && window.turnstile) {
+          try {
+            window.turnstile.reset(turnstileWidgetIdRef.current);
+          } catch (e) {
+            console.error('[CAPTCHA] Failed to reset widget:', e);
+          }
+        }
+        setCaptchaToken(null);
+      }
     } catch (error) {
-      console.error("Submission error:", error);
+      console.error('[PAYMENT] Submission error:', error);
+      setServerError('An error occurred. Please try again.');
+
+      // Reset CAPTCHA on unexpected error
+      if (turnstileWidgetIdRef.current && window.turnstile) {
+        try {
+          window.turnstile.reset(turnstileWidgetIdRef.current);
+        } catch (e) {
+          console.error('[CAPTCHA] Failed to reset widget:', e);
+        }
+      }
+      setCaptchaToken(null);
     }
   };
 
@@ -92,6 +162,53 @@ export default function PaymentClient() {
   // Duplicate the array 4 times to create enough overflow for a seamless infinite loop at xPercent: -50
   const marqueeItems = [...PAYMENT_METHODS, ...PAYMENT_METHODS, ...PAYMENT_METHODS, ...PAYMENT_METHODS];
 
+  // Load Turnstile widget on mount
+  useEffect(() => {
+    if (scriptLoadedRef.current) return;
+
+    const script = document.createElement('script');
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    script.async = true;
+    script.defer = true;
+
+    script.onload = () => {
+      const renderWidget = () => {
+        const container = document.getElementById('payment-captcha-container');
+        if (container && window.turnstile) {
+          const widgetId = window.turnstile.render('#payment-captcha-container', {
+            sitekey: process.env.NEXT_PUBLIC_PAYMENT_TURNSTILE_SITE_KEY,
+            theme: 'light',
+            action: 'payment',
+            callback: handleCaptchaSuccess,
+            'expired-callback': handleCaptchaExpire,
+            'error-callback': handleCaptchaError,
+            size: 'normal',
+          });
+          turnstileWidgetIdRef.current = widgetId;
+        }
+      };
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', renderWidget);
+      } else {
+        renderWidget();
+      }
+    };
+
+    document.head.appendChild(script);
+    scriptLoadedRef.current = true;
+
+    return () => {
+      if (turnstileWidgetIdRef.current && window.turnstile) {
+        try {
+          window.turnstile.remove(turnstileWidgetIdRef.current);
+        } catch (e) {
+          // Widget may have already been removed
+        }
+      }
+    };
+  }, []);
+
   // GSAP Infinite Marquee Initialization
   useGSAP(() => {
     if (!marqueeRef.current) return;
@@ -102,6 +219,24 @@ export default function PaymentClient() {
       repeat: -1,
     });
   });
+
+  // CAPTCHA callbacks
+  const handleCaptchaSuccess = (token: string) => {
+    setCaptchaToken(token);
+    setCaptchaError('');
+    setServerError('');
+  };
+
+  const handleCaptchaExpire = () => {
+    setCaptchaToken(null);
+    setCaptchaError('');
+  };
+
+  const handleCaptchaError = (errorCode: string) => {
+    setCaptchaToken(null);
+    setCaptchaError('Verification failed. Please try again.');
+    console.warn(`[CAPTCHA] Error: ${errorCode}`);
+  };
 
   // Marquee Drag Event Handlers
   const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
@@ -185,8 +320,8 @@ export default function PaymentClient() {
           <div className="w-full md:w-1/2 bg-[#E7E7E7] px-6 md:px-12 lg:px-16 relative z-10 flex flex-col justify-start md:justify-center h-full overflow-y-auto pt-24 pb-8 md:py-0">
             
             <div className="max-w-lg w-full mx-auto pb-12 md:pb-0 mt-12">
-              <div className="mb-8">
-                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-serif font-semibold text-brand-blue leading-tight mb-4 md:mt-0">
+              <div className="mb-5 md:mb-4">
+                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-serif font-semibold text-brand-blue leading-tight mb-3 md:mb-3 md:mt-0">
                   Payment <span className="text-brand-gold">Method</span>
                 </h1>
                 
@@ -235,9 +370,9 @@ export default function PaymentClient() {
                 )}
               </div>
 
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-3 md:space-y-4">
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-2.5 md:space-y-3">
                 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 md:gap-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 md:gap-y-3">
                   <div className="relative flex flex-col">
                     <label className={labelStyles}>First Name</label>
                     <input 
@@ -259,7 +394,7 @@ export default function PaymentClient() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 md:gap-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 md:gap-y-3">
                   <div className="relative flex flex-col">
                     <label className={labelStyles}>Email Address</label>
                     <input 
@@ -299,7 +434,7 @@ export default function PaymentClient() {
                   {errors.project && <span className="absolute -bottom-4 left-2 text-[9px] text-red-500"><AlertCircle size={8} className="inline mr-1"/>{errors.project.message}</span>}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 md:gap-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 md:gap-y-3">
                   <div className="relative flex flex-col">
                     <label className={labelStyles}>Tower</label>
                     <input 
@@ -321,7 +456,7 @@ export default function PaymentClient() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 md:gap-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 md:gap-y-3">
                   <div className="relative flex flex-col">
                     <label className={labelStyles}>Purpose</label>
                     <div className="relative">
@@ -356,14 +491,46 @@ export default function PaymentClient() {
                   </div>
                 </div>
 
-                <div className="pt-4 md:pt-2">
-                  <p className="text-[11px] text-gray-500 font-light leading-relaxed text-center mb-3">
+                {/* Server-side error alert */}
+                {serverError && (
+                  <div className="bg-red-50 p-4 rounded-lg border border-red-200 flex gap-3">
+                    <AlertCircle size={18} className="text-red-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-red-700">Payment Error</p>
+                      <p className="text-sm text-red-600 mt-0.5">{serverError}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Cloudflare Turnstile Widget */}
+                {process.env.NEXT_PUBLIC_PAYMENT_TURNSTILE_SITE_KEY ? (
+                  <div className="pt-4 pb-3 flex flex-col items-center">
+                    <div className="flex justify-center w-full">
+                      <div id="payment-captcha-container" />
+                    </div>
+                    {captchaError && (
+                      <p className="text-sm text-red-600 flex items-center gap-1 mt-2.5">
+                        <AlertCircle size={14} />
+                        {captchaError}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                    <p className="text-sm text-yellow-800">
+                      ⚠️ Payment verification not configured. Add <code className="font-mono text-xs">NEXT_PUBLIC_PAYMENT_TURNSTILE_SITE_KEY</code> to .env.local
+                    </p>
+                  </div>
+                )}
+
+                <div className="pt-3 md:pt-2.5">
+                  <p className="text-[11px] text-gray-500 font-light leading-relaxed text-center mb-2.5">
                     By providing this information, I agree to the Golden Topper Reservation Guidelines, Privacy Policy, and Terms of Service.
                   </p>
-                  
-                  <button 
-                    type="submit" 
-                    disabled={isSubmitting}
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !captchaToken || !process.env.NEXT_PUBLIC_PAYMENT_TURNSTILE_SITE_KEY}
                     className="group relative flex items-center justify-center w-full bg-brand-blue rounded-md py-3.5 overflow-hidden shadow-lg shadow-brand-blue/20 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed outline-none"
                   >
                     <span className="absolute inset-0 w-full h-full bg-brand-gold transform -translate-x-full transition-transform duration-[0.6s] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-0"></span>
