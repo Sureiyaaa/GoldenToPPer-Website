@@ -1,6 +1,7 @@
 'use server';
 
 import * as z from 'zod';
+import { createClient } from '@supabase/supabase-js';
 
 // Cloudflare Turnstile verification response type
 interface TurnstileVerifyResponse {
@@ -14,21 +15,23 @@ interface TurnstileVerifyResponse {
 
 // Payment form schema - reusing the same validation as client
 const paymentSchema = z.object({
-  paymentMethod: z.string().min(1, 'Payment method is required'),
   firstName: z.string().min(1, 'First name is required').regex(/^[a-zA-Z\s\-']+$/, 'Invalid characters in first name'),
   lastName: z.string().min(1, 'Last name is required').regex(/^[a-zA-Z\s\-']+$/, 'Invalid characters in last name'),
   email: z.string().email('Invalid email address'),
   contactNumber: z.string()
-    .min(10, 'Contact number must be at least 10 digits')
+    .min(11, 'Contact number must be 11 digits')
+    .max(11, 'Contact number must be 11 digits')
     .regex(/^\d+$/, 'Contact number must contain only digits'),
-  project: z.string().min(1, 'Project is required'),
-  tower: z.string().min(1, 'Tower is required'),
-  unit: z.string().min(1, 'Unit is required').regex(/^[a-zA-Z0-9\-]+$/, 'Invalid unit format'),
+  projectId: z.string().min(1, 'Project is required').regex(/^\d+$/, 'Invalid project ID'),
+  towerId: z.string().min(1, 'Tower is required').regex(/^\d+$/, 'Invalid tower ID'),
+  unitTypeId: z.string().min(1, 'Unit type is required').regex(/^\d+$/, 'Invalid unit type ID'),
+  unitNumber: z.string().min(1, 'Unit number is required').regex(/^\d+$/, 'Unit number must be digits only').refine((val) => parseInt(val) > 0, 'Unit number must be positive'),
   paymentPurpose: z.string().min(1, 'Payment purpose is required'),
   amount: z.string()
     .min(1, 'Amount is required')
     .regex(/^\d+(\.\d{1,2})?$/, 'Invalid amount format')
     .refine((val) => parseFloat(val) > 0, 'Amount must be greater than zero'),
+  paymentMethod: z.string().min(1, 'Payment method is required'),
 });
 
 type PaymentFormData = z.infer<typeof paymentSchema>;
@@ -39,8 +42,86 @@ const ALLOWED_PAYMENT_METHODS = ['BDO Pay', 'GCash', 'GrabPay', 'Alipay', 'WeCha
 // Allowed payment purposes
 const ALLOWED_PAYMENT_PURPOSES = ['Downpayment', 'Monthly Due', 'Reservation Fee', 'CTS Reprinting Fee'];
 
-// Allowed projects (from the UI form)
-const ALLOWED_PROJECTS = ['City Clou', 'Park One', 'El Sol', 'La Vida'];
+// Create admin Supabase client for server-side queries
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+// Fetch all active projects for payment form
+export async function fetchProjectsForPayment(): Promise<Array<{ id: number; title: string }>> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('project_table')
+      .select('id, title')
+      .eq('is_active', true)
+      .is('deleted_at', null)
+      .order('title', { ascending: true });
+
+    if (error) {
+      console.error('[PAYMENT] Error fetching projects:', error.message);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('[PAYMENT] Unexpected error fetching projects:', err);
+    return [];
+  }
+}
+
+// Fetch towers for a specific project
+export async function fetchTowersForProject(projectId: number): Promise<Array<{ id: number; name: string }>> {
+  if (!projectId) return [];
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('project_towers')
+      .select('id, name')
+      .eq('project_id', projectId)
+      .order('sort_order', { ascending: true })
+      .order('id', { ascending: true });
+
+    if (error) {
+      console.error('[PAYMENT] Error fetching towers:', error.message);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('[PAYMENT] Unexpected error fetching towers:', err);
+    return [];
+  }
+}
+
+// Fetch unit types for a specific tower (renamed from fetchUnitsForTower for clarity)
+export async function fetchUnitTypesForTower(projectId: number, towerName: string): Promise<Array<{ id: number; title: string }>> {
+  if (!projectId || !towerName) return [];
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('unit_layout')
+      .select('id, title')
+      .eq('project_id', projectId)
+      .eq('tower_name', towerName)
+      .order('id', { ascending: true });
+
+    if (error) {
+      console.error('[PAYMENT] Error fetching unit types:', error.message);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('[PAYMENT] Unexpected error fetching unit types:', err);
+    return [];
+  }
+}
+
+// Deprecated: Use fetchUnitTypesForTower instead
+export async function fetchUnitsForTower(projectId: number, towerName: string): Promise<Array<{ id: number; title: string }>> {
+  return fetchUnitTypesForTower(projectId, towerName);
+}
 
 // Verify CAPTCHA token with Cloudflare Siteverify API - Payment version
 async function verifyPaymentCaptchaToken(token: string): Promise<{ valid: boolean; error?: string }> {
@@ -170,7 +251,7 @@ async function verifyPaymentCaptchaToken(token: string): Promise<{ valid: boolea
 }
 
 // Validate payment data server-side
-function validatePaymentData(data: PaymentFormData): { valid: boolean; error?: string } {
+async function validatePaymentData(data: PaymentFormData): Promise<{ valid: boolean; error?: string }> {
   // Validate payment method is in allowed list
   if (!ALLOWED_PAYMENT_METHODS.includes(data.paymentMethod)) {
     return { valid: false, error: 'Invalid payment method.' };
@@ -181,16 +262,66 @@ function validatePaymentData(data: PaymentFormData): { valid: boolean; error?: s
     return { valid: false, error: 'Invalid payment purpose.' };
   }
 
-  // Validate project is in allowed list
-  if (!ALLOWED_PROJECTS.includes(data.project)) {
-    return { valid: false, error: 'Invalid project selection.' };
-  }
-
   // Validate amount is positive and finite
   const amount = parseFloat(data.amount);
   if (!Number.isFinite(amount) || amount <= 0) {
     return { valid: false, error: 'Amount must be a valid positive number.' };
   }
+
+  // Validate project exists and is active
+  try {
+    const { data: projectData, error: projError } = await supabaseAdmin
+      .from('project_table')
+      .select('id')
+      .eq('id', parseInt(data.projectId))
+      .eq('is_active', true)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (projError || !projectData) {
+      return { valid: false, error: 'Invalid project selection.' };
+    }
+  } catch (err) {
+    console.error('[PAYMENT] Error validating project:', err);
+    return { valid: false, error: 'Unable to validate project. Please try again.' };
+  }
+
+  // Validate tower belongs to the selected project
+  try {
+    const { data: towerData, error: towerError } = await supabaseAdmin
+      .from('project_towers')
+      .select('id')
+      .eq('project_id', parseInt(data.projectId))
+      .eq('id', parseInt(data.towerId))
+      .maybeSingle();
+
+    if (towerError || !towerData) {
+      return { valid: false, error: 'Invalid tower selection for the selected project.' };
+    }
+  } catch (err) {
+    console.error('[PAYMENT] Error validating tower:', err);
+    return { valid: false, error: 'Unable to validate tower. Please try again.' };
+  }
+
+  // Validate unit type belongs to the selected tower/project
+  try {
+    const { data: unitTypeData, error: unitTypeError } = await supabaseAdmin
+      .from('unit_layout')
+      .select('id')
+      .eq('project_id', parseInt(data.projectId))
+      .eq('id', parseInt(data.unitTypeId))
+      .maybeSingle();
+
+    if (unitTypeError || !unitTypeData) {
+      return { valid: false, error: 'Invalid unit type selection for the selected tower.' };
+    }
+  } catch (err) {
+    console.error('[PAYMENT] Error validating unit type:', err);
+    return { valid: false, error: 'Unable to validate unit type. Please try again.' };
+  }
+
+  // Note: unitNumber is user-entered and not validated against inventory
+  // since the project does not have an authoritative unit inventory source yet
 
   // TODO: Amount validation against actual project/unit pricing
   // This requires pricing data from the database that is not yet implemented.
@@ -233,7 +364,7 @@ export async function submitPaymentAction(
 
     // Step 3: Validate payment data business rules
     console.log('[PAYMENT] 6. Validating payment business rules...');
-    const businessValidation = validatePaymentData(schemaValidation.data);
+    const businessValidation = await validatePaymentData(schemaValidation.data);
 
     if (!businessValidation.valid) {
       console.log(`[PAYMENT] Business validation failed: ${businessValidation.error}`);
