@@ -1,9 +1,8 @@
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
-import { getCustomSession } from './auth';
+import { requireSuperAdmin } from './auth';
 
-// Initialize with Service Role Key (Safely bypasses RLS from the server)
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -11,13 +10,8 @@ const supabaseAdmin = createClient(
 
 export async function savePermissionsAction(upsertData: any[]) {
   try {
-    // 1. Check if they have a valid custom session
-    const userId = await getCustomSession();
-    if (!userId) {
-      throw new Error("Unauthorized: Please log in.");
-    }
+    await requireSuperAdmin();
 
-    // 2. Perform the DB update using the Admin client
     const { error } = await supabaseAdmin
       .from('module_access')
       .upsert(upsertData, { onConflict: 'group_id,module_id' });
