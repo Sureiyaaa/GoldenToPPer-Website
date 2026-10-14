@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Navbar from "@/app/components/navbar";
-import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight, Check, Edit2, Mail, Phone } from "lucide-react";
+import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight, Check, Edit2, Mail, Phone, Pause, Play } from "lucide-react";
 import PageTransition from "../components/page-transitions";
 import { submitPaymentAction, fetchProjectsForPayment, fetchTowersForProject, fetchUnitTypesForTower } from "@/app/actions/payment";
 
@@ -51,11 +52,71 @@ const paymentSchema = z.object({
 
 type PaymentFormData = z.infer<typeof paymentSchema>;
 
-const PROPERTY_IMAGES = [
-  "/images/projects/city-clou-amenities/function_room_cityclou.png",
-  "/images/projects/el-sol-amenities/function_rooms_el_sol.png",
-  "/images/projects/la-vida-amenities/function_rooms_lavida.png"
+// Project hero images - primary/architectural images used by Projects section
+const PROJECT_HERO_IMAGES: Record<number, string> = {
+  1: "/images/projects/City_Clou_image.png", // City Clou
+  2: "/images/projects/el_sol_projects.webp", // El Sol
+  3: "/images/projects/lavida-dedicated.webp", // La Vida (higher quality source)
+  4: "/images/projects/park-one.webp", // Park One
+};
+
+// Introduce the portfolio before its supporting amenity highlights.
+const GENERAL_SHOWCASE_IMAGES = [
+  PROJECT_HERO_IMAGES[1],
+  PROJECT_HERO_IMAGES[4],
+  PROJECT_HERO_IMAGES[3],
+  PROJECT_HERO_IMAGES[2],
+  "/images/projects/city-clou-amenities/function_room_cityclou.webp",
+  "/images/projects/park-one-amenities/gym_with_yoga_room_parkone.jpg",
+  "/images/projects/la-vida-amenities/lap_pool_lavida.webp",
+  "/images/projects/el-sol-amenities/lounge_and_bar.webp",
 ];
+
+// Project-specific amenity images mapped by project ID
+const PROJECT_AMENITIES: Record<number, string[]> = {
+  1: [ // City Clou
+    "/images/projects/city-clou-amenities/dedicated_retail_area_city-clou.webp",
+    "/images/projects/city-clou-amenities/lap_pool_city-clou.webp",
+    "/images/projects/city-clou-amenities/gameroom_cityclou.webp",
+    "/images/projects/city-clou-amenities/playroom_cityclou.webp",
+    "/images/projects/city-clou-amenities/lounge_cityclou.webp",
+    "/images/projects/city-clou-amenities/library_cityclou.webp",
+    "/images/projects/city-clou-amenities/function_room_cityclou.webp",
+    "/images/projects/city-clou-amenities/gym_cityclou.webp",
+    "/images/projects/city-clou-amenities/yoga_cityclou.webp",
+  ],
+  2: [ // El Sol
+    "/images/projects/el-sol-amenities/lounge_and_bar.webp",
+    "/images/projects/el-sol-amenities/swimming_pool_with_kiddie_pool.webp",
+    "/images/projects/el-sol-amenities/function_rooms_el_sol.webp",
+    "/images/projects/el-sol-amenities/outdoor_bar_and_lounge.webp",
+    "/images/projects/el-sol-amenities/gym_with_yoga_room.webp",
+    "/images/projects/el-sol-amenities/recreational_court.webp",
+    "/images/projects/el-sol-amenities/childrens_playroom.webp",
+  ],
+  3: [ // La Vida
+    "/images/projects/la-vida-amenities/dedicated_retail_area_lavida.webp",
+    "/images/projects/la-vida-amenities/kids_playroom_lavida.webp",
+    "/images/projects/la-vida-amenities/lap_pool_lavida.webp",
+    "/images/projects/la-vida-amenities/function_rooms_lavida.webp",
+    "/images/projects/la-vida-amenities/kiddie_pool_lavida.webp",
+    "/images/projects/la-vida-amenities/jogging_trail_lavida.webp",
+  ],
+  4: [ // Park One
+    "/images/projects/park-one-amenities/lap-pool-parkone.jpg",
+    "/images/projects/park-one-amenities/gym_with_yoga_room_parkone.jpg",
+    "/images/projects/park-one-amenities/function_rooms_parkone.jpg",
+  ],
+};
+
+const PROJECT_CAROUSEL_IMAGES: Record<number, string[]> = {
+  1: [PROJECT_HERO_IMAGES[1], ...PROJECT_AMENITIES[1]],
+  2: [PROJECT_HERO_IMAGES[2], ...PROJECT_AMENITIES[2]],
+  3: [PROJECT_HERO_IMAGES[3], ...PROJECT_AMENITIES[3]],
+  4: [PROJECT_HERO_IMAGES[4], ...PROJECT_AMENITIES[4]],
+};
+
+const CAROUSEL_DURATION_MS = 5000;
 
 const PAYMENT_METHODS = [
   { id: "mastercard", label: "Mastercard", logo: "/images/payment/mastercard.svg" },
@@ -78,8 +139,196 @@ const STEPS = [
 // Navbar uses h-20, or h-16 + mt-4 when scrolled: both end at 5rem.
 const NAVBAR_HEIGHT = '5rem';
 
+// Stable component identity keeps wizard re-renders from restarting the slideshow.
+function PaymentCarousel({ images, projectName }: { images: string[]; projectName: string | null }) {
+  const [slideIndex, setSlideIndex] = useState(0);
+  const [loadedSlides, setLoadedSlides] = useState<number[]>([0]);
+  const [isDesktop, setIsDesktop] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  const [manuallyPaused, setManuallyPaused] = useState(false);
+  const [pageHidden, setPageHidden] = useState(false);
+  const [manualAnnouncement, setManualAnnouncement] = useState('');
+  const activeProgressRef = useRef<HTMLSpanElement>(null);
+  const currentSlideRef = useRef(0);
+  const elapsedRef = useRef(0);
+  const lastFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const desktopQuery = window.matchMedia('(min-width: 768px)');
+    const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updateMedia = () => {
+      setIsDesktop(desktopQuery.matches);
+      setReducedMotion(motionQuery.matches);
+    };
+    const updateVisibility = () => setPageHidden(document.hidden);
+    updateMedia();
+    updateVisibility();
+    desktopQuery.addEventListener('change', updateMedia);
+    motionQuery.addEventListener('change', updateMedia);
+    document.addEventListener('visibilitychange', updateVisibility);
+    return () => {
+      desktopQuery.removeEventListener('change', updateMedia);
+      motionQuery.removeEventListener('change', updateMedia);
+      document.removeEventListener('visibilitychange', updateVisibility);
+    };
+  }, []);
+
+  // Mount neighboring images ahead of navigation; retain visited nodes/cache on loops.
+  useEffect(() => {
+    if (!isDesktop) return;
+    setLoadedSlides((loaded) => {
+      const staged = new Set([
+        ...loaded,
+        slideIndex,
+        (slideIndex + 1) % images.length,
+        (slideIndex - 1 + images.length) % images.length,
+      ]);
+      return staged.size === loaded.length ? loaded : [...staged];
+    });
+  }, [isDesktop, slideIndex, images.length]);
+
+  const showSlide = useCallback((index: number, manual = false) => {
+    currentSlideRef.current = index;
+    elapsedRef.current = 0;
+    lastFrameRef.current = performance.now();
+    if (manual && activeProgressRef.current) {
+      activeProgressRef.current.style.transform = 'scaleX(0)';
+    }
+    setSlideIndex(index);
+    if (manual) setManualAnnouncement(`Property image ${index + 1} of ${images.length}`);
+  }, [images.length]);
+
+  const paused = isHovered || isFocused || manuallyPaused || pageHidden;
+  const autoplay = isDesktop && !reducedMotion && images.length > 1;
+
+  // One clock owns both the visible fill and advancement, including pause/resume.
+  useEffect(() => {
+    if (!autoplay || paused) {
+      lastFrameRef.current = null;
+      return;
+    }
+    let frameId = 0;
+    lastFrameRef.current = performance.now();
+    const tick = (timestamp: number) => {
+      elapsedRef.current += timestamp - (lastFrameRef.current ?? timestamp);
+      lastFrameRef.current = timestamp;
+      const progress = Math.min(elapsedRef.current / CAROUSEL_DURATION_MS, 1);
+      if (activeProgressRef.current) {
+        activeProgressRef.current.style.transform = `scaleX(${progress})`;
+      }
+      if (progress >= 1) {
+        showSlide((currentSlideRef.current + 1) % images.length);
+      }
+      frameId = requestAnimationFrame(tick);
+    };
+    frameId = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(frameId);
+      lastFrameRef.current = null;
+    };
+  }, [autoplay, paused, images.length, showSlide]);
+
+  const navigate = (direction: number) => {
+    showSlide((currentSlideRef.current + direction + images.length) % images.length, true);
+  };
+  const renderedSlides = [...new Set([...loadedSlides, slideIndex])];
+
+  return (
+    <section
+      id="payment-property-carousel"
+      aria-label={projectName ? `${projectName} property images` : 'Golden ToPPer property highlights'}
+      aria-roledescription="carousel"
+      className="hidden md:block w-full md:w-1/2 relative h-full z-0 group overflow-hidden bg-black"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onFocusCapture={() => setIsFocused(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setIsFocused(false);
+      }}
+    >
+      {renderedSlides.map((index) => (
+        <div
+          key={images[index]}
+          data-carousel-slide={index}
+          aria-hidden={index !== slideIndex}
+          className={`pointer-events-none absolute inset-0 transition-opacity duration-500 ease-in-out motion-reduce:transition-none motion-reduce:duration-0 ${index === slideIndex ? 'opacity-100' : 'opacity-0'}`}
+        >
+          <Image
+            src={images[index]}
+            alt=""
+            fill
+            sizes="(max-width: 767px) 1px, 50vw"
+            loading="eager"
+            className="object-cover object-center"
+          />
+        </div>
+      ))}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-brand-blue/80 via-transparent to-black/20 mix-blend-multiply" />
+
+      <button
+        type="button"
+        aria-label="Previous property image"
+        onClick={() => navigate(-1)}
+        className="absolute left-6 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-brand-blue text-white hover:bg-brand-gold hover:text-brand-blue rounded-full transition-colors duration-200 shadow-lg z-10 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-gold"
+      >
+        <ChevronLeft size={20} strokeWidth={1.5} />
+      </button>
+      <button
+        type="button"
+        aria-label="Next property image"
+        onClick={() => navigate(1)}
+        className="absolute right-6 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-brand-blue text-white hover:bg-brand-gold hover:text-brand-blue rounded-full transition-colors duration-200 shadow-lg z-10 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-gold"
+      >
+        <ChevronRight size={20} strokeWidth={1.5} />
+      </button>
+
+      <div className="absolute bottom-16 left-10 md:left-12 right-12 text-white z-10" aria-live="off">
+        <p className="text-[11px] font-medium tracking-wide text-white mb-2 drop-shadow-md">
+          {projectName ? `Property View ${slideIndex + 1} of ${images.length}` : 'Property Highlights'}
+        </p>
+        <h2 className="text-4xl lg:text-5xl font-serif font-normal leading-tight drop-shadow-xl">
+          <span className="text-brand-gold">{projectName || 'Golden ToPPer'}</span>
+        </h2>
+        {!projectName && (
+          <p className="mt-2 text-[11px] font-medium tracking-wide text-white/90 drop-shadow-md">
+            Highlight {slideIndex + 1} of {images.length}
+          </p>
+        )}
+      </div>
+
+      <div className="absolute bottom-6 left-10 md:left-12 right-12 z-10 flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 gap-1.5" aria-hidden="true">
+          {images.map((src, index) => (
+            <span key={src} data-carousel-segment={index} className="h-[3px] min-w-0 flex-1 overflow-hidden rounded-full bg-white/20">
+              <span
+                key={index === slideIndex ? 'active' : 'inactive'}
+                ref={index === slideIndex ? activeProgressRef : undefined}
+                data-carousel-progress={index === slideIndex ? 'current' : index < slideIndex ? 'complete' : 'upcoming'}
+                className="block h-full w-full origin-left rounded-full bg-brand-gold"
+                style={{ transform: index < slideIndex ? 'scaleX(1)' : 'scaleX(0)' }}
+              />
+            </span>
+          ))}
+        </div>
+        <button
+          type="button"
+          aria-label={manuallyPaused ? 'Resume property slideshow' : 'Pause property slideshow'}
+          aria-pressed={manuallyPaused}
+          disabled={reducedMotion}
+          onClick={() => setManuallyPaused((value) => !value)}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/20 text-white/80 transition-colors duration-200 hover:border-brand-gold/60 hover:text-brand-gold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-gold motion-reduce:hidden"
+        >
+          {manuallyPaused ? <Play size={12} aria-hidden="true" /> : <Pause size={12} aria-hidden="true" />}
+        </button>
+      </div>
+      <p className="sr-only" aria-live="polite">{manualAnnouncement}</p>
+    </section>
+  );
+}
+
 export default function PaymentClient() {
-  const [currentImg, setCurrentImg] = useState(0);
   const [currentStep, setCurrentStep] = useState(1);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
 
@@ -192,8 +441,27 @@ export default function PaymentClient() {
     loadUnitTypes();
   }, [watchTowerId, watchProjectId, towers, setValue]);
 
-  const nextImg = () => setCurrentImg((prev) => (prev + 1) % PROPERTY_IMAGES.length);
-  const prevImg = () => setCurrentImg((prev) => (prev - 1 + PROPERTY_IMAGES.length) % PROPERTY_IMAGES.length);
+  // Get carousel images based on project selection
+  const getCarouselImages = (): string[] => {
+    if (!watchProjectId) {
+      return GENERAL_SHOWCASE_IMAGES;
+    }
+    const projectId = parseInt(watchProjectId);
+    return PROJECT_CAROUSEL_IMAGES[projectId] || GENERAL_SHOWCASE_IMAGES;
+  };
+
+  // Get selected project name
+  const getSelectedProjectName = (): string | null => {
+    if (!watchProjectId) {
+      return null;
+    }
+    const project = projects.find(p => p.id.toString() === watchProjectId);
+    return project?.title || null;
+  };
+
+  const carouselImages = getCarouselImages();
+  const selectedProjectName = getSelectedProjectName();
+
 
   const inputStyles = "h-[50px] w-full min-w-0 rounded-md border border-stone-200 bg-[#FDFBF7] px-4 py-3 text-base md:text-sm text-gray-900 outline-none transition-[background-color,border-color,box-shadow] duration-200 placeholder:text-stone-400 enabled:hover:border-stone-300 enabled:hover:bg-white enabled:focus:border-brand-blue enabled:focus:bg-white focus:ring-2 focus:ring-brand-blue/10 disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-100 disabled:text-stone-500";
   const selectStyles = `${inputStyles} appearance-none cursor-pointer pr-11`;
@@ -782,36 +1050,12 @@ export default function PaymentClient() {
 
         <main className="relative flex min-h-0 flex-1 flex-col md:flex-row">
 
-          {/* LEFT SIDE - Property Image */}
-          <div className="hidden md:block w-full md:w-1/2 relative h-full z-0 group bg-black">
-            <div
-              className="absolute inset-0 bg-cover bg-center transition-all duration-700 ease-in-out opacity-90"
-              style={{ backgroundImage: `url(${PROPERTY_IMAGES[currentImg]})` }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-brand-blue/80 via-transparent to-black/20 mix-blend-multiply" />
-
-            <button
-              type="button" onClick={prevImg}
-              className="absolute left-6 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-brand-blue text-white hover:bg-brand-gold rounded-full transition-all outline-none shadow-lg z-10"
-            >
-              <ChevronLeft size={20} strokeWidth={1.5} />
-            </button>
-            <button
-              type="button" onClick={nextImg}
-              className="absolute right-6 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-brand-blue text-white hover:bg-brand-gold rounded-full transition-all outline-none shadow-lg z-10"
-            >
-              <ChevronRight size={20} strokeWidth={1.5} />
-            </button>
-
-            <div className="absolute bottom-10 left-10 md:bottom-12 md:left-12 text-white z-10">
-              <p className="text-[11px] font-medium tracking-wide text-white mb-2 drop-shadow-md">
-                Property View {currentImg + 1} of {PROPERTY_IMAGES.length}
-              </p>
-              <h2 className="text-4xl lg:text-5xl font-serif font-normal leading-tight drop-shadow-xl">
-                <span className="text-brand-gold">Golden Topper</span>
-              </h2>
-            </div>
-          </div>
+          {/* LEFT SIDE - Contextual property carousel */}
+          <PaymentCarousel
+            key={watchProjectId || 'showcase'}
+            images={carouselImages}
+            projectName={selectedProjectName}
+          />
 
           {/* RIGHT SIDE - Wizard Form */}
           <div
