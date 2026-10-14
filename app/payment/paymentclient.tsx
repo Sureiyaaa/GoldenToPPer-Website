@@ -9,6 +9,7 @@ import Navbar from "@/app/components/navbar";
 import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight, Check, Edit2, Mail, Phone, Pause, Play } from "lucide-react";
 import PageTransition from "../components/page-transitions";
 import { submitPaymentAction, fetchProjectsForPayment, fetchTowersForProject, fetchUnitTypesForTower } from "@/app/actions/payment";
+import { fetchDefaultCarouselSlidesAction, fetchProjectCarouselSlidesAction, PaymentCarouselSlide } from "@/app/actions/payment-carousel";
 
 declare global {
   interface Window {
@@ -51,6 +52,34 @@ const paymentSchema = z.object({
 });
 
 type PaymentFormData = z.infer<typeof paymentSchema>;
+
+// Public carousel slide shape (CMS slide with focal point and alt text)
+interface CarouselImage {
+  imageUrl: string;
+  altText?: string | null;
+  focalX: number;
+  focalY: number;
+}
+
+// Convert legacy static fallback to carousel image format
+function convertLegacyDefaultShowcase(): CarouselImage[] {
+  return GENERAL_SHOWCASE_IMAGES.map(url => ({
+    imageUrl: url,
+    altText: null,
+    focalX: 50,
+    focalY: 50,
+  }));
+}
+
+function convertLegacyProjectAmenities(projectId: number): CarouselImage[] {
+  const amenities = PROJECT_AMENITIES[projectId] || [];
+  return amenities.map(url => ({
+    imageUrl: url,
+    altText: null,
+    focalX: 50,
+    focalY: 50,
+  }));
+}
 
 // Project hero images - primary/architectural images used by Projects section
 const PROJECT_HERO_IMAGES: Record<number, string> = {
@@ -133,7 +162,7 @@ const STEPS = [
 const NAVBAR_HEIGHT = '5rem';
 
 // Stable component identity keeps wizard re-renders from restarting the slideshow.
-function PaymentCarousel({ images, projectName }: { images: string[]; projectName: string | null }) {
+function PaymentCarousel({ images, projectName }: { images: CarouselImage[]; projectName: string | null }) {
   const [slideIndex, setSlideIndex] = useState(0);
   const [loadedSlides, setLoadedSlides] = useState<number[]>([0]);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -241,23 +270,28 @@ function PaymentCarousel({ images, projectName }: { images: string[]; projectNam
         if (!event.currentTarget.contains(event.relatedTarget)) setIsFocused(false);
       }}
     >
-      {renderedSlides.map((index) => (
-        <div
-          key={images[index]}
-          data-carousel-slide={index}
-          aria-hidden={index !== slideIndex}
-          className={`pointer-events-none absolute inset-0 transition-opacity duration-500 ease-in-out motion-reduce:transition-none motion-reduce:duration-0 ${index === slideIndex ? 'opacity-100' : 'opacity-0'}`}
-        >
-          <Image
-            src={images[index]}
-            alt=""
-            fill
-            sizes="(max-width: 767px) 1px, 50vw"
-            loading="eager"
-            className="object-cover object-center"
-          />
-        </div>
-      ))}
+      {renderedSlides.map((index) => {
+        const slide = images[index];
+        if (!slide) return null;
+        return (
+          <div
+            key={`slide-${index}-${slide.imageUrl}`}
+            data-carousel-slide={index}
+            aria-hidden={index !== slideIndex}
+            className={`pointer-events-none absolute inset-0 transition-opacity duration-500 ease-in-out motion-reduce:transition-none motion-reduce:duration-0 ${index === slideIndex ? 'opacity-100' : 'opacity-0'}`}
+          >
+            <Image
+              src={slide.imageUrl}
+              alt={slide.altText || "Property image"}
+              fill
+              sizes="(max-width: 767px) 1px, 50vw"
+              loading="eager"
+              className="object-cover"
+              style={{ objectPosition: `${slide.focalX}% ${slide.focalY}%` }}
+            />
+          </div>
+        );
+      })}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-brand-blue/80 via-transparent to-black/20 mix-blend-multiply" />
 
       <button
@@ -293,8 +327,8 @@ function PaymentCarousel({ images, projectName }: { images: string[]; projectNam
 
       <div className="absolute bottom-6 left-10 md:left-12 right-12 z-10 flex items-center gap-3">
         <div className="flex min-w-0 flex-1 gap-1.5" aria-hidden="true">
-          {images.map((src, index) => (
-            <span key={src} data-carousel-segment={index} className="h-[3px] min-w-0 flex-1 overflow-hidden rounded-full bg-white/20">
+          {images.map((slide, index) => (
+            <span key={`segment-${index}-${slide.imageUrl}`} data-carousel-segment={index} className="h-[3px] min-w-0 flex-1 overflow-hidden rounded-full bg-white/20">
               <span
                 key={index === slideIndex ? 'active' : 'inactive'}
                 ref={index === slideIndex ? activeProgressRef : undefined}
@@ -341,6 +375,13 @@ export default function PaymentClient() {
   const [loadingTowers, setLoadingTowers] = useState(false);
   const [loadingUnitTypes, setLoadingUnitTypes] = useState(false);
 
+  // Carousel state - CMS-driven slides with focal point metadata
+  const [carouselSlides, setCarouselSlides] = useState<CarouselImage[]>([]);
+  const [carouselLoading, setCarouselLoading] = useState(false);
+  const projectRequestIdRef = useRef<number>(0);
+  const selectedProjectIdRef = useRef<number | null>(null);
+  const resolvedDefaultSlidesRef = useRef<CarouselImage[] | null>(null);
+
   const {
     register,
     handleSubmit,
@@ -378,31 +419,184 @@ export default function PaymentClient() {
     loadProjects();
   }, []);
 
-  // Load towers when project changes
+  // Load default carousel slides on mount
+  // Resolve CMS + fallback once, store in ref for reuse across no-project states
+  // Only update carousel if no project is selected to prevent race with project selection
+  useEffect(() => {
+    const loadDefaultCarousel = async () => {
+      setCarouselLoading(true);
+      try {
+        const result = await fetchDefaultCarouselSlidesAction();
+
+        let resolved: CarouselImage[];
+        if (result.success && result.slides.length > 0) {
+          // Convert CMS slides to carousel image format with focal point
+          resolved = result.slides.map(slide => ({
+            imageUrl: slide.image_url,
+            altText: slide.alt_text,
+            focalX: slide.focal_x,
+            focalY: slide.focal_y,
+          }));
+        } else {
+          // Both success+empty and failure fall back to legacy
+          resolved = convertLegacyDefaultShowcase();
+        }
+
+        // Always update the baseline ref for later fallback use
+        resolvedDefaultSlidesRef.current = resolved;
+
+        // Only update carousel display if no project selected (prevent race with project selection)
+        if (!selectedProjectIdRef.current) {
+          setCarouselSlides(resolved);
+        }
+      } catch (err) {
+        console.error('[PAYMENT] Error loading default carousel:', err);
+        const fallback = convertLegacyDefaultShowcase();
+        resolvedDefaultSlidesRef.current = fallback;
+        if (!selectedProjectIdRef.current) {
+          setCarouselSlides(fallback);
+        }
+      } finally {
+        setCarouselLoading(false);
+      }
+    };
+    loadDefaultCarousel();
+  }, []);
+
+  // Load towers and carousel when project changes
   useEffect(() => {
     if (!watchProjectId) {
+      // Protect deselection with request counter (project → no project)
+      ++projectRequestIdRef.current;
+      selectedProjectIdRef.current = null;
       setTowers([]);
       setUnitTypes([]);
+      // Reset carousel to resolved default when no project selected
+      if (resolvedDefaultSlidesRef.current) {
+        setCarouselSlides(resolvedDefaultSlidesRef.current);
+      } else {
+        setCarouselSlides(convertLegacyDefaultShowcase());
+      }
       setValue('towerId', '', { shouldValidate: false });
       setValue('unitTypeId', '', { shouldValidate: false });
       return;
     }
 
-    const loadTowers = async () => {
+    const projectId = parseInt(watchProjectId);
+    selectedProjectIdRef.current = projectId;
+    const currentRequestId = ++projectRequestIdRef.current;
+
+    const loadData = async () => {
       setLoadingTowers(true);
+      setCarouselLoading(true);
       try {
-        const projectId = parseInt(watchProjectId);
-        const data = await fetchTowersForProject(projectId);
-        setTowers(data);
+        // Load towers
+        const towerData = await fetchTowersForProject(projectId);
+        setTowers(towerData);
+
+        // Load project carousel slides
+        const result = await fetchProjectCarouselSlidesAction(projectId);
+
+        // Protect against stale responses
+        if (currentRequestId !== projectRequestIdRef.current) {
+          return;
+        }
+
+        // Get canonical hero from selected project
+        const selectedProject = projects.find(p => p.id === projectId);
+        const effectiveHero = selectedProject?.image
+          ? {
+              imageUrl: selectedProject.image,
+              altText: `${selectedProject.title} project image`,
+              focalX: 50,
+              focalY: 50,
+            }
+          : null;
+
+        if (result.success) {
+          // CMS fetch succeeded
+          const carouselImages = result.slides.map(slide => ({
+            imageUrl: slide.image_url,
+            altText: slide.alt_text,
+            focalX: slide.focal_x,
+            focalY: slide.focal_y,
+          }));
+
+          // Compose based on what we have
+          if (effectiveHero && carouselImages.length > 0) {
+            // Hero + custom slides
+            setCarouselSlides([effectiveHero, ...carouselImages]);
+          } else if (effectiveHero) {
+            // Hero only (success + empty custom)
+            setCarouselSlides([effectiveHero]);
+          } else if (carouselImages.length > 0) {
+            // Custom slides only (no hero)
+            setCarouselSlides(carouselImages);
+          } else {
+            // Neither hero nor custom (success + empty) → use resolved default
+            if (resolvedDefaultSlidesRef.current) {
+              setCarouselSlides(resolvedDefaultSlidesRef.current);
+            } else {
+              setCarouselSlides(convertLegacyDefaultShowcase());
+            }
+          }
+        } else {
+          // CMS fetch failed → emergency legacy fallback
+          const legacyAmenities = convertLegacyProjectAmenities(projectId);
+
+          if (effectiveHero && legacyAmenities.length > 0) {
+            // Hero + legacy amenities
+            setCarouselSlides([effectiveHero, ...legacyAmenities]);
+          } else if (effectiveHero) {
+            // Hero only (no legacy amenities available)
+            setCarouselSlides([effectiveHero]);
+          } else if (legacyAmenities.length > 0) {
+            // Legacy amenities only (no hero)
+            setCarouselSlides(legacyAmenities);
+          } else {
+            // Nothing available → resolved default
+            if (resolvedDefaultSlidesRef.current) {
+              setCarouselSlides(resolvedDefaultSlidesRef.current);
+            } else {
+              setCarouselSlides(convertLegacyDefaultShowcase());
+            }
+          }
+        }
       } catch (err) {
-        console.error('Error loading towers:', err);
+        console.error('Error loading project data:', err);
+        // Network/unknown error → emergency legacy fallback
+        const selectedProject = projects.find(p => p.id === projectId);
+        const effectiveHero = selectedProject?.image
+          ? {
+              imageUrl: selectedProject.image,
+              altText: `${selectedProject.title} project image`,
+              focalX: 50,
+              focalY: 50,
+            }
+          : null;
+        const legacyAmenities = convertLegacyProjectAmenities(projectId);
+
+        if (effectiveHero && legacyAmenities.length > 0) {
+          setCarouselSlides([effectiveHero, ...legacyAmenities]);
+        } else if (effectiveHero) {
+          setCarouselSlides([effectiveHero]);
+        } else if (legacyAmenities.length > 0) {
+          setCarouselSlides(legacyAmenities);
+        } else {
+          if (resolvedDefaultSlidesRef.current) {
+            setCarouselSlides(resolvedDefaultSlidesRef.current);
+          } else {
+            setCarouselSlides(convertLegacyDefaultShowcase());
+          }
+        }
       } finally {
         setLoadingTowers(false);
+        setCarouselLoading(false);
       }
     };
 
-    loadTowers();
-  }, [watchProjectId, setValue]);
+    loadData();
+  }, [watchProjectId, setValue, projects]);
 
   // Load unit types when tower changes
   useEffect(() => {
@@ -434,27 +628,6 @@ export default function PaymentClient() {
     loadUnitTypes();
   }, [watchTowerId, watchProjectId, towers, setValue]);
 
-  // Get carousel images based on project selection
-  const getCarouselImages = (): string[] => {
-    if (!watchProjectId) {
-      return GENERAL_SHOWCASE_IMAGES;
-    }
-    const projectId = parseInt(watchProjectId);
-    const selectedProject = projects.find(p => p.id === projectId);
-
-    // Use canonical project.image as hero if available, fallback to legacy PROJECT_HERO_IMAGES
-    const heroImage = selectedProject?.image || PROJECT_HERO_IMAGES[projectId];
-
-    // If no hero available at all, return showcase
-    if (!heroImage) {
-      return GENERAL_SHOWCASE_IMAGES;
-    }
-
-    // Compose: canonical hero + static amenities
-    const amenities = PROJECT_AMENITIES[projectId] || [];
-    return [heroImage, ...amenities];
-  };
-
   // Get selected project name
   const getSelectedProjectName = (): string | null => {
     if (!watchProjectId) {
@@ -464,7 +637,6 @@ export default function PaymentClient() {
     return project?.title || null;
   };
 
-  const carouselImages = getCarouselImages();
   const selectedProjectName = getSelectedProjectName();
 
 
@@ -1058,7 +1230,7 @@ export default function PaymentClient() {
           {/* LEFT SIDE - Contextual property carousel */}
           <PaymentCarousel
             key={watchProjectId || 'showcase'}
-            images={carouselImages}
+            images={carouselSlides}
             projectName={selectedProjectName}
           />
 

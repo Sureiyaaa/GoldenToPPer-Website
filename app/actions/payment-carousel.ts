@@ -22,6 +22,11 @@ export interface PaymentCarouselSlide {
   updated_at: string;
 }
 
+// Public carousel result - discriminates success from failure
+export type PublicCarouselResult =
+  | { success: true; slides: PaymentCarouselSlide[] }
+  | { success: false; slides: [] };
+
 // MIME type to extension mapping
 const MIME_TO_EXT: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -471,8 +476,9 @@ export async function finalizePaymentCarouselUploadAction(
 /**
  * Fetch default showcase slides (project_id IS NULL) that are active
  * Used by public Payment page for carousel
+ * Returns discriminated result to distinguish success+empty from failure
  */
-export async function fetchDefaultCarouselSlidesAction(): Promise<PaymentCarouselSlide[]> {
+export async function fetchDefaultCarouselSlidesAction(): Promise<PublicCarouselResult> {
   try {
     const supabase = getAdminClient();
 
@@ -481,25 +487,28 @@ export async function fetchDefaultCarouselSlidesAction(): Promise<PaymentCarouse
       .select('*')
       .is('project_id', null)
       .eq('is_active', true)
-      .order('sort_order', { ascending: true });
+      .order('sort_order', { ascending: true })
+      .order('id', { ascending: true });
 
     if (error) {
       console.error('[PAYMENT_CAROUSEL] Error fetching default slides:', error.message);
-      return [];
+      return { success: false, slides: [] };
     }
 
-    return (data || []) as PaymentCarouselSlide[];
+    return { success: true, slides: (data || []) as PaymentCarouselSlide[] };
   } catch (err: any) {
     console.error('[PAYMENT_CAROUSEL] Unexpected error fetching default slides:', err);
-    return [];
+    return { success: false, slides: [] };
   }
 }
 
 /**
  * Fetch project-specific additional carousel slides (project_id = X) that are active
  * Used by public Payment page when project is selected
+ * Returns discriminated result to distinguish success+empty from failure
+ * Validates project is active/not deleted before serving slides
  */
-export async function fetchProjectCarouselSlidesAction(projectId: number): Promise<PaymentCarouselSlide[]> {
+export async function fetchProjectCarouselSlidesAction(projectId: number): Promise<PublicCarouselResult> {
   try {
     // Validate project exists and is active/not deleted
     await validateProjectExists(projectId);
@@ -511,17 +520,18 @@ export async function fetchProjectCarouselSlidesAction(projectId: number): Promi
       .select('*')
       .eq('project_id', projectId)
       .eq('is_active', true)
-      .order('sort_order', { ascending: true });
+      .order('sort_order', { ascending: true })
+      .order('id', { ascending: true });
 
     if (error) {
       console.error('[PAYMENT_CAROUSEL] Error fetching project slides:', error.message);
-      return [];
+      return { success: false, slides: [] };
     }
 
-    return (data || []) as PaymentCarouselSlide[];
+    return { success: true, slides: (data || []) as PaymentCarouselSlide[] };
   } catch (err: any) {
     console.error('[PAYMENT_CAROUSEL] Error fetching project slides:', err);
-    return [];
+    return { success: false, slides: [] };
   }
 }
 
