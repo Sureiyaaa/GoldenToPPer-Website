@@ -17,6 +17,7 @@ import {
 } from '@/app/actions/payment-carousel';
 import { createClient } from '@/utils/supabase/client';
 import PaymentCarouselPreview from './PaymentCarouselPreview';
+import FocalPointEditor from './FocalPointEditor';
 
 type CarouselContext = 'showcase' | `project-${number}`;
 
@@ -387,6 +388,14 @@ export default function AdminPaymentEditor() {
 
     setDraftSlides(prev => prev.map(s =>
       s.id === slideId ? { ...s, alt_text: altText, _isDirty: true } : s
+    ));
+    setIsDraftDirty(true);
+  };
+
+  // Helper: Update focal point
+  const handleUpdateFocalPoint = (slideId: number, focalX: number, focalY: number) => {
+    setDraftSlides(prev => prev.map(s =>
+      s.id === slideId ? { ...s, focal_x: focalX, focal_y: focalY, _isDirty: true } : s
     ));
     setIsDraftDirty(true);
   };
@@ -992,16 +1001,19 @@ export default function AdminPaymentEditor() {
                 </p>
               </div>
 
-              {/* Focal Point (read-only for now) */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-semibold text-gray-600 mb-1">Focal X</label>
-                  <p className="text-sm text-gray-900">{selectedDraft.focal_x?.toFixed(1) || '50.0'}%</p>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-semibold text-gray-600 mb-1">Focal Y</label>
-                  <p className="text-sm text-gray-900">{selectedDraft.focal_y?.toFixed(1) || '50.0'}%</p>
-                </div>
+              {/* Focal Point Editor */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-gold mb-3">
+                  Image Focus
+                </p>
+                <FocalPointEditor
+                  imageUrl={selectedDraft._pendingPreview || selectedDraft.image_url}
+                  focalX={selectedDraft.focal_x ?? 50}
+                  focalY={selectedDraft.focal_y ?? 50}
+                  onFocalChange={(x, y) => handleUpdateFocalPoint(selectedDraft.id as number, x, y)}
+                  isHidden={!selectedDraft.is_active}
+                  canEdit={canEdit}
+                />
               </div>
 
               {/* Visibility Toggle */}
