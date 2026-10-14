@@ -22,6 +22,13 @@ export interface PaymentCarouselSlide {
   updated_at: string;
 }
 
+// MIME type to extension mapping
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
+
 // ============================================================
 // FIELD ALLOWLIST
 // ============================================================
@@ -95,7 +102,116 @@ function filterPayload(payload: any): Record<string, any> {
   return filtered;
 }
 
-function validateSlideInput(payload: any) {
+/**
+ * Validate that image_url is either a Supabase carousel URL matching the project context
+ * or a local /images/ path for migration assets.
+ *
+ * Supabase URL validation:
+ * - Parse with new URL() to validate structure
+ * - Require origin matches process.env.NEXT_PUBLIC_SUPABASE_URL exactly
+ * - Require pathname starts with /storage/v1/object/public/images/carousel/{folder}/
+ * - Require folder matches project context (carousel/default/ or carousel/project-N/)
+ * - Require actual filename after folder prefix (not just the folder path)
+ * - Reject query params or fragments
+ *
+ * Local path validation:
+ * - Must start exactly with /images/
+ * - Must have content after /images/
+ * - No protocol or scheme
+ * - No path traversal (after URL decoding)
+ */
+function validateImageUrl(imageUrl: string, projectId: number | null): string[] {
+  const errors: string[] = [];
+
+  if (!imageUrl || typeof imageUrl !== 'string') {
+    errors.push('image_url is required');
+    return errors;
+  }
+
+  imageUrl = imageUrl.trim();
+
+  if (imageUrl.length === 0) {
+    errors.push('image_url cannot be empty');
+    return errors;
+  }
+
+  // Check if local migration path
+  if (imageUrl.startsWith('/images/')) {
+    // Validate local paths conservatively
+    // Must start exactly with /images/ and have content after it
+    if (imageUrl.length <= '/images/'.length) {
+      errors.push('Local image path must have a filename after /images/');
+      return errors;
+    }
+    // No protocol or scheme
+    if (imageUrl.includes('://') || imageUrl.startsWith('//')) {
+      errors.push('image_url cannot contain protocol or be protocol-relative');
+      return errors;
+    }
+    // No query string or fragments
+    if (imageUrl.includes('?') || imageUrl.includes('#')) {
+      errors.push('Local image path cannot contain query strings or fragments');
+      return errors;
+    }
+    // Reject path traversal (after decoding to catch encoded sequences)
+    try {
+      const decodedPath = decodeURIComponent(imageUrl);
+      if (decodedPath.includes('..')) {
+        errors.push('image_url cannot contain path traversal sequences');
+        return errors;
+      }
+    } catch (decodeErr) {
+      // If decoding fails, reject it
+      errors.push('image_url contains invalid encoding');
+      return errors;
+    }
+    // Valid local path for migration
+    return errors;
+  }
+
+  // Otherwise, must be Supabase carousel URL
+  try {
+    const url = new URL(imageUrl);
+
+    // Validate origin matches Supabase instance exactly
+    const supabaseOrigin = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).origin;
+    if (url.origin !== supabaseOrigin) {
+      errors.push('image_url must be from the configured Supabase instance');
+      return errors;
+    }
+
+    // Reject query params or fragments
+    if (url.search || url.hash) {
+      errors.push('image_url cannot contain query parameters or fragments');
+      return errors;
+    }
+
+    // Validate pathname matches project context with exact prefix check
+    const expectedFolder = projectId === null ? 'default' : `project-${projectId}`;
+    const expectedPrefix = `/storage/v1/object/public/images/carousel/${expectedFolder}/`;
+
+    if (!url.pathname.startsWith(expectedPrefix)) {
+      errors.push(
+        `image_url must belong to carousel folder: carousel/${expectedFolder}/ (current: ${url.pathname})`
+      );
+      return errors;
+    }
+
+    // Ensure there's actually a filename after the folder prefix
+    const afterPrefix = url.pathname.slice(expectedPrefix.length);
+    if (afterPrefix.length === 0) {
+      errors.push('image_url must include a filename, not just the folder path');
+      return errors;
+    }
+
+    return errors;
+  } catch (parseError) {
+    errors.push('image_url is not a valid URL');
+    return errors;
+  }
+}
+
+function validateSlideInput(payload: any, projectId?: number | null) {
   const errors: string[] = [];
 
   // project_id: optional, must be valid if provided
@@ -105,12 +221,9 @@ function validateSlideInput(payload: any) {
     }
   }
 
-  // image_url: required, non-empty string
-  if (!payload.image_url || typeof payload.image_url !== 'string') {
-    errors.push('image_url is required');
-  } else if (payload.image_url.trim().length === 0) {
-    errors.push('image_url cannot be empty');
-  }
+  // image_url: required, validate with context binding
+  const imageUrlErrors = validateImageUrl(payload.image_url, projectId ?? payload.project_id ?? null);
+  errors.push(...imageUrlErrors);
 
   // sort_order: optional, must be >= 0
   if (payload.sort_order !== undefined) {
@@ -172,6 +285,182 @@ async function validateProjectExists(projectId: number | null) {
 
   if (error || !project) {
     throw new Error('Project not found or is inactive');
+  }
+}
+
+// ============================================================
+// ADMIN UPLOAD PREPARATION (METADATA + PATH GENERATION)
+// ============================================================
+
+/**
+ * Prepare upload: validate RBAC, project, metadata, and generate signed upload token
+ * Returns signed upload URL token for browser direct upload using uploadToSignedUrl
+ *
+ * The browser then uploads directly to Supabase Storage using the signed token,
+ * bypassing serverless function payload limits for files up to 10 MB.
+ */
+export async function preparePaymentCarouselUploadAction(
+  operation: 'create' | 'replace',
+  projectId: number | null,
+  mimeType: string,
+  fileSize: number
+): Promise<{ success: boolean; storagePath?: string; token?: string; error?: string }> {
+  try {
+    // Authorize based on operation
+    if (operation === 'create') {
+      await authorizePaymentCarouselOperation('create');
+    } else {
+      await authorizePaymentCarouselOperation('edit');
+    }
+
+    // Validate MIME type
+    const ALLOWED_TYPES = new Set(Object.keys(MIME_TO_EXT));
+    if (!ALLOWED_TYPES.has(mimeType)) {
+      throw new Error(`Invalid image format. Allowed: JPEG, PNG, WebP. Got: ${mimeType || 'unknown'}`);
+    }
+
+    // Validate file size (metadata check, actual file validated during browser upload)
+    const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
+    if (fileSize <= 0) {
+      throw new Error('File size must be greater than 0');
+    }
+
+    if (fileSize > MAX_SIZE) {
+      throw new Error(`File too large. Maximum: 10 MB. Got: ${(fileSize / 1024 / 1024).toFixed(1)} MB`);
+    }
+
+    // Validate project exists if specified
+    if (projectId !== null) {
+      await validateProjectExists(projectId);
+    }
+
+    // Generate safe storage path on server
+    const ext = MIME_TO_EXT[mimeType];
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 9);
+    const safeFilename = `${timestamp}-${random}.${ext}`;
+    const folder = projectId === null ? 'default' : `project-${projectId}`;
+    const storagePath = `carousel/${folder}/${safeFilename}`;
+
+    // Create signed upload URL using service-role client
+    // This gives the browser an authorization token valid for 2 hours
+    const supabase = getAdminClient();
+    const { data: signedUploadData, error: signError } = await supabase.storage
+      .from('images')
+      .createSignedUploadUrl(storagePath, { upsert: false });
+
+    if (signError || !signedUploadData?.token) {
+      throw new Error(`Failed to generate signed upload URL: ${signError?.message || 'unknown error'}`);
+    }
+
+    return {
+      success: true,
+      storagePath,
+      token: signedUploadData.token,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || 'Upload preparation failed',
+    };
+  }
+}
+
+// ============================================================
+// ADMIN UPLOAD FINALIZATION (VERIFY + GET PUBLIC URL)
+// ============================================================
+
+/**
+ * After browser uploads with signed token, verify upload exists and is valid
+ * Returns canonical public URL for slide persistence
+ *
+ * Must verify authorization again to prevent unauthorized slides from being persisted
+ */
+export async function finalizePaymentCarouselUploadAction(
+  operation: 'create' | 'replace',
+  storagePath: string,
+  projectId: number | null
+): Promise<{ success: boolean; url?: string; error?: string }> {
+  try {
+    // Re-authorize on finalize to ensure authorization not just on prepare
+    if (operation === 'create') {
+      await authorizePaymentCarouselOperation('create');
+    } else {
+      await authorizePaymentCarouselOperation('edit');
+    }
+
+    // Validate storage path format (prevent path traversal)
+    const folder = projectId === null ? 'default' : `project-${projectId}`;
+    const expectedPrefix = `carousel/${folder}/`;
+
+    if (!storagePath.startsWith(expectedPrefix)) {
+      throw new Error('Invalid storage path: does not match expected carousel context');
+    }
+
+    // Verify project if specified
+    if (projectId !== null) {
+      await validateProjectExists(projectId);
+    }
+
+    // Verify upload exists in storage
+    const supabase = getAdminClient();
+    const { data: fileList, error: listError } = await supabase.storage
+      .from('images')
+      .list(folder, { limit: 1, search: storagePath.split('/').pop() });
+
+    if (listError || !fileList || fileList.length === 0) {
+      throw new Error('Uploaded file not found in storage');
+    }
+
+    const uploadedFile = fileList.find(f => `${folder}/${f.name}` === storagePath);
+    if (!uploadedFile) {
+      throw new Error('Uploaded file verification failed: path mismatch');
+    }
+
+    // Verify file size REQUIRED and within limits (fail-closed)
+    const MAX_SIZE = 10 * 1024 * 1024;
+    const uploadedSize = uploadedFile.metadata?.size;
+    if (typeof uploadedSize !== 'number' || uploadedSize <= 0 || uploadedSize > MAX_SIZE) {
+      // Delete the file if size validation fails
+      await supabase.storage.from('images').remove([storagePath]);
+      throw new Error(
+        uploadedSize === undefined
+          ? 'Uploaded file size metadata missing'
+          : `Uploaded file exceeds 10 MB limit: ${(uploadedSize / 1024 / 1024).toFixed(1)} MB`
+      );
+    }
+
+    // Verify MIME type REQUIRED and in allowlist (fail-closed)
+    const uploadedMimeType = uploadedFile.metadata?.mimetype;
+    const ALLOWED_TYPES = new Set(Object.keys(MIME_TO_EXT));
+    if (typeof uploadedMimeType !== 'string' || !ALLOWED_TYPES.has(uploadedMimeType)) {
+      // Delete the file if MIME validation fails
+      await supabase.storage.from('images').remove([storagePath]);
+      throw new Error(
+        uploadedMimeType === undefined
+          ? 'Uploaded file MIME type metadata missing'
+          : `Invalid image content-type: ${uploadedMimeType}. Only JPEG, PNG, WebP allowed.`
+      );
+    }
+
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('images')
+      .getPublicUrl(storagePath);
+
+    if (!publicUrl) {
+      throw new Error('Failed to generate public URL');
+    }
+
+    return {
+      success: true,
+      url: publicUrl,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || 'Upload finalization failed',
+    };
   }
 }
 
@@ -300,16 +589,17 @@ export async function createPaymentCarouselSlideAction(
   try {
     await authorizePaymentCarouselOperation('create');
 
-    // Validate input
-    validateSlideInput(payload);
+    // Validate project first (for context binding in URL validation)
+    const projectId = payload.project_id ?? null;
+    if (projectId !== null) {
+      await validateProjectExists(projectId);
+    }
+
+    // Validate input with project context for URL binding
+    validateSlideInput(payload, projectId);
 
     // Filter to allowed fields
     const filtered = filterPayload(payload);
-
-    // Validate project if specified
-    if (filtered.project_id !== undefined && filtered.project_id !== null) {
-      await validateProjectExists(filtered.project_id);
-    }
 
     // Ensure required fields
     if (!filtered.image_url) {
@@ -370,16 +660,17 @@ export async function updatePaymentCarouselSlideAction(
       throw new Error('Invalid slide ID');
     }
 
-    // Validate input
-    validateSlideInput(payload);
+    // Determine project context for URL validation
+    const projectId = payload.project_id ?? null;
+    if (projectId !== null) {
+      await validateProjectExists(projectId);
+    }
+
+    // Validate input with project context for URL binding
+    validateSlideInput(payload, projectId);
 
     // Filter to allowed fields
     const filtered = filterPayload(payload);
-
-    // Validate project if being changed
-    if (filtered.project_id !== undefined && filtered.project_id !== null) {
-      await validateProjectExists(filtered.project_id);
-    }
 
     // Add updated_at timestamp
     filtered.updated_at = new Date().toISOString();
