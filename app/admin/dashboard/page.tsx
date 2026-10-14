@@ -15,7 +15,7 @@ import { z } from 'zod';
 import {
   LogOut, Building2, Landmark, LayoutDashboard, Search, Filter,
   Edit2, Archive, Plus, Loader2, Eye, EyeOff, History, Move3d, Newspaper, House,
-  Bell, CheckCircle2, X, Menu, UserCircle2, Megaphone, Settings, ShieldAlert, AlertCircle, BookOpen, Upload, ChevronDown, GripVertical, ArrowUpRight
+  Bell, CheckCircle2, X, Menu, UserCircle2, Megaphone, Settings, ShieldAlert, AlertCircle, BookOpen, Upload, ChevronDown, GripVertical, ArrowUpRight, CreditCard
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { CustomerInboxProvider, CustomerInboxManager, NotificationCenter } from '@/app/admin/components/customer-inbox';
@@ -3425,6 +3425,15 @@ function HomeDashboard({
       moduleName: 'PROMOTION',
       icon: Megaphone,
     },
+    {
+      label: 'Payment',
+      description: 'Manage payment page property showcase',
+      tab: 'Payment',
+      moduleCode: 'payment_carousel',
+      moduleName: 'PAYMENT',
+      icon: CreditCard,
+      hasVisibilityToggle: false,
+    },
 
   ];
 
@@ -3768,30 +3777,32 @@ function HomeDashboard({
 
                 <div className="pointer-events-none relative z-[1] flex items-start justify-between gap-2">
                   <Icon size={25} strokeWidth={1.8} aria-hidden="true" className="shrink-0 text-brand-blue transition-colors group-hover:text-white" />
-                  <div className="pointer-events-auto relative z-10 shrink-0 text-right">
-                    {statusReady ? (
-                      canEditVisibility ? (
-                        <button
-                          type="button"
-                          onClick={(event) => handleSectionVisibilityToggle(event, module!.id)}
-                          disabled={isSavingSections}
-                          aria-pressed={isShown}
-                          aria-label={`${isShown ? 'Hide' : 'Show'} ${card.label} on the website`}
-                          title="Changes to website visibility take effect after you save"
-                          className="inline-flex min-h-9 items-center gap-2 rounded-lg px-1 text-[10px] font-semibold text-gray-600 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold group-hover:text-white group-hover:hover:bg-white/10 disabled:cursor-wait disabled:opacity-60"
-                        >
-                          <span className="whitespace-nowrap">{isShown ? 'Shown on website' : 'Hidden from website'}</span>
-                          <span aria-hidden="true" className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${isShown ? 'bg-green-500' : 'bg-gray-300'}`}>
-                            <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${isShown ? 'translate-x-4' : ''}`} />
-                          </span>
-                        </button>
+                  {card.hasVisibilityToggle !== false && (
+                    <div className="pointer-events-auto relative z-10 shrink-0 text-right">
+                      {statusReady ? (
+                        canEditVisibility ? (
+                          <button
+                            type="button"
+                            onClick={(event) => handleSectionVisibilityToggle(event, module!.id)}
+                            disabled={isSavingSections}
+                            aria-pressed={isShown}
+                            aria-label={`${isShown ? 'Hide' : 'Show'} ${card.label} on the website`}
+                            title="Changes to website visibility take effect after you save"
+                            className="inline-flex min-h-9 items-center gap-2 rounded-lg px-1 text-[10px] font-semibold text-gray-600 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold group-hover:text-white group-hover:hover:bg-white/10 disabled:cursor-wait disabled:opacity-60"
+                          >
+                            <span className="whitespace-nowrap">{isShown ? 'Shown on website' : 'Hidden from website'}</span>
+                            <span aria-hidden="true" className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${isShown ? 'bg-green-500' : 'bg-gray-300'}`}>
+                              <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${isShown ? 'translate-x-4' : ''}`} />
+                            </span>
+                          </button>
+                        ) : (
+                          <span className="inline-block py-2 text-[10px] font-semibold text-gray-500 group-hover:text-white/80">{isShown ? 'Shown on website' : 'Hidden from website'}</span>
+                        )
                       ) : (
-                        <span className="inline-block py-2 text-[10px] font-semibold text-gray-500 group-hover:text-white/80">{isShown ? 'Shown on website' : 'Hidden from website'}</span>
-                      )
-                    ) : (
-                      <span className="inline-block py-2 text-[10px] font-semibold text-gray-400 group-hover:text-white/70">{isLoadingSections ? 'Loading status...' : 'Status unavailable'}</span>
-                    )}
-                  </div>
+                        <span className="inline-block py-2 text-[10px] font-semibold text-gray-400 group-hover:text-white/70">{isLoadingSections ? 'Loading status...' : 'Status unavailable'}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="pointer-events-none relative z-[1] mt-2">
@@ -4026,10 +4037,16 @@ function AdminMainDashboardContent() {
   useEffect(() => {
     const requestedSection = searchParams.get('section');
 
+    // Payment is a dedicated route, not a Dashboard section
+    if (requestedSection === 'Payment') {
+      router.push('/admin/payment');
+      return;
+    }
+
     if (requestedSection) {
       setActiveTab(requestedSection === 'Homepage Content' ? 'Homepage' : requestedSection);
     }
-  }, [searchParams]);
+  }, [searchParams, router]);
   const [searchQuery, setSearchQuery] = useState(() => {
     if (typeof window === 'undefined') return '';
 
@@ -4097,11 +4114,6 @@ function AdminMainDashboardContent() {
       moduleCode: 'edit_project'
     },
     {
-      name: 'Navbar Setup',
-      icon: LayoutDashboard,
-      moduleCode: 'edit_project'
-    },
-    {
       name: 'Virtual Tours',
       icon: Move3d,
       moduleCode: 'virtual_tours'
@@ -4120,6 +4132,16 @@ function AdminMainDashboardContent() {
       name: 'Promotions',
       icon: Megaphone,
       moduleCode: 'promotion_code'
+    },
+    {
+      name: 'Payment',
+      icon: CreditCard,
+      moduleCode: 'payment_carousel'
+    },
+    {
+      name: 'Navbar Setup',
+      icon: LayoutDashboard,
+      moduleCode: 'edit_project'
     },
     { name: 'Customer Inbox', icon: Bell, moduleCode: 'notifications_code' },
     // Kept internally even though they are no longer
@@ -4210,13 +4232,23 @@ function AdminMainDashboardContent() {
   }, [router, supabase, signOutAndRedirect]);
 
   const navigateToSection = (section: string) => {
+    // Payment is a dedicated route, don't render it as a Dashboard section
+    if (section === 'Payment') {
+      router.push('/admin/payment');
+      return;
+    }
+
     setActiveTab(section);
     setFilterCategory('');
     setSearchQuery('');
     setProjectsMenuOpen(false);
     setIsSidebarOpen(false);
     // Update URL without full page reload
-    router.push(section === 'Home' ? '/admin/dashboard' : `/admin/dashboard?section=${encodeURIComponent(section)}`);
+    if (section === 'Home') {
+      router.push('/admin/dashboard');
+    } else {
+      router.push(`/admin/dashboard?section=${encodeURIComponent(section)}`);
+    }
   };
 
   const handleSignOut = async () => { localStorage.clear(); await signOutAndRedirect(); };
