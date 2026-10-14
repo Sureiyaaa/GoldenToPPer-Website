@@ -109,13 +109,6 @@ const PROJECT_AMENITIES: Record<number, string[]> = {
   ],
 };
 
-const PROJECT_CAROUSEL_IMAGES: Record<number, string[]> = {
-  1: [PROJECT_HERO_IMAGES[1], ...PROJECT_AMENITIES[1]],
-  2: [PROJECT_HERO_IMAGES[2], ...PROJECT_AMENITIES[2]],
-  3: [PROJECT_HERO_IMAGES[3], ...PROJECT_AMENITIES[3]],
-  4: [PROJECT_HERO_IMAGES[4], ...PROJECT_AMENITIES[4]],
-};
-
 const CAROUSEL_DURATION_MS = 5000;
 
 const PAYMENT_METHODS = [
@@ -341,7 +334,7 @@ export default function PaymentClient() {
   const [serverError, setServerError] = useState('');
 
   // Project/Tower/UnitType data loading state
-  const [projects, setProjects] = useState<Array<{ id: number; title: string }>>([]);
+  const [projects, setProjects] = useState<Array<{ id: number; title: string; image?: string }>>([]);
   const [towers, setTowers] = useState<Array<{ id: number; name: string }>>([]);
   const [unitTypes, setUnitTypes] = useState<Array<{ id: number; title: string }>>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
@@ -447,7 +440,19 @@ export default function PaymentClient() {
       return GENERAL_SHOWCASE_IMAGES;
     }
     const projectId = parseInt(watchProjectId);
-    return PROJECT_CAROUSEL_IMAGES[projectId] || GENERAL_SHOWCASE_IMAGES;
+    const selectedProject = projects.find(p => p.id === projectId);
+
+    // Use canonical project.image as hero if available, fallback to legacy PROJECT_HERO_IMAGES
+    const heroImage = selectedProject?.image || PROJECT_HERO_IMAGES[projectId];
+
+    // If no hero available at all, return showcase
+    if (!heroImage) {
+      return GENERAL_SHOWCASE_IMAGES;
+    }
+
+    // Compose: canonical hero + static amenities
+    const amenities = PROJECT_AMENITIES[projectId] || [];
+    return [heroImage, ...amenities];
   };
 
   // Get selected project name

@@ -49,11 +49,11 @@ const supabaseAdmin = createClient(
 );
 
 // Fetch all active projects for payment form
-export async function fetchProjectsForPayment(): Promise<Array<{ id: number; title: string }>> {
+export async function fetchProjectsForPayment(): Promise<Array<{ id: number; title: string; image?: string }>> {
   try {
     const { data, error } = await supabaseAdmin
       .from('project_table')
-      .select('id, title')
+      .select('id, title, image')
       .eq('is_active', true)
       .is('deleted_at', null)
       .order('title', { ascending: true });
