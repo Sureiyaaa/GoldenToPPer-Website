@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Navbar from "@/app/components/navbar";
-import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight, Check, Edit2 } from "lucide-react";
+import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight, Check, Edit2, Mail, Phone } from "lucide-react";
 import PageTransition from "../components/page-transitions";
 import { submitPaymentAction, fetchProjectsForPayment, fetchTowersForProject, fetchUnitTypesForTower } from "@/app/actions/payment";
 
@@ -195,10 +195,12 @@ export default function PaymentClient() {
   const nextImg = () => setCurrentImg((prev) => (prev + 1) % PROPERTY_IMAGES.length);
   const prevImg = () => setCurrentImg((prev) => (prev - 1 + PROPERTY_IMAGES.length) % PROPERTY_IMAGES.length);
 
-  const inputStyles = "w-full bg-transparent border border-gray-300 rounded-md px-4 py-3 text-base md:text-sm text-gray-900 focus:border-brand-blue focus:ring-1 focus:ring-brand-blue outline-none transition-all duration-300 placeholder:text-gray-400";
-  const labelStyles = "text-xs text-gray-600 mb-2 block font-medium";
-  const errorStyles = "text-xs text-red-600 mt-1.5 block pl-1 flex items-center gap-1";
-  const primaryButtonStyles = "inline-flex h-12 min-w-[11rem] items-center justify-center gap-2 rounded-md px-4 text-sm font-medium text-white transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-blue disabled:bg-gray-400 disabled:cursor-not-allowed";
+  const inputStyles = "h-[50px] w-full min-w-0 rounded-md border border-stone-200 bg-[#FDFBF7] px-4 py-3 text-base md:text-sm text-gray-900 outline-none transition-[background-color,border-color,box-shadow] duration-200 placeholder:text-stone-400 enabled:hover:border-stone-300 enabled:hover:bg-white enabled:focus:border-brand-blue enabled:focus:bg-white focus:ring-2 focus:ring-brand-blue/10 disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-100 disabled:text-stone-500";
+  const selectStyles = `${inputStyles} appearance-none cursor-pointer pr-11`;
+  const inputErrorStyles = "border-red-300! enabled:hover:border-red-400! focus:border-red-400! focus:ring-red-500/10!";
+  const labelStyles = "mb-2 block text-xs font-medium tracking-wide text-stone-600";
+  const errorStyles = "mt-1.5 flex items-start gap-1 text-xs leading-4 text-red-600";
+  const primaryButtonStyles = "inline-flex h-12 min-w-[11rem] items-center justify-center gap-2 rounded-md border border-transparent bg-brand-blue px-4 text-sm font-medium text-white shadow-[0_2px_8px_rgba(20,47,114,0.08)] transition-[background-color,border-color,box-shadow,filter] duration-200 enabled:hover:border-brand-gold/60 enabled:hover:brightness-95 enabled:hover:shadow-[0_4px_14px_rgba(20,47,114,0.14)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-blue disabled:cursor-not-allowed disabled:bg-gray-400 disabled:shadow-none";
 
   // Step-specific field validation
   const step1Fields = ['firstName', 'lastName', 'email', 'contactNumber'] as const;
@@ -385,7 +387,7 @@ export default function PaymentClient() {
             <li key={step.id} className="relative flex min-w-0 flex-col items-center gap-3">
               {step.id < STEPS.length && (
                 <span aria-hidden="true" className={`absolute left-1/2 top-4 h-0.5 w-full ${
-                  currentStep > step.id ? 'bg-brand-gold' : 'bg-gray-300'
+                  currentStep > step.id ? 'bg-brand-gold' : 'bg-stone-200'
                 }`} />
               )}
               <button
@@ -394,12 +396,12 @@ export default function PaymentClient() {
                 aria-current={isActive ? 'step' : undefined}
                 onClick={() => goToStep(step.id)}
                 disabled={!isCompleted && !isActive && step.id > currentStep}
-                className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-blue ${
+                className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-[background-color,box-shadow] duration-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-blue ${
                   isActive
-                    ? 'bg-brand-blue text-white ring-2 ring-brand-blue ring-offset-2'
+                    ? 'bg-brand-blue text-white ring-2 ring-brand-blue ring-offset-2 ring-offset-[#F9F9F7]'
                     : isCompleted
-                    ? 'bg-brand-gold text-white hover:bg-yellow-600 cursor-pointer'
-                    : 'bg-gray-300 text-gray-600 disabled:cursor-not-allowed'
+                    ? 'bg-brand-gold text-white hover:bg-brand-gold/90 hover:ring-2 hover:ring-brand-gold/30 hover:ring-offset-2 hover:ring-offset-[#F9F9F7] cursor-pointer'
+                    : 'bg-stone-200 text-stone-500 disabled:cursor-not-allowed'
                 }`}
               >
                 {isCompleted && !isActive ? <Check size={16} /> : step.id}
@@ -420,7 +422,7 @@ export default function PaymentClient() {
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1 text-xs text-brand-blue hover:text-brand-gold transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-blue"
+      className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-blue underline-offset-4 transition-colors duration-200 hover:text-brand-gold hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-blue"
     >
       <Edit2 size={14} />
       {label}
@@ -430,13 +432,13 @@ export default function PaymentClient() {
   // Step 1: Payer Information
   const Step1Content = () => (
     <div className="space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 @[28rem]:grid-cols-2 gap-7">
           <div className="flex flex-col">
             <label htmlFor="payment-first-name" className={labelStyles}>First Name</label>
             <input
               id="payment-first-name"
               {...register("firstName")}
-              className={`${inputStyles} ${errors.firstName ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
+              className={`${inputStyles} ${errors.firstName ? inputErrorStyles : ''}`}
               placeholder="John"
             />
             {errors.firstName && <span className={errorStyles}><AlertCircle size={12} />{errors.firstName.message}</span>}
@@ -447,37 +449,43 @@ export default function PaymentClient() {
             <input
               id="payment-last-name"
               {...register("lastName")}
-              className={`${inputStyles} ${errors.lastName ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
+              className={`${inputStyles} ${errors.lastName ? inputErrorStyles : ''}`}
               placeholder="Doe"
             />
             {errors.lastName && <span className={errorStyles}><AlertCircle size={12} />{errors.lastName.message}</span>}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 @[28rem]:grid-cols-2 gap-7">
           <div className="flex flex-col">
             <label htmlFor="payment-email" className={labelStyles}>Email Address</label>
-            <input
-              id="payment-email"
-              {...register("email")}
-              type="email"
-              className={`${inputStyles} ${errors.email ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
-              placeholder="email@address.com"
-            />
+            <div className="relative">
+              <Mail size={16} strokeWidth={1.5} aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
+              <input
+                id="payment-email"
+                {...register("email")}
+                type="email"
+                className={`${inputStyles} pl-11 ${errors.email ? inputErrorStyles : ''}`}
+                placeholder="email@address.com"
+              />
+            </div>
             {errors.email && <span className={errorStyles}><AlertCircle size={12} />{errors.email.message}</span>}
           </div>
 
           <div className="flex flex-col">
             <label htmlFor="payment-contact" className={labelStyles}>Contact Number</label>
-            <input
-              id="payment-contact"
-              {...register("contactNumber")}
-              type="tel"
-              inputMode="numeric"
-              maxLength={11}
-              className={`${inputStyles} ${errors.contactNumber ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
-              placeholder="09XXXXXXXXX"
-            />
+            <div className="relative">
+              <Phone size={16} strokeWidth={1.5} aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
+              <input
+                id="payment-contact"
+                {...register("contactNumber")}
+                type="tel"
+                inputMode="numeric"
+                maxLength={11}
+                className={`${inputStyles} pl-11 ${errors.contactNumber ? inputErrorStyles : ''}`}
+                placeholder="09XXXXXXXXX"
+              />
+            </div>
             {errors.contactNumber && <span className={errorStyles}><AlertCircle size={12} />{errors.contactNumber.message}</span>}
           </div>
         </div>
@@ -495,7 +503,7 @@ export default function PaymentClient() {
             <select
               id="payment-project"
               {...register("projectId")}
-              className={`${inputStyles} appearance-none cursor-pointer bg-white ${errors.projectId ? 'border-red-500' : ''}`}
+              className={`${selectStyles} ${errors.projectId ? inputErrorStyles : ''}`}
               disabled={loadingProjects}
             >
               <option value="">Select Project</option>
@@ -505,19 +513,19 @@ export default function PaymentClient() {
                 </option>
               ))}
             </select>
-            <ChevronDown size={14} className={`absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none ${errors.projectId ? 'text-red-500' : 'text-gray-400'}`} />
+            <ChevronDown size={16} strokeWidth={1.5} aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-brand-blue/50" />
           </div>
           {errors.projectId && <span className={errorStyles}><AlertCircle size={12} />{errors.projectId.message}</span>}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 @[28rem]:grid-cols-2 gap-7">
           <div className="flex flex-col">
             <label htmlFor="payment-tower" className={labelStyles}>Tower</label>
             <div className="relative">
               <select
                 id="payment-tower"
                 {...register("towerId")}
-                className={`${inputStyles} appearance-none cursor-pointer bg-white ${!watchProjectId ? 'opacity-50 cursor-not-allowed' : ''} ${errors.towerId ? 'border-red-500' : ''}`}
+                className={`${selectStyles} ${errors.towerId ? inputErrorStyles : ''}`}
                 disabled={!watchProjectId || loadingTowers}
               >
                 <option value="">
@@ -529,7 +537,7 @@ export default function PaymentClient() {
                   </option>
                 ))}
               </select>
-              <ChevronDown size={14} className={`absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none ${errors.towerId ? 'text-red-500' : 'text-gray-400'}`} />
+              <ChevronDown size={16} strokeWidth={1.5} aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-brand-blue/50" />
             </div>
             {errors.towerId && <span className={errorStyles}><AlertCircle size={12} />{errors.towerId.message}</span>}
           </div>
@@ -540,7 +548,7 @@ export default function PaymentClient() {
               <select
                 id="payment-unit-type"
                 {...register("unitTypeId")}
-                className={`${inputStyles} appearance-none cursor-pointer bg-white ${!watchTowerId ? 'opacity-50 cursor-not-allowed' : ''} ${errors.unitTypeId ? 'border-red-500' : ''}`}
+                className={`${selectStyles} ${errors.unitTypeId ? inputErrorStyles : ''}`}
                 disabled={!watchTowerId || loadingUnitTypes}
               >
                 <option value="">
@@ -552,7 +560,7 @@ export default function PaymentClient() {
                   </option>
                 ))}
               </select>
-              <ChevronDown size={14} className={`absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none ${errors.unitTypeId ? 'text-red-500' : 'text-gray-400'}`} />
+              <ChevronDown size={16} strokeWidth={1.5} aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-brand-blue/50" />
             </div>
             {errors.unitTypeId && <span className={errorStyles}><AlertCircle size={12} />{errors.unitTypeId.message}</span>}
           </div>
@@ -565,7 +573,7 @@ export default function PaymentClient() {
             {...register("unitNumber")}
             type="text"
             inputMode="numeric"
-            className={`${inputStyles} ${errors.unitNumber ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
+            className={`${inputStyles} ${errors.unitNumber ? inputErrorStyles : ''}`}
             placeholder="e.g. 1008"
           />
           {errors.unitNumber && <span className={errorStyles}><AlertCircle size={12} />{errors.unitNumber.message}</span>}
@@ -576,14 +584,14 @@ export default function PaymentClient() {
   // Step 3: Payment Details
   const Step3Content = () => (
     <div className="space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 @[28rem]:grid-cols-2 gap-7">
           <div className="flex flex-col">
             <label htmlFor="payment-purpose" className={labelStyles}>Purpose</label>
             <div className="relative">
               <select
                 id="payment-purpose"
                 {...register("paymentPurpose")}
-                className={`${inputStyles} appearance-none cursor-pointer bg-white ${errors.paymentPurpose ? 'border-red-500' : ''}`}
+                className={`${selectStyles} ${errors.paymentPurpose ? inputErrorStyles : ''}`}
               >
                 <option value="">Select Purpose</option>
                 <option value="Downpayment">Downpayment</option>
@@ -591,7 +599,7 @@ export default function PaymentClient() {
                 <option value="Reservation Fee">Reservation Fee</option>
                 <option value="CTS Reprinting Fee">CTS Reprinting Fee</option>
               </select>
-              <ChevronDown size={14} className={`absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none ${errors.paymentPurpose ? 'text-red-500' : 'text-gray-400'}`} />
+              <ChevronDown size={16} strokeWidth={1.5} aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-brand-blue/50" />
             </div>
             {errors.paymentPurpose && <span className={errorStyles}><AlertCircle size={12} />{errors.paymentPurpose.message}</span>}
           </div>
@@ -599,13 +607,13 @@ export default function PaymentClient() {
           <div className="flex flex-col">
             <label htmlFor="payment-amount" className={labelStyles}>Amount</label>
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none">₱</span>
+              <span aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-stone-400">₱</span>
               <input
                 id="payment-amount"
                 type="number"
                 step="0.01"
                 {...register("amount")}
-                className={`${inputStyles} pl-8 ${errors.amount ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
+                className={`${inputStyles} pl-10 ${errors.amount ? inputErrorStyles : ''}`}
                 placeholder="0.00"
               />
             </div>
@@ -615,7 +623,7 @@ export default function PaymentClient() {
 
         <div>
           <span id="payment-method-label" className={labelStyles}>Payment Method</span>
-          <div role="group" aria-labelledby="payment-method-label" className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div role="group" aria-labelledby="payment-method-label" className="grid grid-cols-2 @[28rem]:grid-cols-4 gap-3">
             {PAYMENT_METHODS.map((method) => {
               const isSelected = watchPaymentMethod === method.label;
               return (
@@ -624,21 +632,23 @@ export default function PaymentClient() {
                   type="button"
                   aria-pressed={isSelected}
                   onClick={() => setValue("paymentMethod", method.label, { shouldValidate: true })}
-                  className={`relative flex flex-col items-center justify-center gap-2 px-3 py-3 rounded-lg border-2 transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue ${
+                  className={`relative flex h-[92px] min-w-0 flex-col items-center justify-center gap-2 rounded-lg border px-3 py-4 transition-[background-color,border-color,box-shadow] duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue ${
                     isSelected
-                      ? 'border-brand-blue bg-blue-50'
-                      : 'border-gray-200 bg-white hover:border-gray-300'
+                      ? 'border-brand-blue bg-brand-gold/10 shadow-[0_2px_8px_rgba(20,47,114,0.06)] ring-1 ring-brand-blue/10'
+                      : 'border-stone-200 bg-[#FDFBF7] hover:border-brand-gold/70 hover:bg-white hover:shadow-[0_2px_8px_rgba(20,47,114,0.04)]'
                   }`}
                   title={method.label}
                 >
-                  <img
-                    src={method.logo}
-                    alt={method.label}
-                    className="h-5 w-auto object-contain"
-                  />
-                  <span className="text-xs font-medium text-gray-700 text-center">{method.label}</span>
+                  <span className="flex h-7 w-full max-w-24 items-center justify-center">
+                    <img
+                      src={method.logo}
+                      alt={method.label}
+                      className="max-h-6 max-w-full w-auto object-contain"
+                    />
+                  </span>
+                  <span className="text-xs font-medium text-brand-blue text-center">{method.label}</span>
                   {isSelected && (
-                    <Check size={14} className="absolute top-1 right-1 text-brand-blue" />
+                    <Check size={14} aria-hidden="true" className="absolute top-2 right-2 rounded-full bg-brand-gold/25 text-brand-blue" />
                   )}
                 </button>
               );
@@ -656,57 +666,67 @@ export default function PaymentClient() {
     const selectedTower = towers.find(t => t.id.toString() === formData.towerId);
     const selectedUnitType = unitTypes.find(u => u.id.toString() === formData.unitTypeId);
     const selectedPaymentMethod = PAYMENT_METHODS.find(m => m.label === formData.paymentMethod);
-    const summaryStyles = "grid grid-cols-[minmax(0,1fr)_minmax(0,1.65fr)] gap-x-4 gap-y-2 text-xs sm:text-[13px] leading-4 [&>dt]:text-gray-500 [&>dd]:min-w-0 [&>dd]:font-medium [&>dd]:text-gray-900 [&>dd]:[overflow-wrap:anywhere]";
+    const summaryCardStyles = "min-w-0 rounded-md border border-stone-200/70 bg-[#FDFBF7] p-4 transition-colors duration-200 hover:border-brand-gold/30";
+    const summaryHeaderStyles = "mb-2.5 flex items-center justify-between gap-3 border-b border-stone-200/70 pb-1.5";
+    const summaryLabelStyles = "text-xs leading-4 text-stone-500";
+    const summaryValueStyles = "mt-0.5 min-w-0 text-[13px] sm:text-sm font-medium leading-[18px] text-gray-900 [overflow-wrap:anywhere]";
 
     return (
       <div>
         {/* Review Sections */}
-        <div className="space-y-6">
-          {/* Payer Information */}
-          <section aria-label="Payer summary">
-            <div className="flex justify-between items-center border-b border-gray-300 pb-1 mb-2">
-              <h3 className="font-semibold text-sm leading-4 text-gray-800">Payer Information</h3>
+        <div className="grid grid-cols-1 @[28rem]:grid-cols-2 gap-5">
+          <section aria-label="Payer summary" className={summaryCardStyles}>
+            <div className={summaryHeaderStyles}>
+              <h3 className="font-semibold text-sm leading-5 text-brand-blue">Payer Information</h3>
               <EditButton onClick={() => goToStep(1)} label="Edit" />
             </div>
-            <dl className={summaryStyles}>
-              <dt>Name</dt>
-              <dd>{formData.firstName} {formData.lastName}</dd>
-              <dt>Email</dt>
-              <dd>{formData.email}</dd>
-              <dt>Contact</dt>
-              <dd>{formData.contactNumber}</dd>
+            <dl className="grid gap-2.5">
+              <div>
+                <dt className={summaryLabelStyles}>Name</dt>
+                <dd className={summaryValueStyles}>{formData.firstName} {formData.lastName}</dd>
+              </div>
+              <div>
+                <dt className={summaryLabelStyles}>Email</dt>
+                <dd className={summaryValueStyles}>{formData.email}</dd>
+              </div>
+              <div>
+                <dt className={summaryLabelStyles}>Contact</dt>
+                <dd className={summaryValueStyles}>{formData.contactNumber}</dd>
+              </div>
             </dl>
           </section>
 
-          <section aria-label="Property summary">
-            <div className="flex justify-between items-center border-b border-gray-300 pb-1 mb-2">
-              <h3 className="font-semibold text-sm leading-4 text-gray-800">Property Details</h3>
-              <EditButton onClick={() => goToStep(2)} label="Edit" />
-            </div>
-            <dl className={summaryStyles}>
-              <dt>Project</dt>
-              <dd>{selectedProject?.title}</dd>
-              <dt>Tower</dt>
-              <dd>{selectedTower?.name}</dd>
-              <dt>Unit Type</dt>
-              <dd>{selectedUnitType?.title}</dd>
-              <dt>Unit Number</dt>
-              <dd>{formData.unitNumber}</dd>
-            </dl>
-          </section>
-
-          <section aria-label="Payment summary">
-            <div className="flex justify-between items-center border-b border-gray-300 pb-1 mb-2">
-              <h3 className="font-semibold text-sm leading-4 text-gray-800">Payment Details</h3>
+          <section aria-label="Payment summary" className={summaryCardStyles}>
+            <div className={summaryHeaderStyles}>
+              <h3 className="font-semibold text-sm leading-5 text-brand-blue">Payment Details</h3>
               <EditButton onClick={() => goToStep(3)} label="Edit" />
             </div>
-            <dl className={summaryStyles}>
-              <dt>Purpose</dt>
-              <dd>{formData.paymentPurpose}</dd>
-              <dt>Amount</dt>
-              <dd><strong className="font-semibold text-brand-blue">₱{parseFloat(formData.amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong></dd>
-              <dt>Payment Method</dt>
-              <dd>{selectedPaymentMethod?.label}</dd>
+            <dl className="grid gap-2.5">
+              <div>
+                <dt className={summaryLabelStyles}>Purpose</dt>
+                <dd className={summaryValueStyles}>{formData.paymentPurpose}</dd>
+              </div>
+              <div>
+                <dt className={summaryLabelStyles}>Amount</dt>
+                <dd className={summaryValueStyles}><strong className="font-semibold text-brand-blue">₱{parseFloat(formData.amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong></dd>
+              </div>
+              <div>
+                <dt className={summaryLabelStyles}>Payment Method</dt>
+                <dd className={summaryValueStyles}>{selectedPaymentMethod?.label}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section aria-label="Property summary" className={`${summaryCardStyles} @[28rem]:col-span-2`}>
+            <div className={summaryHeaderStyles}>
+              <h3 className="font-semibold text-sm leading-5 text-brand-blue">Property Details</h3>
+              <EditButton onClick={() => goToStep(2)} label="Edit" />
+            </div>
+            <dl className="grid grid-cols-1 @[28rem]:grid-cols-2 gap-x-6 gap-y-2.5 text-[13px] sm:text-sm leading-[18px] [&>div]:grid [&>div]:grid-cols-[5rem_minmax(0,1fr)] [&>div]:gap-x-3 [&_dt]:text-xs [&_dt]:text-stone-500 [&_dd]:min-w-0 [&_dd]:font-medium [&_dd]:text-gray-900 [&_dd]:[overflow-wrap:anywhere]">
+              <div><dt>Project</dt><dd>{selectedProject?.title}</dd></div>
+              <div><dt>Tower</dt><dd>{selectedTower?.name}</dd></div>
+              <div><dt>Unit Type</dt><dd>{selectedUnitType?.title}</dd></div>
+              <div><dt>Unit Number</dt><dd>{formData.unitNumber}</dd></div>
             </dl>
           </section>
         </div>
@@ -724,7 +744,7 @@ export default function PaymentClient() {
 
         {/* Turnstile Widget */}
         {process.env.NEXT_PUBLIC_PAYMENT_TURNSTILE_SITE_KEY ? (
-          <div className="mt-7 flex flex-col items-center">
+          <div className="mt-6 flex flex-col items-center">
             <div className="flex justify-center w-full">
               <div id="payment-captcha-container" className="min-h-[65px]" />
             </div>
@@ -736,7 +756,7 @@ export default function PaymentClient() {
             )}
           </div>
         ) : (
-          <div className="bg-yellow-50 p-3 rounded border border-yellow-200 mt-7">
+          <div className="bg-yellow-50 p-3 rounded border border-yellow-200 mt-6">
             <p className="text-xs text-yellow-800">
               ⚠️ Payment verification not configured. Add <code className="font-mono text-[10px]">NEXT_PUBLIC_PAYMENT_TURNSTILE_SITE_KEY</code> to .env.local
             </p>
@@ -745,8 +765,8 @@ export default function PaymentClient() {
 
         {/* Terms */}
         <div className="mt-5">
-          <p className="text-[11px] text-gray-500 leading-4 text-center">
-            By providing this information, I agree to the Golden Topper Reservation Guidelines, Privacy Policy, and Terms of Service.
+          <p className="mx-auto max-w-md text-[11px] leading-[18px] text-stone-500 text-center">
+            By providing this information, I agree to the Golden Topper <a href="/buyers-guide" className="text-brand-blue underline decoration-brand-gold/60 underline-offset-2 transition-colors duration-200 hover:text-brand-gold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue">Reservation Guidelines</a>, <a href="/privacy-policy" className="text-brand-blue underline decoration-brand-gold/60 underline-offset-2 transition-colors duration-200 hover:text-brand-gold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue">Privacy Policy</a>, and <a href="/terms-of-use" className="text-brand-blue underline decoration-brand-gold/60 underline-offset-2 transition-colors duration-200 hover:text-brand-gold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue">Terms of Service</a>.
           </p>
         </div>
 
@@ -756,7 +776,7 @@ export default function PaymentClient() {
 
   return (
     <PageTransition>
-      <div className="flex min-h-[100dvh] flex-col md:h-[100dvh] md:overflow-hidden font-sans bg-[#E7E7E7] selection:bg-brand-gold selection:text-white">
+      <div className="flex min-h-[100dvh] flex-col md:h-[100dvh] md:overflow-hidden font-sans bg-[#F9F9F7] selection:bg-brand-gold selection:text-white">
 
         <Navbar />
 
@@ -795,17 +815,18 @@ export default function PaymentClient() {
 
           {/* RIGHT SIDE - Wizard Form */}
           <div
-            className="relative z-10 mt-[var(--payment-navbar-height)] w-full bg-[#E7E7E7] px-2 min-[360px]:px-6 pb-7 md:h-[calc(100dvh-var(--payment-navbar-height))] md:w-1/2 lg:px-12 xl:px-16"
+            ref={currentStep === 4 ? stepContentRef : undefined}
+            className={`relative z-10 mt-[var(--payment-navbar-height)] w-full bg-[#F9F9F7] px-2 min-[360px]:px-6 pb-7 md:h-[calc(100dvh-var(--payment-navbar-height))] md:w-1/2 lg:px-8 xl:px-10 ${currentStep === 4 ? 'md:overflow-y-auto md:[overflow-anchor:none]' : ''}`}
             style={{ '--payment-navbar-height': NAVBAR_HEIGHT } as React.CSSProperties}
           >
             <form
               onSubmit={currentStep === 4 ? handleSubmit(onSubmit) : (event) => { event.preventDefault(); void validateAndMoveNext(); }}
-              className="mx-auto grid min-h-[calc(100dvh-var(--payment-navbar-height)-1.75rem)] w-full max-w-lg grid-rows-[auto_1fr_auto] md:h-full md:min-h-0 md:grid-rows-[auto_minmax(0,1fr)_auto]"
+              className={`@container mx-auto grid min-h-[calc(100dvh-var(--payment-navbar-height)-1.75rem)] w-full max-w-[640px] grid-rows-[auto_1fr_auto] ${currentStep === 4 ? 'md:grid-rows-[auto_minmax(min-content,1fr)_auto]' : 'md:h-full md:min-h-0 md:grid-rows-[auto_minmax(0,1fr)_auto]'}`}
             >
               {StepIndicator()}
 
-              <div ref={stepContentRef} className="min-h-0 pt-10 pb-5 md:overflow-y-auto md:[scrollbar-gutter:stable] [scrollbar-width:thin]">
-                <h2 className="mb-6 text-2xl font-semibold leading-8 text-brand-blue">{STEPS[currentStep - 1].title}</h2>
+              <div ref={currentStep === 4 ? undefined : stepContentRef} className={`min-h-0 pt-10 pb-5 ${currentStep === 4 ? '' : 'md:overflow-y-auto md:[scrollbar-gutter:stable] [scrollbar-width:thin]'}`}>
+                <h2 className="mb-6 border-l-2 border-brand-gold pl-3 text-2xl font-semibold leading-8 tracking-tight text-brand-blue">{STEPS[currentStep - 1].title}</h2>
                 {/* Render helpers directly so state updates preserve inputs and the CAPTCHA DOM. */}
                 {currentStep === 1 && Step1Content()}
                 {currentStep === 2 && Step2Content()}
@@ -813,12 +834,12 @@ export default function PaymentClient() {
                 {currentStep === 4 && Step4Content()}
               </div>
 
-              <footer className="flex items-center justify-between gap-3 border-t border-gray-300 pt-4">
+              <footer className="flex items-center justify-between gap-3 border-t border-stone-200 pt-4">
                 {currentStep > 1 ? (
                   <button
                     type="button"
                     onClick={goBack}
-                    className="inline-flex h-12 min-w-20 sm:min-w-24 items-center justify-center gap-2 rounded-md border border-gray-300 px-4 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-blue"
+                    className="inline-flex h-12 min-w-20 sm:min-w-24 items-center justify-center gap-2 rounded-md border border-stone-300 px-4 text-sm font-medium text-brand-blue transition-[background-color,border-color] duration-200 hover:border-brand-gold/70 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-blue"
                   >
                     <ChevronLeft size={16} aria-hidden="true" /> Back
                   </button>
@@ -828,7 +849,7 @@ export default function PaymentClient() {
                   <button
                     type="submit"
                     disabled={isSubmitting || !captchaToken || !process.env.NEXT_PUBLIC_PAYMENT_TURNSTILE_SITE_KEY}
-                    className={`${primaryButtonStyles} bg-brand-blue enabled:hover:bg-blue-800`}
+                    className={primaryButtonStyles}
                   >
                     {isSubmitting ? 'Processing...' : 'Pay Now'}
                   </button>
@@ -836,10 +857,10 @@ export default function PaymentClient() {
                   <button
                     type="button"
                     onClick={validateAndMoveNext}
-                    className={`${primaryButtonStyles} bg-brand-blue hover:bg-blue-800`}
+                    className={primaryButtonStyles}
                   >
                     {currentStep === 3 ? 'Review Payment' : 'Continue'}
-                    <ChevronRight size={16} aria-hidden="true" />
+                    <ChevronRight size={16} aria-hidden="true" className="text-brand-gold" />
                   </button>
                 )}
               </footer>
