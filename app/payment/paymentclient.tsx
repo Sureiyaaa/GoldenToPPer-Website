@@ -61,9 +61,9 @@ interface CarouselImage {
   focalY: number;
 }
 
-// Convert legacy static fallback to carousel image format
+// Convert legacy fallback images to carousel format with centered focal point (no CMS alt text available)
 function convertLegacyDefaultShowcase(): CarouselImage[] {
-  return GENERAL_SHOWCASE_IMAGES.map(url => ({
+  return LEGACY_DEFAULT_SHOWCASE_FALLBACK.map(url => ({
     imageUrl: url,
     altText: null,
     focalX: 50,
@@ -72,7 +72,7 @@ function convertLegacyDefaultShowcase(): CarouselImage[] {
 }
 
 function convertLegacyProjectAmenities(projectId: number): CarouselImage[] {
-  const amenities = PROJECT_AMENITIES[projectId] || [];
+  const amenities = LEGACY_PROJECT_AMENITY_FALLBACK[projectId] || [];
   return amenities.map(url => ({
     imageUrl: url,
     altText: null,
@@ -81,28 +81,32 @@ function convertLegacyProjectAmenities(projectId: number): CarouselImage[] {
   }));
 }
 
-// Project hero images - primary/architectural images used by Projects section
-const PROJECT_HERO_IMAGES: Record<number, string> = {
+// Emergency fallback images for Default showcase (used only for CMS failure/empty)
+// Component refs for building LEGACY_DEFAULT_SHOWCASE_FALLBACK array
+const LEGACY_DEFAULT_CAROUSEL_IMAGES: Record<number, string> = {
   1: "/images/projects/City_Clou_image.png", // City Clou
   2: "/images/projects/el_sol_projects.webp", // El Sol
   3: "/images/projects/lavida-dedicated.webp", // La Vida (higher quality source)
   4: "/images/projects/park-one.webp", // Park One
 };
 
-// Introduce the portfolio before its supporting amenity highlights.
-const GENERAL_SHOWCASE_IMAGES = [
-  PROJECT_HERO_IMAGES[1],
-  PROJECT_HERO_IMAGES[4],
-  PROJECT_HERO_IMAGES[3],
-  PROJECT_HERO_IMAGES[2],
+// Emergency fallback for Default showcase when CMS is unavailable or empty.
+// This is only used when fetchDefaultCarouselSlidesAction() fails or returns no slides.
+// Introduces the portfolio before its supporting amenity highlights.
+const LEGACY_DEFAULT_SHOWCASE_FALLBACK = [
+  LEGACY_DEFAULT_CAROUSEL_IMAGES[1],
+  LEGACY_DEFAULT_CAROUSEL_IMAGES[4],
+  LEGACY_DEFAULT_CAROUSEL_IMAGES[3],
+  LEGACY_DEFAULT_CAROUSEL_IMAGES[2],
   "/images/projects/city-clou-amenities/function_room_cityclou.webp",
   "/images/projects/park-one-amenities/gym_with_yoga_room_parkone.jpg",
   "/images/projects/la-vida-amenities/lap_pool_lavida.webp",
   "/images/projects/el-sol-amenities/lounge_and_bar.webp",
 ];
 
-// Project-specific amenity images mapped by project ID
-const PROJECT_AMENITIES: Record<number, string[]> = {
+// Emergency fallback amenity images for projects when CMS is unavailable or fails.
+// This is only used when fetchProjectCarouselSlidesAction() fails.
+const LEGACY_PROJECT_AMENITY_FALLBACK: Record<number, string[]> = {
   1: [ // City Clou
     "/images/projects/city-clou-amenities/dedicated_retail_area_city-clou.webp",
     "/images/projects/city-clou-amenities/lap_pool_city-clou.webp",
