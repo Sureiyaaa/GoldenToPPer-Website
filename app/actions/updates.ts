@@ -2,6 +2,7 @@
 'use server'
 
 import { createClient } from '@supabase/supabase-js'
+import { revalidatePath } from 'next/cache'
 import { getRBACProfile } from '@/app/actions/auth'
 
 // Approved table configurations for generic mutations
@@ -55,6 +56,14 @@ export async function toggleActiveStatus(table: string, id: string | number, cur
   if (!updated) {
     throw new Error(`Record not found in ${table} with id ${id}.`);
   }
+
+  // Invalidate public-facing caches for news visibility changes
+  if (table === 'news_updates') {
+    revalidatePath('/', 'page');
+    revalidatePath('/news&updates', 'page');
+    revalidatePath('/news&updates/[slug]', 'page');
+  }
+
   return true;
 }
 
