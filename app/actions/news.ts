@@ -1,7 +1,9 @@
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
+import { revalidatePath } from 'next/cache';
 import { getCustomSession, getRBACProfile } from './auth';
+import { extractPlainTextFromContent, validateArticleContent } from '@/lib/validations/article-validation';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,8 +16,8 @@ const supabaseAdmin = createClient(
 // Allowed fields per operation (prevents arbitrary column modification)
 const NEWS_FIELD_ALLOWLISTS: Record<string, Record<'create' | 'edit', Set<string>>> = {
   'news_updates': {
-    'create': new Set(['title', 'category', 'date', 'slug', 'excerpt', 'image']),
-    'edit': new Set(['title', 'category', 'date', 'slug', 'excerpt', 'image']),
+    'create': new Set(['title', 'category', 'date', 'slug', 'excerpt', 'image', 'article_content']),
+    'edit': new Set(['title', 'category', 'date', 'slug', 'excerpt', 'image', 'article_content']),
   }
 };
 
@@ -127,6 +129,33 @@ export async function saveArticleToDB(payload: any, editId: string | null) {
       }
     }
 
+    // If article_content is provided, parse JSON string and validate
+    if (filteredPayload.article_content) {
+      // Parse JSON string from editor (avoid double-encoding in JSONB)
+      if (typeof filteredPayload.article_content === 'string') {
+        try {
+          filteredPayload.article_content = JSON.parse(filteredPayload.article_content);
+        } catch (e) {
+          throw new Error('Invalid article content format');
+        }
+      }
+
+      if (!validateArticleContent(filteredPayload.article_content)) {
+        throw new Error('Invalid article content format or content too short (minimum 10 characters required)');
+      }
+
+      const derivedExcerpt = extractPlainTextFromContent(filteredPayload.article_content);
+      if (!derivedExcerpt || derivedExcerpt.length < 10) {
+        throw new Error('Article content must contain at least 10 characters of text');
+      }
+
+      // Update excerpt to match rich content
+      filteredPayload.excerpt = derivedExcerpt;
+    } else if (!filteredPayload.excerpt) {
+      // If no article_content and no excerpt, error
+      throw new Error('Article must have content (excerpt or article_content)');
+    }
+
     // Determine create vs edit using server-side record verification
     let isCreate = true;
     let recordId: any = null;
@@ -165,6 +194,11 @@ export async function saveArticleToDB(payload: any, editId: string | null) {
     }
 
     if (res.error) throw new Error(res.error.message);
+
+    // Invalidate public-facing caches for news content updates
+    revalidatePath('/', 'page');
+    revalidatePath('/news&updates', 'page');
+    revalidatePath('/news&updates/[slug]', 'page');
 
     return { success: true, data: res.data };
   } catch (error: any) {

@@ -1,6 +1,8 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { Editor, EditorContent } from '@tiptap/react';
+import { renderArticleContent } from '@/lib/rendering/article-content';
 
 export type NewsEditorRegion = 'image' | 'meta' | 'title' | 'excerpt';
 
@@ -10,18 +12,21 @@ type NewsPreviewData = {
   category: string;
   date: string;
   excerpt: string;
+  article_content?: string | null;
 };
 
 type PreviewSkeletonProps = {
   data: NewsPreviewData;
   selectedRegion: NewsEditorRegion | 'slug';
   onSelectRegion: (region: NewsEditorRegion) => void;
+  editor: Editor | null;
 };
 
 export default function PreviewSkeleton({
   data,
   selectedRegion,
   onSelectRegion,
+  editor,
 }: PreviewSkeletonProps) {
   const regionClass = (region: NewsEditorRegion) =>
     `rounded-md outline-none transition-all focus-visible:ring-2 focus-visible:ring-brand-gold ${
@@ -104,24 +109,26 @@ export default function PreviewSkeleton({
             animate={{ opacity: 1 }}
             className="mt-12 w-full"
           >
-            <button
-              type="button"
-              onClick={() => onSelectRegion('excerpt')}
-              aria-label="Edit article content"
-              aria-pressed={selectedRegion === 'excerpt'}
-              className={`block w-full cursor-pointer text-left ${regionClass('excerpt')}`}
-            >
-              <span className="block text-base leading-[1.85] text-gray-700 md:text-[17px]">
-                {data.excerpt.split(/\n+/).filter(Boolean).map((paragraph, index) => (
-                  <span
-                    key={index}
-                    className="mb-6 block text-left md:text-justify [text-align-last:left]"
-                  >
-                    {paragraph.trim()}
-                  </span>
-                ))}
-              </span>
-            </button>
+            {selectedRegion === 'excerpt' && editor ? (
+              <div className={`block w-full text-left ${regionClass('excerpt')}`}>
+                <EditorContent
+                  editor={editor}
+                  className="prose prose-sm max-w-none text-base leading-[1.85] text-gray-700 md:text-[17px] [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-0 [&_.ProseMirror_p]:mb-6"
+                />
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onSelectRegion('excerpt')}
+                aria-label="Edit article content"
+                aria-pressed={selectedRegion === 'excerpt'}
+                className={`block w-full cursor-pointer text-left ${regionClass('excerpt')}`}
+              >
+                <span className="block text-base leading-[1.85] text-gray-700 md:text-[17px]">
+                  {renderArticleContent(data.article_content || data.excerpt)}
+                </span>
+              </button>
+            )}
           </motion.article>
         </div>
       </main>

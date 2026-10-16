@@ -33,9 +33,11 @@ import { createClient } from '@/utils/supabase/client';
 import { saveArticleToDB, uploadImage } from '@/app/actions/news';
 import { createAuditLogAction } from '@/app/actions/admin_fetchers';
 import ImageDropzone from '@/app/components/imagedropzone';
+import RichTextEditor from './RichTextEditor';
 import PreviewSkeleton, {
   NewsEditorRegion,
 } from './PreviewSkeleton';
+import { useArticleEditor } from './useArticleEditor';
 
 const NewsFormSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -44,6 +46,7 @@ const NewsFormSchema = z.object({
   slug: z.string().min(1, 'Slug is required'),
   excerpt: z.string().min(1, 'Article content is required'),
   image: z.string().optional(),
+  article_content: z.string().nullable().optional(),
 });
 
 type NewsFormValues = z.infer<typeof NewsFormSchema>;
@@ -64,6 +67,7 @@ const EMPTY_FORM: NewsFormValues = {
   slug: '',
   excerpt: '',
   image: '',
+  article_content: null,
 };
 
 function NewsManager() {
@@ -124,6 +128,18 @@ function NewsManager() {
   } = useForm<NewsFormValues>({
     resolver: zodResolver(NewsFormSchema),
     defaultValues: EMPTY_FORM,
+  });
+
+  const formData = watch();
+
+  const editor = useArticleEditor({
+    value: formData.article_content,
+    excerpt: formData.excerpt,
+    onChange: (value) =>
+      setValue('article_content', value, {
+        shouldDirty: true,
+        shouldValidate: true,
+      }),
   });
 
   useEffect(() => {
@@ -230,6 +246,11 @@ function NewsManager() {
           slug: data.slug || '',
           excerpt: data.excerpt || '',
           image: data.image || '',
+          article_content: data.article_content
+            ? typeof data.article_content === 'string'
+              ? data.article_content
+              : JSON.stringify(data.article_content)
+            : null,
         };
 
         reset(values);
@@ -456,7 +477,6 @@ function NewsManager() {
     }
   };
 
-  const formData = watch();
   const hasErrors =
     Object.keys(errors).length > 0;
 
@@ -525,6 +545,8 @@ function NewsManager() {
     excerpt:
       formData.excerpt ||
       'Write your article content to see it rendered here.',
+    article_content:
+      formData.article_content || null,
     image:
       previews.image ||
       formData.image ||
@@ -770,10 +792,11 @@ function NewsManager() {
                 data={previewData}
                 selectedRegion={selectedRegion}
                 onSelectRegion={setSelectedRegion}
+                editor={editor}
               />
 
               <p className="mt-5 text-[9px] font-bold uppercase tracking-[0.18em] text-gray-400">
-                Select article content in the preview to edit it
+                Click on the article body to edit. Use the toolbar for formatting.
               </p>
             </div>
           </div>
@@ -1094,20 +1117,26 @@ function NewsManager() {
                     labelStyles
                   }
                 >
-                  Article Content
+                  Formatting
                 </label>
 
-                <textarea
-                  {...register(
-                    'excerpt'
-                  )}
-                  rows={12}
-                  className={`${inputStyles} resize-none leading-relaxed`}
-                  placeholder="Write the article content or update..."
-                />
+                <RichTextEditor editor={editor} />
+
+                <p className="mt-4 text-[10px] leading-relaxed text-gray-400">
+                  Click in the article text on the left to edit. Select text and use the buttons above to apply formatting. Keyboard shortcuts: <kbd className="px-1 bg-gray-100 rounded text-[9px]">Ctrl+B</kbd> bold, <kbd className="px-1 bg-gray-100 rounded text-[9px]">Ctrl+I</kbd> italic, <kbd className="px-1 bg-gray-100 rounded text-[9px]">Enter</kbd> new paragraph.
+                </p>
+
+                {errors.article_content && (
+                  <p className="mt-4 text-[10px] font-bold text-red-500">
+                    {
+                      errors.article_content
+                        .message
+                    }
+                  </p>
+                )}
 
                 {errors.excerpt && (
-                  <p className="mt-2 text-[10px] font-bold text-red-500">
+                  <p className="mt-4 text-[10px] font-bold text-red-500">
                     {
                       errors.excerpt
                         .message
