@@ -72,7 +72,7 @@ export async function fetchLiveHomepageAdminDataAction() {
     supabase.from('homepage_process_steps').select('*').order('sort_order', { ascending: true }),
     supabase.from('homepage_awards').select('*').order('sort_order', { ascending: true }),
     supabase.from('project_table').select('id, title, slug').is('deleted_at', null).eq('is_active', true),
-    supabase.from('news_updates').select('*').is('is_archived', null).order('date', { ascending: false }).limit(4),
+    supabase.from('news_updates').select('*').is('is_archived', null).eq('is_active', true).order('date', { ascending: false }).limit(4),
   ]);
 
   return {

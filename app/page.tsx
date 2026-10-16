@@ -21,7 +21,7 @@ export default async function HomePage() {
   );
 
   const [newsRes, projectsRes, settingsRes, heroRes, devAreasRes, processRes, awardsRes] = await Promise.all([
-    supabase.from('news_updates').select('*').order('date', { ascending: false }).limit(4),
+    supabase.from('news_updates').select('*').is('is_archived', null).eq('is_active', true).order('date', { ascending: false }).limit(4),
     supabase.from('project_table').select('id, title, slug, image, virtual_tours (*)').is('deleted_at', null).eq('is_active', true).order('id', { ascending: true }),
     supabase.from('homepage_settings').select('*').eq('id', 1).maybeSingle(),
     supabase.from('homepage_hero_slides').select('*, project_table(id, title, slug)').eq('is_active', true).order('sort_order', { ascending: true }),
