@@ -12,6 +12,7 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import BackToTop from '@/app/components/backtotop';
 import { createClient } from '@/lib/supabase/client';
+import { renderArticleContent } from '@/lib/rendering/article-content';
 import Link from 'next/link';
 
 if (typeof window !== 'undefined') {
@@ -28,6 +29,7 @@ interface NewsArticle {
   date: string;
   image: string | null;
   excerpt: string | null;
+  article_content?: string | null;
 }
 
 export default function SingleNewsClient({ 
@@ -193,17 +195,9 @@ export default function SingleNewsClient({
             className="mt-12 w-full"
           >
             <div className="text-base md:text-[17px] text-gray-700 leading-[1.85]">
-              {(initialArticle.excerpt || '')
-                .split(/\n+/)
-                .filter(Boolean)
-                .map((paragraph, index) => (
-                  <p
-                    key={index}
-                    className="mb-6 text-left md:text-justify [text-align-last:left]"
-                  >
-                    {paragraph.trim()}
-                  </p>
-                ))}
+              {renderArticleContent(
+                initialArticle.article_content || initialArticle.excerpt
+              )}
             </div>
           </motion.article>
 
