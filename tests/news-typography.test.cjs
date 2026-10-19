@@ -26,13 +26,15 @@ import React,{useRef,useEffect,useState} from 'react';import{createRoot}from'rea
 import Preview from ${JSON.stringify(path.join(root, 'app/admin/news/PreviewSkeleton.tsx').replace(/\\/g, '/'))};
 import Public from ${JSON.stringify(path.join(root, 'app/news&updates/[slug]/newsclient.tsx').replace(/\\/g, '/'))};
 import {useSectionEditor,cleanupAllSectionEditors} from ${JSON.stringify(path.join(root, 'app/admin/news/useSectionEditor.ts').replace(/\\/g, '/'))};
-import {adaptLegacyArticleToSections} from ${JSON.stringify(path.join(root, 'app/types/article-sections.ts').replace(/\\/g, '/'))};
-import {parseArticleContent} from ${JSON.stringify(path.join(root, 'lib/rendering/article-content.ts').replace(/\\/g, '/'))};
+import {adaptLegacyArticleToSections,deriveExcerptFromSections} from ${JSON.stringify(path.join(root, 'app/types/article-sections.ts').replace(/\\/g, '/'))};
+import {parseArticleContent,extractPlainText} from ${JSON.stringify(path.join(root, 'lib/rendering/article-content.ts').replace(/\\/g, '/'))};
+import {extractPlainTextFromContent} from ${JSON.stringify(path.join(root, 'lib/validations/article-validation.ts').replace(/\\/g, '/'))};
+window.newsParsing={parseArticleContent,extractPlainText,extractPlainTextFromContent,adaptLegacyArticleToSections,deriveExcerptFromSections};
 window.newsSaved=${JSON.stringify(saved)};window.newsBase=${JSON.stringify(base)};window.newsBody=${JSON.stringify(body)};window.newsImage=${JSON.stringify(image)};
 function Fixture({mode,article}){const doc=article.article_sections||adaptLegacyArticleToSections({...article,article_content:article.article_content?parseArticleContent(article.article_content):null});const section=doc.sections[0];const registry=useRef(new Map());const [value,setValue]=useState(section.body);const editor=useSectionEditor({sectionId:mode==='editable'?section.id:'',content:value,onChange:setValue,editorsRegistry:registry});useEffect(()=>()=>cleanupAllSectionEditors(registry),[]);useEffect(()=>{window.fixtureEditor=editor;},[editor]);return mode==='public'?<Public initialArticle={article}/>:<Preview data={{...article,article_sections:doc}} selectedRegion={mode==='editable'?'section-body':'overview'} selectedSectionId={mode==='editable'?section.id:null} sectionEditor={editor} onSelectRegion={()=>{}} onSelectSection={()=>{}}/>;}
 const root=createRoot(document.getElementById('app'));let key=0;window.renderNewsFixture=(mode,layout='text-only',hasImage=false,heading=false,kind='formatted')=>{let article=kind==='saved'?window.newsSaved:{...window.newsBase};if(kind==='formatted')article.article_sections={version:1,createdAt:'2026-10-19',updatedAt:'2026-10-19',sections:[{id:'section-a',heading:typeof heading==='string'?heading:'A section heading',headingEnabled:!!heading,layout,body:window.newsBody,image:hasImage?window.newsImage:undefined,order:0}]};if(kind==='legacy'){article.article_content=null;article.excerpt=window.newsBase.excerpt;}root.render(<Fixture key={++key} mode={mode} article={article}/>);};window.renderNewsFixture('readonly');
 `);
-async function main() {
+async function main(t) {
     await new Promise((resolve, reject) => webpack({ mode: 'development', context: root, entry: path.join(work, 'entry.jsx'), devtool: false, output: { path: work, filename: 'bundle.js' }, resolve: { extensions: ['.tsx', '.ts', '.jsx', '.js'], modules: [path.join(root, 'node_modules'), 'node_modules'], alias: { '@/app/components/navbar': path.join(work, 'empty.jsx'), '@/app/components/footer': path.join(work, 'empty.jsx'), '@/app/components/backtotop': path.join(work, 'empty.jsx'), '@/app/components/page-transitions': path.join(work, 'transition.jsx'), '@/lib/supabase/client': path.join(work, 'data.js'), 'next/navigation': path.join(work, 'navigation.js'), 'next/link': path.join(work, 'link.jsx'), 'next/image': path.join(work, 'image.jsx'), 'lenis': path.join(work, 'lenis.js'), 'gsap/ScrollTrigger': path.join(work, 'animation.js'), 'gsap': path.join(work, 'animation.js'), '@': root } }, module: { rules: [{ test: /\.[jt]sx?$/, exclude: /node_modules/, use: path.join(work, 'loader.cjs') }] } }, (e, stats) => e || stats.hasErrors() ? reject(e || Error(stats.toString({ all: false, errors: true }))) : resolve()));
     const css = await postcss([tailwind({ base: root })]).process(fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8'), { from: path.join(root, 'app/globals.css') });
     write('styles.css', css.css);
@@ -97,10 +99,165 @@ async function main() {
         await evaluate(`document.fonts.ready`);
         if (!await evaluate("typeof window.renderNewsFixture==='function'"))
             throw Error('Fixture startup: ' + JSON.stringify(exceptions));
+        // Invoke the fixture's production imports, never a copy of the parser.
+        const parseContent = input => evaluate('window.newsParsing.parseArticleContent(' + (input === undefined ? 'undefined' : JSON.stringify(input)) + ')');
+        const assertEmptyDocument = doc => {
+            assert.equal(doc.type, 'doc');
+            assert.equal(doc.content.length, 1);
+            assert.equal(doc.content[0].type, 'paragraph');
+            assert.deepEqual(doc.content[0].content ?? [], []);
+        };
+        await t.test('production parser preserves structured JSONB paragraphs, marks, spaces and breaks without mutating input', async () => {
+            const result = await evaluate('(() => {const input=' + JSON.stringify(body) + ';const before=JSON.stringify(input);const doc=window.newsParsing.parseArticleContent(input);return {doc,unchanged:JSON.stringify(input)===before};})()');
+            assert.deepEqual(result.doc, body);
+            assert.equal(result.unchanged, true);
+        });
+        await t.test('production parser accepts stringified rich documents', async () => {
+            assert.deepEqual(await parseContent(JSON.stringify(body)), body);
+        });
+        await t.test('malformed and non-document JSON strings retain literal legacy text', async () => {
+            for (const input of ['{invalid json}', '{"type":"doc",', '{}', 'null', '[1,2]']) {
+                assert.deepEqual(await parseContent(input), {
+                    type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: input }] }],
+                }, input);
+            }
+        });
+        await t.test('invalid object shapes and invalid top-level blocks normalize safely', async () => {
+            for (const input of [{}, [], { type: 'paragraph' }, { type: 'doc' }, { type: 'doc', content: null }, { type: 'doc', content: {} }, { type: 'doc', content: [] }]) {
+                assertEmptyDocument(await parseContent(input));
+            }
+            const paragraph = { type: 'paragraph', content: [{ type: 'text', text: 'Kept paragraph', marks: [{ type: 'bold' }] }] };
+            const invalidBlocks = { type: 'doc', content: [null, { type: 'heading', content: [{ type: 'text', text: 'Unsupported block' }] }, paragraph] };
+            for (const input of [invalidBlocks, JSON.stringify(invalidBlocks)]) {
+                assert.deepEqual(await parseContent(input), { type: 'doc', content: [paragraph] });
+            }
+        });
+        await t.test('null, undefined and empty input produce empty documents without invented fallback text', async () => {
+            for (const input of [null, undefined, '']) assertEmptyDocument(await parseContent(input));
+        });
+        await t.test('legacy plain text retains single/multiple newline conversion and edge trimming', async () => {
+            assert.deepEqual(await parseContent('  First  \nSecond\n\nThird  '), {
+                type: 'doc', content: [
+                    { type: 'paragraph', content: [{ type: 'text', text: 'First' }] },
+                    { type: 'paragraph', content: [{ type: 'text', text: 'Second' }] },
+                    { type: 'paragraph', content: [{ type: 'text', text: 'Third' }] },
+                ],
+            });
+            for (const separator of ['\n', '\n\n', '\n\n\n', '\n\n\n\n']) {
+                assert.deepEqual(await parseContent('  First  ' + separator + '  Second  '), {
+                    type: 'doc', content: [
+                        { type: 'paragraph', content: [{ type: 'text', text: 'First' }] },
+                        { type: 'paragraph', content: [{ type: 'text', text: 'Second' }] },
+                    ],
+                }, 'newline runs do not invent blank legacy paragraphs');
+            }
+        });
+        const extractContent = (helper, input) => evaluate('window.newsParsing.' + helper + '(' + (input === undefined ? 'undefined' : JSON.stringify(input)) + ')');
+        await t.test('production text extractors preserve inline spacing, hard breaks and blank paragraph separators', async () => {
+            const rich = { type: 'doc', content: [
+                { type: 'paragraph', content: [
+                    { type: 'text', text: '  Bold', marks: [{ type: 'bold' }] },
+                    { type: 'text', text: ' and ' },
+                    { type: 'text', text: 'italic', marks: [{ type: 'italic' }] },
+                    { type: 'text', text: ' / ' },
+                    { type: 'text', text: 'both', marks: [{ type: 'bold' }, { type: 'italic' }] },
+                ] },
+                { type: 'paragraph', content: [] },
+                { type: 'paragraph', content: [{ type: 'text', text: 'Line 1' }, { type: 'hardBreak' }, { type: 'text', text: 'Line 2  ' }] },
+                { type: 'paragraph' },
+                { type: 'paragraph', content: [{ type: 'text', text: 'Final  paragraph.  ' }] },
+            ] };
+            const expected = 'Bold and italic / both\n\n\n\nLine 1\nLine 2  \n\n\n\nFinal  paragraph.';
+            for (const helper of ['extractPlainText', 'extractPlainTextFromContent']) {
+                for (const input of [rich, JSON.stringify(rich)]) assert.equal(await extractContent(helper, input), expected, helper);
+            }
+            assert.deepEqual(await parseContent(rich), rich, 'extraction rules do not trim or flatten the rich document');
+        });
+        await t.test('legacy parse/extract round trips stabilize paragraph separators without losing text', async () => {
+            const legacy = '  First\nLine 2\n\nSecond\n\n\nLine 2  ';
+            const doc = await parseContent(legacy);
+            const expected = 'First\n\nLine 2\n\nSecond\n\nLine 2';
+            assert.equal(await extractContent('extractPlainText', legacy), expected);
+            for (const helper of ['extractPlainText', 'extractPlainTextFromContent']) {
+                for (const input of [doc, JSON.stringify(doc)]) {
+                    const text = await extractContent(helper, input);
+                    assert.equal(text, expected, helper);
+                    assert.deepEqual(await parseContent(text), doc, 'normalized legacy paragraphs round trip');
+                }
+                for (const input of [null, undefined, '', await parseContent('   \n\n   ')]) {
+                    assert.equal(await extractContent(helper, input), '', helper + ' empty text');
+                }
+            }
+            // The save-side helper accepts document JSON, not unparsed legacy prose.
+            assert.equal(await extractContent('extractPlainTextFromContent', legacy), '');
+        });
+        await t.test('production section excerpts skip blank paragraphs and preserve marked text spacing', async () => {
+            const getExcerpt = content => evaluate('(() => {const helpers=window.newsParsing;return helpers.deriveExcerptFromSections(helpers.adaptLegacyArticleToSections({article_content:' + JSON.stringify(content) + '}));})()');
+            assert.equal(await getExcerpt({ type: 'doc', content: [
+                { type: 'paragraph' },
+                { type: 'paragraph', content: [{ type: 'text', text: '   ' }] },
+                { type: 'paragraph', content: [{ type: 'text', text: '  First ', marks: [{ type: 'bold' }] }, { type: 'text', text: 'relevant paragraph  ', marks: [{ type: 'italic' }] }] },
+                { type: 'paragraph', content: [{ type: 'text', text: 'Later paragraph' }] },
+            ] }), '  First relevant paragraph  ');
+            assert.equal(await getExcerpt('   \n\n   '), '');
+        });
+        await t.test('production legacy adapter uses excerpt only for absent rich content and preserves rich-content priority', async () => {
+            const adapt = input => evaluate('window.newsParsing.adaptLegacyArticleToSections(' + JSON.stringify({ title: 'Legacy article', excerpt: 'Fallback first\nFallback second', article_content: input }) + ')');
+            const fallback = { type: 'doc', content: [
+                { type: 'paragraph', content: [{ type: 'text', text: 'Fallback first' }] },
+                { type: 'paragraph', content: [{ type: 'text', text: 'Fallback second' }] },
+            ] };
+            for (const input of [null, undefined, '']) {
+                const adapted = await adapt(input);
+                assert.equal(adapted.sections.length, 1);
+                assert.deepEqual(adapted.sections[0].body, fallback);
+            }
+            for (const input of [body, JSON.stringify(body)]) assert.deepEqual((await adapt(input)).sections[0].body, body);
+            assertEmptyDocument((await adapt({ type: 'doc', content: [] })).sections[0].body);
+            assert.deepEqual((await adapt('{invalid json}')).sections[0].body, {
+                type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: '{invalid json}' }] }],
+            }, 'nonempty malformed content is literal text, not an excerpt fallback');
+        });
         const font = await evaluate(`Array.from(document.styleSheets).flatMap(sheet=>{try{return Array.from(sheet.cssRules)}catch{return[]}}).filter(r=>r.type===CSSRule.FONT_FACE_RULE&&r.style.fontFamily.includes('Poppins')).map(r=>r.style.fontFamily)[0]`);
         if (font)
             await evaluate('document.documentElement.style.setProperty("--font-poppins",' + JSON.stringify(font) + ');document.fonts.ready');
         const render = async (mode, layout = 'text-only', image = false, heading = false, kind = 'formatted') => { await evaluate('window.renderNewsFixture(' + [mode, layout, image, heading, kind].map(v => JSON.stringify(v)).join(',') + ')'); await wait(100); await evaluate('document.fonts.ready'); };
+        await t.test('production Tiptap initialization accepts parsed legacy whitespace and rich documents without empty text nodes', async () => {
+            const cases = [
+                { input: 'Text', paragraphs: ['Text'] },
+                { input: 'Line 1\nLine 2', paragraphs: ['Line 1', 'Line 2'] },
+                { input: '  Trim me  ', paragraphs: ['Trim me'] },
+                { input: 'First\n   \nSecond', paragraphs: ['First', '', 'Second'] },
+                { input: 'Text\n\n\n   \n\nMore', paragraphs: ['Text', '', 'More'] },
+                { input: '  \nText\n  \nMore  \n  ', paragraphs: ['', 'Text', '', 'More', ''] },
+                { input: '   \n\n   ', paragraphs: ['', ''] },
+                { input: '\n\n', paragraphs: [''] },
+                { input: null, paragraphs: [''] },
+                { input: { type: 'doc', content: [{ type: 'paragraph' }, { type: 'paragraph', content: [] }] }, paragraphs: ['', ''] },
+                { input: body },
+            ];
+            try {
+                for (const { input, paragraphs } of cases) {
+                    const parsed = await parseContent(input);
+                    await evaluate('window.newsBody=' + JSON.stringify(parsed));
+                    await render('editable'); // Creates the real editor through useSectionEditor.
+                    const actual = await evaluate(`(() => {
+                        const editor=window.fixtureEditor;
+                        const source=editor.schema.nodeFromJSON(window.newsBody);
+                        // Validate both the parser output and initialized editor with ProseMirror,
+                        // so editor sanitization cannot conceal an invalid empty text node.
+                        source.check();
+                        editor.state.doc.check();
+                        const paragraphs=[];source.forEach(node=>paragraphs.push(node.textContent));
+                        return {source:source.toJSON(),initialized:editor.getJSON(),paragraphs};
+                    })()`);
+                    assert.deepEqual(actual.initialized, actual.source, 'initialization preserves schema-valid paragraphs, marks and hard breaks');
+                    if (paragraphs) assert.deepEqual(actual.paragraphs, paragraphs, JSON.stringify(input));
+                }
+            } finally {
+                await evaluate('window.newsBody=' + JSON.stringify(body));
+            }
+        });
         const originalBase = await evaluate('window.newsBase');
         for (const width of [1440, 375]) {
             await size(width, 900);
@@ -129,6 +286,17 @@ async function main() {
         }
         console.log('PASS cover default/explicit visibility, matching hidden layout, recovery affordance and independent section images in editable/read-only/public at desktop/mobile widths.');
         const measure = () => evaluate(`(()=>{const title=document.querySelector('.news-article-title');const body=document.querySelector('[data-news-target="body"]')||document.querySelector('.news-article-body')||document.querySelector('.prose');const ps=[...body.querySelectorAll('p')];const paragraph=ps[0];const heading=document.querySelector('h2');const cs=getComputedStyle(paragraph);return {titleGap:Math.round(paragraph.getBoundingClientRect().top-title.getBoundingClientRect().bottom),headingGap:heading?Math.round(paragraph.getBoundingClientRect().top-heading.getBoundingClientRect().bottom):null,bodyWidth:Math.round(body.getBoundingClientRect().width),paragraphWidth:Math.round(paragraph.getBoundingClientRect().width),paragraphs:ps.length,firstHeight:Math.round(paragraph.getBoundingClientRect().height),secondHeight:Math.round(ps[1]?.getBoundingClientRect().height||0),paragraphGap:Math.round(ps[1]?.getBoundingClientRect().top-paragraph.getBoundingClientRect().bottom||0),bodyHeight:Math.round(body.getBoundingClientRect().height),font:cs.fontFamily,fontSize:cs.fontSize,lineHeight:cs.lineHeight,align:cs.textAlign,whiteSpace:cs.whiteSpace,wordSpacing:cs.wordSpacing,text:ps.map(p=>p.textContent)}})()`);
+        await t.test('public rich articles render marks without editable surfaces or editor controls',async()=>{
+            for(const width of [1440,375]){
+                await size(width,900);await render('public');
+                const publicState=await evaluate(`(()=>{const body=document.querySelector('.news-article-body');return {text:body.textContent,bold:!!body.querySelector('strong'),italic:!!body.querySelector('em'),editable:[...document.querySelectorAll('*')].some(node=>node.isContentEditable),tiptap:document.querySelectorAll('.ProseMirror,.tiptap').length,controls:document.querySelectorAll('[data-news-target],[data-news-panel],[aria-label="Bold"],[aria-label="Italic"],[aria-label="Text formatting"]').length,designMode:document.designMode};})()`);
+                assert.ok(publicState.bold && publicState.italic,'rich marks are rendered');
+                assert.equal(publicState.editable,false);assert.equal(publicState.tiptap,0);assert.equal(publicState.controls,0);assert.equal(publicState.designMode,'off');
+                await evaluate("document.querySelector('.news-article-body p').click()");
+                await call('Input.insertText',{text:'UNINTENDED PUBLIC EDIT'});await wait(80);
+                assert.equal(await evaluate("document.querySelector('.news-article-body').textContent"),publicState.text,'typing cannot alter public article content');
+            }
+        });
         const windowSavedParagraphCount = saved.article_sections.sections[0].body.content.length;
         for (const width of [1440, 375]) {
             await size(width, 900);

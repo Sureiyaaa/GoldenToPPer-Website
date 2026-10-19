@@ -22,11 +22,11 @@ const initialArticle = { id: 'fixture', title: 'Inspector fixture', category: 'U
 const write = (name, text) => fs.writeFileSync(path.join(work, name), text);
 write('browse-a.png', Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=', 'base64'));
 write('browse-b.png', fs.readFileSync(path.join(work, 'browse-a.png')));
-write('loader.cjs', 'const ts = require(' + JSON.stringify(repoRequire.resolve('typescript')) + ');' + " module.exports = function(source) { if(this.resourcePath.endsWith('news'+require('path').sep+'page.tsx')) {source=source.replace('const editorsRegistry = useRef<Map<string, Editor>>(new Map());','const editorsRegistry = useRef<Map<string, Editor>>(new Map()); (window as any).newsEditors=editorsRegistry.current;');source=source.replace('  if (isFetching) {',\"(window as any).newsTest = { sections: () => sectionsRef.current, values: getValues, drafts: () => sectionImages.draftsRef.current, reorder: reorderSections, reset: handleReset, stage: stageSectionImage, remove: removeSection, save: () => handleSubmit(onSubmit, showFirstInvalidField)() };\\n  if (isFetching) {\");}return ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX}}).outputText;};");
+write('loader.cjs', 'const ts = require(' + JSON.stringify(repoRequire.resolve('typescript')) + ');' + " module.exports = function(source) { if(this.resourcePath.endsWith('news'+require('path').sep+'page.tsx')) {source=source.replace('const editorsRegistry = useRef<Map<string, Editor>>(new Map());','const editorsRegistry = useRef<Map<string, Editor>>(new Map()); (window as any).newsEditors=editorsRegistry.current;');source=source.replace('onChange: (body, sectionId) => {','onChange: (body, sectionId) => { (window as any).newsSectionUpdates.push({articleId: editId, sectionId, body: structuredClone(body)});');source=source.replace('  if (isFetching) {',\"(window as any).newsTest = { sections: () => sectionsRef.current, values: getValues, drafts: () => sectionImages.draftsRef.current, reorder: reorderSections, reset: handleReset, stage: stageSectionImage, remove: removeSection, syncSections: setSections, save: () => handleSubmit(onSubmit, showFirstInvalidField)() };\\n  if (isFetching) {\");}return ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX}}).outputText;};");
 write('navigation.js', `import {useState,useEffect} from 'react'; export const useRouter = () => ({push() {}, replace() {}}); export const useSearchParams = () => { const [id,setId]=useState('fixture'); useEffect(()=>{window.fixtureNavigate=setId;return()=>{delete window.fixtureNavigate;};},[]); return new URLSearchParams('?edit='+id); };`);
-write('data.js', `export const initial = ${JSON.stringify(initialArticle)}; const other={...initial,id:'other',title:'Other article',slug:'other-article',article_sections:{...initial.article_sections,sections:[{...initial.article_sections.sections[0],id:'other-a'}]}}; export const read = (id='fixture') => id==='other'?other:JSON.parse(localStorage.getItem('news-inspector-fixture') || JSON.stringify(initial)); window.uploadCalls=[];window.saveCalls=[];export const createClient = () => ({ from: () => ({ id:'fixture',select(){return this;},is(){return this;},eq(field,id){this.id=id;return this;},order:async()=>({data:[{id:'fixture',title:read().title},{id:'other',title:other.title}],error:null}),single:async function(){return {data:read(this.id),error:null};} }) }); export async function saveArticleToDB(value,id) {window.saveCalls.push({id,value:structuredClone(value)});if(window.failSave)throw Error('Fixture database failure');if(window.holdSave)await new Promise(resolve=>window.releaseSave=resolve);window.lastSaved=structuredClone(value);localStorage.setItem('news-inspector-fixture',JSON.stringify({id:'fixture',...value}));return {id:'fixture'};} export async function uploadImage(request) {const file=request.get('file');const fileName=request.get('fileName');window.uploadCalls.push({name:file.name,fileName,type:file.type,size:file.size,isFile:file instanceof File});if(window.holdUploads)await new Promise(resolve=>window.releaseUpload=resolve);if(window.failUpload)throw Error('Fixture storage failure');return location.origin+'/uploaded/'+fileName;} export async function createAuditLogAction(){}`);
-write('entry.jsx', `import React from 'react'; import {createRoot} from 'react-dom/client'; import News from ${JSON.stringify(path.join(root, 'app/admin/news/page.tsx').replace(/\\/g, '/'))}; createRoot(document.getElementById('app')).render(<News/>);`);
-async function main() {
+write('data.js', `export const initial = ${JSON.stringify(initialArticle)}; const other={...initial,id:'other',title:'Other article',slug:'other-article',article_sections:{...initial.article_sections,sections:[{...initial.article_sections.sections[0],id:'other-a'}]}}; export const read = (id='fixture') => id==='other'?(window.otherNewsFixture||other):JSON.parse(localStorage.getItem('news-inspector-fixture') || JSON.stringify(initial)); window.uploadCalls=[];window.saveCalls=[];window.newsSectionUpdates=[];export const createClient = () => ({ from: () => ({ id:'fixture',select(){return this;},is(){return this;},eq(field,id){this.id=id;return this;},order:async()=>({data:[{id:'fixture',title:read().title},{id:'other',title:other.title}],error:null}),single:async function(){return {data:read(this.id),error:null};} }) }); export async function saveArticleToDB(value,id) {window.saveCalls.push({id,value:structuredClone(value)});if(window.failSave)throw Error('Fixture database failure');if(window.holdSave)await new Promise(resolve=>window.releaseSave=resolve);window.lastSaved=structuredClone(value);localStorage.setItem('news-inspector-fixture',JSON.stringify({id:'fixture',...value}));return {id:'fixture'};} export async function uploadImage(request) {const file=request.get('file');const fileName=request.get('fileName');window.uploadCalls.push({name:file.name,fileName,type:file.type,size:file.size,isFile:file instanceof File});if(window.holdUploads)await new Promise(resolve=>window.releaseUpload=resolve);if(window.failUpload)throw Error('Fixture storage failure');return location.origin+'/uploaded/'+fileName;} export async function createAuditLogAction(){}`);
+write('entry.jsx', `import React from 'react'; import {createRoot} from 'react-dom/client'; import News from ${JSON.stringify(path.join(root, 'app/admin/news/page.tsx').replace(/\\/g, '/'))}; const root=createRoot(document.getElementById('app'));window.unmountNewsFixture=()=>root.unmount();root.render(<News/>);`);
+async function main(t) {
   await new Promise((resolve, reject) => webpack({ mode: 'development', context: root, entry: path.join(work, 'entry.jsx'), devtool: false, output: {path: work, filename: 'bundle.js'}, resolve: { extensions: ['.tsx','.ts','.jsx','.js'], modules: [path.join(root, 'node_modules'), 'node_modules'], alias: { 'next/navigation': path.join(work, 'navigation.js'), '@/utils/supabase/client': path.join(work, 'data.js'), '@/app/actions/news': path.join(work, 'data.js'), '@/app/actions/admin_fetchers': path.join(work, 'data.js'), '@': root } }, module: {rules: [{ test: /\.[jt]sx?$/, exclude: /node_modules/, use: path.join(work, 'loader.cjs') }]} }, (error, stats) => error || stats.hasErrors() ? reject(error || new Error(stats.toString({all:false, errors:true}))) : resolve()));
   const css = await postcss([tailwind({base: root})]).process(fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8'), {from: path.join(root,'app/globals.css')});
   write('styles.css', css.css);
@@ -47,9 +47,15 @@ async function main() {
     socket = new WebSocket(browserUrl);
     await new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error('WebSocket startup timeout')), 10000); socket.onopen = () => { clearTimeout(timer); resolve(); }; socket.onerror = error => { clearTimeout(timer); reject(error); }; });
 
-    let chooser; let dragData; let id = 0; const pending = new Map(); const exceptions = [];
+    let chooser; let dragData; let id = 0; let fixtureReload = false; let pageLoads = 0; const pending = new Map(); const exceptions = [];
     socket.onmessage = event => {
       const message = JSON.parse(event.data); if(message.method==='Page.fileChooserOpened') chooser=message.params; if (message.method === 'Input.dragIntercepted') dragData = message.params.data;
+      if(message.method==='Page.loadEventFired')pageLoads++;
+      // Starting a fresh fixture explicitly discards its draft. Native typing can
+      // activate Chromium's beforeunload prompt, which otherwise blocks CDP reads.
+      if(message.method==='Page.javascriptDialogOpening' && message.params.type==='beforeunload' && fixtureReload){
+        send('Page.handleJavaScriptDialog',{accept:true},message.sessionId).catch(error=>exceptions.push(error.message));
+      }
       if (message.method === 'Runtime.exceptionThrown') exceptions.push(message.params.exceptionDetails.text + ' ' + (message.params.exceptionDetails.exception?.description || ''));
       if (message.id) { const task = pending.get(message.id); pending.delete(message.id); message.error ? task.reject(new Error(JSON.stringify(message.error))) : task.resolve(message.result); }
     };
@@ -73,6 +79,14 @@ async function main() {
 
 
     const waitFor = async (expression,message) => {for(let i=0;i<120;i++){if(await evaluate(expression))return;await wait(60);}throw Error(message+' | '+exceptions.join('\n'));};
+    const reloadPage = async () => {
+      const previousLoads=pageLoads;fixtureReload=true;
+      try{
+        await call("Page.reload");
+        for(let i=0;i<120 && pageLoads===previousLoads;i++)await wait(60);
+        assert.ok(pageLoads>previousLoads,'wait for the new document instead of reading the outgoing page');
+      }finally{fixtureReload=false;}
+    };
     const ready = async () => waitFor("document.querySelector('[data-news-panel=\"overview\"]') && document.querySelectorAll('[data-section-id]').length===3",'Fixture did not load');
     const click = async selector => {await evaluate('document.querySelector('+JSON.stringify(selector)+').click()');await wait(100);};
     const preview = id => '[data-news-preview-section="'+id+'"] [data-news-target="image"]';
@@ -82,7 +96,12 @@ async function main() {
     const reset = async () => {await click('header button:has(svg.lucide-rotate-ccw)');};
     const back = async () => {await evaluate("Array.from(document.querySelectorAll('aside button')).find(e=>e.textContent.includes('Back to overview')).click()");await wait(80);};
     const sectionImage = async id => {await click(preview(id));assert.equal(await evaluate("document.querySelector('[data-news-panel]').dataset.newsPanel"),'section-image');assert.equal(await evaluate("!!document.querySelector('aside input[type=url], aside #news-title, aside [aria-label=\"Article sections\"]')"),false);};
-    const fixture = async (article = null) => {await evaluate('localStorage.clear()');if(article)await evaluate('localStorage.setItem("news-inspector-fixture",'+JSON.stringify(JSON.stringify(article))+')');await call('Page.reload');await wait(150);if(article && !article.article_sections)await waitFor("document.querySelector('[data-news-panel=\"overview\"]') && document.querySelectorAll('[data-section-id]').length===1",'Legacy fixture did not load');else await ready();await call('Page.setInterceptFileChooserDialog',{enabled:true});await evaluate("window.revoked=[];const revoke=URL.revokeObjectURL.bind(URL);URL.revokeObjectURL=url=>{window.revoked.push(url);revoke(url);};");};
+    const fixture = async (article = null) => {
+      await evaluate('localStorage.clear()');if(article)await evaluate('localStorage.setItem("news-inspector-fixture",'+JSON.stringify(JSON.stringify(article))+')');
+      await reloadPage();await wait(150);
+      if(article && !article.article_sections)await waitFor("document.querySelector('[data-news-panel=\"overview\"]') && document.querySelectorAll('[data-section-id]').length===1",'Legacy fixture did not load');else await ready();
+      await call('Page.setInterceptFileChooserDialog',{enabled:true});await evaluate("window.revoked=[];const revoke=URL.revokeObjectURL.bind(URL);URL.revokeObjectURL=url=>{window.revoked.push(url);revoke(url);};");
+    };
     const browse = async filename => {
       chooser=null;
       await evaluate("(() => {const button=Array.from(document.querySelectorAll('aside button')).find(e=>e.textContent.includes('Replace Image'));if(button)button.click();else document.querySelector('aside [role=\"button\"]').click();})()");
@@ -130,7 +149,7 @@ async function main() {
     await click(coverSwitch);await reset();assert.equal(await evaluate('window.newsTest.values().show_cover_on_article'),true,'Reset restores visible default');
     await click(cover);await click(coverSwitch);await save();await completed();
     assert.equal(await evaluate('window.lastSaved.show_cover_on_article'),false);assert.equal(await evaluate('window.lastSaved.image'),image);
-    await call('Page.reload');await wait(200);await ready();assert.equal(await evaluate("!!document.querySelector('[data-news-cover]')"),false);
+    await reloadPage();await wait(200);await ready();assert.equal(await evaluate("!!document.querySelector('[data-news-cover]')"),false);
     await click(cover);assert.equal(await evaluate("document.querySelector('header button:has(svg.lucide-save)').disabled"),true,'reopening persisted hidden cover stays clean');
     await click(coverSwitch);await reset();assert.equal(await evaluate('window.newsTest.values().show_cover_on_article'),false,'Reset restores persisted hidden preference');
     await click(cover);await browse('browse-a.png');assert.equal(await evaluate("!!document.querySelector('[data-news-cover]')"),false,'replacement respects hidden preference');
@@ -138,22 +157,27 @@ async function main() {
     await click(cover);await browse('browse-b.png');await save();await completed();
     const replacementCover=await evaluate('window.lastSaved.image');assert.ok(replacementCover.includes('/uploaded/'));assert.equal(await evaluate('window.lastSaved.show_cover_on_article'),false);
     assert.deepEqual(await evaluate('window.lastSaved.article_sections.sections.map(s=>s.image)'),initialArticle.article_sections.sections.map(s=>s.image),'cover replacement leaves section images unchanged');
-    await click(cover);await click(coverSwitch);await save();await completed();await call('Page.reload');await wait(200);await ready();
+    await click(cover);await click(coverSwitch);await save();await completed();await reloadPage();await wait(200);await ready();
     assert.equal(await evaluate("document.querySelector('[data-news-cover] img').getAttribute('src')"),replacementCover,'re-enabling restores the saved replacement');
     await click(cover);await remove();assert.equal(await evaluate('window.newsTest.values().image'),'');assert.equal(await evaluate("!!document.querySelector('[data-news-cover]')"),false);await reset();assert.equal(await evaluate('window.newsTest.values().image'),replacementCover);
     console.log('PASS cover visibility default/hide/reopen/restore, no reserved space, independent section/editor state, mock Save/reload, persisted Reset, hidden cover replace/remove');
-    for(const [index,layout] of ['image-above','title-above','image-contained','sidebar-image-right','sidebar-image-left'].entries()){
+    const legacyLayoutCases = [
+      ...['image-above','title-above','image-contained','sidebar-image-right','sidebar-image-left'].map(layout=>({layout,expected:layout})),
+      {layout:undefined,expected:'image-above'},
+      {layout:null,expected:'image-above'},
+    ];
+    for(const [index,{layout,expected}] of legacyLayoutCases.entries()){
       // Include older records without article_sections, exercising the legacy adapter.
       const article={...initialArticle,article_layout:layout,article_sections:index%2?null:initialArticle.article_sections};
       await fixture(article);await overviewOrder();
-      assert.equal(await evaluate('window.newsTest.values().article_layout'),layout);
+      assert.equal(await evaluate('window.newsTest.values().article_layout'),expected,'loading retains historical values and applies the editor default for absent/null layouts');
       assert.equal(await evaluate("document.querySelector('header button:has(svg.lucide-save)').disabled"),true);
       await evaluate("window.newsEditors.get(window.newsTest.sections().sections[0].id).commands.insertContent(' discarded edit')");await reset();
-      assert.equal(await evaluate('window.newsTest.values().article_layout'),layout,'Reset preserves the stored article layout');
+      assert.equal(await evaluate('window.newsTest.values().article_layout'),expected,'Reset restores the loaded article layout');
       assert.equal(await evaluate("document.querySelector('header button:has(svg.lucide-save)').disabled"),true);
       await evaluate("window.newsEditors.get(window.newsTest.sections().sections[0].id).commands.insertContent(' saved edit')");await save();await completed();
-      assert.equal(await evaluate('window.lastSaved.article_layout'),layout,'Save preserves every legacy article layout');
-      await call('Page.reload');await waitFor('!!document.querySelector("#news-title") && window.newsTest.values().article_layout==='+JSON.stringify(layout),'Saved article failed to reload');await overviewOrder();
+      assert.equal(await evaluate('window.lastSaved.article_layout'),expected,'Save preserves each historical layout or the editor default');
+      await reloadPage();await waitFor('!!document.querySelector("#news-title") && window.newsTest.values().article_layout==='+JSON.stringify(expected),'Saved article failed to reload');await overviewOrder();
     }
     await fixture();
     for(const [selector,panel] of [
@@ -166,7 +190,7 @@ async function main() {
       assert.equal(await evaluate("document.querySelector('header button:has(svg.lucide-save)').disabled"),true,'preview/card selection alone stays clean');
       await back();await overviewOrder();
     }
-    console.log('PASS no article layout UI, overview field order, contextual selection/Back stays clean, all five legacy article_layout values survive load/Reset/Save/reload');
+    console.log('PASS no article layout UI, overview field order, contextual selection/Back stays clean, all five legacy article_layout values survive load/Reset/Save/reload; omitted/null values use the editor default');
     const editInput = async (selector,value) => {
       await evaluate('(()=>{const input=document.querySelector('+JSON.stringify(selector)+');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(input,'+JSON.stringify(value)+');input.dispatchEvent(new Event("input",{bubbles:true}));input.dispatchEvent(new Event("change",{bubbles:true}));})()');await wait(100);
     };
@@ -202,7 +226,7 @@ async function main() {
     }
     await click('[data-news-header-part="date"]');await editInput('#news-title','Saved article header');await editInput('#news-date','2026-11-03');
     await save();await completed();assert.equal(await evaluate('window.lastSaved.title'),'Saved article header');assert.equal(await evaluate('window.lastSaved.date'),'2026-11-03');assert.equal(await evaluate('window.lastSaved.slug'),initialArticle.slug);
-    await call('Page.reload');await wait(200);await ready();await click('[data-news-header-part="date"]');
+    await reloadPage();await wait(200);await ready();await click('[data-news-header-part="date"]');
     assert.equal(await evaluate('document.querySelector("#news-title").value'),'Saved article header');assert.equal(await evaluate('document.querySelector("#news-date").value'),'2026-11-03');
     await editInput('#news-title','Discarded title');await editInput('#news-date','2026-11-04');await reset();
     assert.equal(await evaluate('window.newsTest.values().title'),'Saved article header');assert.equal(await evaluate('window.newsTest.values().date'),'2026-11-03');
@@ -257,7 +281,7 @@ async function main() {
       await nativeClick(sectionBody('b'));assert.equal(await evaluate("window.newsEditors.get('b')===window.emptyEditor && window.emptyEditor.can().undo()"),true);
       await back();await save();await completed();
       assert.equal(await evaluate('JSON.stringify(window.lastSaved).includes('+JSON.stringify(placeholder)+')'),false,'placeholder is absent from saved JSON, excerpt and legacy content');
-      await call('Page.reload');await wait(200);await ready();assert.equal((await emptyCue('b')).empty,true);
+      await reloadPage();await wait(200);await ready();assert.equal((await emptyCue('b')).empty,true);
       await nativeClick(sectionBody('b'));await call('Input.insertText',{text:'Discard this edit'});await wait(100);assert.equal((await emptyCue('b')).empty,false);
       await reset();assert.equal((await emptyCue('b')).empty,true);assert.equal(await evaluate("document.querySelector('header button:has(svg.lucide-save)').disabled"),true);
     }
@@ -290,6 +314,63 @@ async function main() {
         assert.equal(await evaluate("document.querySelectorAll('aside [aria-label=Bold],aside #section-heading').length"),0,'dedicated section image panel remains separate');await back();
       }
     }
+    await t.test('native formatting and history shortcuts update the selected text and toolbar states',async()=>{
+      await size(1440,900);await fixture();await nativeClick(sectionBody('a'));
+      await evaluate('window.shortcutEditor=window.newsEditors.get("a");window.shortcutEditor.commands.focus();window.shortcutEditor.commands.setTextSelection({from:1,to:6});void 0;');await wait(80);
+      const shortcut=async letter=>{
+        const event={key:letter,code:'Key'+letter.toUpperCase(),windowsVirtualKeyCode:letter.toUpperCase().charCodeAt(0),modifiers:2};
+        await call('Input.dispatchKeyEvent',{type:'keyDown',...event});await call('Input.dispatchKeyEvent',{type:'keyUp',...event});await wait(100);
+      };
+      const states=()=>evaluate('({bold:document.querySelector("aside [aria-label=Bold]").getAttribute("aria-pressed"),italic:document.querySelector("aside [aria-label=Italic]").getAttribute("aria-pressed")})');
+      const assertMarks=async expected=>{
+        assert.deepEqual((await bodyValue('a')).content[0].content[0].marks?.map(mark=>mark.type).sort()||[],expected);
+        assert.deepEqual(await states(),{bold:String(expected.includes('bold')),italic:String(expected.includes('italic'))});
+      };
+      const unchangedB=await bodyValue('b');
+      await assertMarks(['bold']);
+      await shortcut('b');await assertMarks([]);
+      await shortcut('b');await assertMarks(['bold']);
+      await shortcut('i');await assertMarks(['bold','italic']);
+      const combined=await bodyValue('a');
+      await shortcut('i');await assertMarks(['bold']);
+      await shortcut('z');await assertMarks(['bold','italic']);assert.deepEqual(await bodyValue('a'),combined);
+      await shortcut('y');await assertMarks(['bold']);
+      await evaluate('window.shortcutEditor.commands.setTextSelection({from:7,to:12});void 0;');await wait(80);
+      assert.deepEqual(await states(),{bold:'true',italic:'false'});
+      await evaluate('window.shortcutEditor.commands.setTextSelection({from:1,to:6});void 0;');await shortcut('i');await assertMarks(['bold','italic']);
+      await evaluate('window.shortcutEditor.commands.setTextSelection({from:7,to:12});void 0;');await wait(80);
+      assert.deepEqual(await evaluate('({bold:window.shortcutEditor.isActive("bold"),italic:window.shortcutEditor.isActive("italic"),from:window.shortcutEditor.state.selection.from,to:window.shortcutEditor.state.selection.to})'),{bold:true,italic:false,from:7,to:12},'the editor selection itself has only bold marks');
+      assert.deepEqual(await states(),{bold:'true',italic:'false'},'toolbar follows the newly selected text, not previous marks');
+      await evaluate('window.shortcutEditor.commands.setTextSelection({from:1,to:6});void 0;');await wait(80);
+      assert.deepEqual(await states(),{bold:'true',italic:'true'});
+      assert.deepEqual(await bodyValue('b'),unchangedB,'shortcuts cannot format another section');
+    });
+    await t.test('toolbar selection states and styling follow all mark combinations and section switches at desktop/mobile widths',async()=>{
+      const markedArticle=structuredClone(initialArticle);
+      markedArticle.article_sections.sections[0].body={type:'doc',content:[{type:'paragraph',content:[
+        {type:'text',text:'Plain '},{type:'text',text:'Bold ',marks:[{type:'bold'}]},
+        {type:'text',text:'Italic ',marks:[{type:'italic'}]},{type:'text',text:'Both',marks:[{type:'bold'},{type:'italic'}]},
+      ]}]};
+      for(const width of [1440,375]){
+        await size(width,900);await fixture(markedArticle);await nativeClick(sectionBody('a'));
+        await evaluate('window.markEditor=window.newsEditors.get("a");void 0;');
+        const assertToolbar=async(bold,italic)=>{
+          const buttons=await evaluate('["Bold","Italic"].map(label=>{const button=document.querySelector("aside [aria-label="+label+"]");return {pressed:button.getAttribute("aria-pressed"),activeStyle:button.classList.contains("bg-brand-blue") && button.classList.contains("text-white"),disabled:button.disabled};})');
+          assert.deepEqual(buttons,[bold,italic].map(active=>({pressed:String(active),activeStyle:active,disabled:false})));
+        };
+        for(const [from,to,bold,italic] of [[1,6,false,false],[7,11,true,false],[12,18,false,true],[19,23,true,true]]){
+          await evaluate('window.markEditor.commands.focus();window.markEditor.commands.setTextSelection({from:'+from+',to:'+to+'});void 0;');await wait(80);
+          await assertToolbar(bold,italic);
+        }
+        assert.equal(await evaluate("document.querySelector('header button:has(svg.lucide-save)').disabled"),true,'selecting marks alone leaves the form clean');
+        await click(sectionBody('b'));await wait(80);await assertToolbar(true,false);
+        await click(sectionBody('a'));await wait(80);await assertToolbar(true,true);
+        assert.equal(await evaluate('window.newsEditors.get("a")===window.markEditor'),true);
+        await nativeClick('aside [aria-label="Bold"]');await assertToolbar(false,true);
+        await nativeClick('aside [aria-label="Italic"]');await assertToolbar(false,false);
+        assert.deepEqual(await evaluate('({from:window.markEditor.state.selection.from,to:window.markEditor.state.selection.to})'),{from:19,to:23},'toolbar clicks preserve the selected range');
+      }
+    });
     await size(1440,900);await fixture();await nativeClick(sectionBody('b'));await completeSectionSettings();
     assert.equal(await evaluate("document.querySelector('[data-news-preview-section=\"b\"] .ProseMirror').contains(document.activeElement)"),true,'activating a new body keeps focus in its inline editor');
     await click(sectionBody('a'));
@@ -315,11 +396,14 @@ async function main() {
     await save();await completed();assert.deepEqual(await evaluate('window.lastSaved.article_sections.sections.map(section=>section.id)'),['b','a','c']);
     assert.deepEqual(await evaluate("window.lastSaved.article_sections.sections.find(section=>section.id==='a').body"),formattedA);assert.deepEqual(await evaluate("window.lastSaved.article_sections.sections.find(section=>section.id==='b').body"),typedB);
     assert.ok((await evaluate("window.lastSaved.article_sections.sections.find(section=>section.id==='a').image")).includes('/uploaded/'));assert.equal(await evaluate('window.lastSaved.image'),image);
-    await call('Page.reload');await wait(200);await ready();await click(sectionBody('a'));await completeSectionSettings();assert.equal(await evaluate('document.querySelector("#section-heading").value'),'Updated section heading');
+    await reloadPage();await wait(200);await ready();await click(sectionBody('a'));await completeSectionSettings();assert.equal(await evaluate('document.querySelector("#section-heading").value'),'Updated section heading');
     await evaluate("window.newsEditors.get('a').commands.insertContent(' discarded body')");await editInput('#section-heading','Discarded heading');await reset();
     assert.deepEqual(await bodyValue('a'),formattedA);assert.equal(await evaluate("window.newsTest.sections().sections.find(section=>section.id==='a').heading"),'Updated section heading');
     await evaluate("window.deletedEditor=window.newsEditors.get('a');void 0;");await click('[data-section-id="a"] button[aria-label^="Delete"]');
     assert.equal(await evaluate("!window.newsEditors.has('a') && window.deletedEditor.isDestroyed"),true,'removal cleans up the correct editor');assert.deepEqual(await bodyValue('b'),typedB);
+    const afterRemoval = await evaluate('({sections:window.newsTest.sections(),updates:window.newsSectionUpdates})');
+    await evaluate("void window.deletedEditor.emit('update',{editor:window.deletedEditor})");await wait(70);
+    assert.deepEqual(await evaluate('({sections:window.newsTest.sections(),updates:window.newsSectionUpdates})'),afterRemoval,'a late event from the destroyed editor neither resurrects its section nor invokes a stale callback');
     await reset();await fixture();
     console.log('PASS body/card share complete Section Settings, control order/ID removal, native Bold/Italic/range targeting, correct sections, inline focus/typing, keyboard drag, history, mock Save/reload/Reset, image workflow and editor cleanup');
     await click('[aria-label="Select Third heading"]');
@@ -349,8 +433,8 @@ async function main() {
     assert.ok((await img()).startsWith('blob:'));await reset();
     assert.equal(await storedLayout('c'),'text-only');assert.equal(await canonical('c'),image);assert.equal(await evaluate('!!document.querySelector('+JSON.stringify(preview('c'))+')'),false);
     await click('[aria-label="Select Third heading"]');await placement('Image Right');await browse('browse-a.png');await save();await completed();
-    await call('Page.reload');await wait(200);await ready();assert.equal(await storedLayout('c'),'image-right');assert.ok((await canonical('c')).includes('/uploaded/'));assert.equal(await canonical('a'),image);assert.equal(await canonical('b'),image);
-    await sectionImage('c');await remove();await save();await completed();await call('Page.reload');await wait(200);await ready();
+    await reloadPage();await wait(200);await ready();assert.equal(await storedLayout('c'),'image-right');assert.ok((await canonical('c')).includes('/uploaded/'));assert.equal(await canonical('a'),image);assert.equal(await canonical('b'),image);
+    await sectionImage('c');await remove();await save();await completed();await reloadPage();await wait(200);await ready();
     assert.equal(await storedLayout('c'),'image-right','Save/reload retains placement after image removal');assert.equal(await canonical('c'),'');assert.equal(await evaluate('!!document.querySelector('+JSON.stringify(preview('c'))+')'),false);
     await click('[aria-label="Select Section 2"]');assert.equal(await evaluate("document.querySelector('aside [aria-label=\"Image placement\"] [aria-pressed=true]').textContent.includes('Image Below')"),true);
     await fixture();await evaluate("Array.from(document.querySelectorAll('aside button')).find(button=>button.textContent.includes('Add Section')).click()");await wait(120);
@@ -387,7 +471,7 @@ async function main() {
     assert.equal(await evaluate('JSON.stringify(window.lastSaved.article_sections).includes("blob:")'),false);
     assert.equal(await evaluate('window.uploadCalls[0].isFile && window.uploadCalls[0].size>0 && window.uploadCalls[0].fileName.endsWith(".png")'),true);
     assert.equal(await evaluate('Object.keys(window.newsTest.drafts()).length'),0);
-    await call('Page.reload');await wait(200);await ready();assert.equal(await canonical('a'),persistentA);await sectionImage('a');assert.equal(await img(),persistentA);await waitFor("document.querySelector('aside img')?.naturalWidth>0",'Saved image did not render');
+    await reloadPage();await wait(200);await ready();assert.equal(await canonical('a'),persistentA);await sectionImage('a');assert.equal(await img(),persistentA);await waitFor("document.querySelector('aside img')?.naturalWidth>0",'Saved image did not render');
     console.log('PASS Save resolves the File to a persistent URL, switching/reordering while upload is pending stays ID-bound, mock database reload restores it, cover unchanged');
     await fixture();await sectionImage('a');await browse('browse-a.png');await evaluate('window.failUpload=true');await save();
     await waitFor("document.querySelector('aside').textContent.includes('Fixture storage failure')",'Missing upload error');assert.ok((await img()).startsWith('blob:'));assert.equal(await evaluate('window.saveCalls.length'),0);
@@ -407,6 +491,143 @@ async function main() {
     await fixture();await sectionImage('a');await browse('browse-a.png');await heldUpload();await evaluate("window.fixtureNavigate('other')");await waitFor("document.querySelector('#news-title')?.value==='Other article'",'Article switch failed');await release();await wait(120);
     assert.equal(await evaluate('window.saveCalls.length'),0);assert.equal(await evaluate("window.newsTest.sections().sections[0].id"),'other-a');assert.equal(await evaluate('Object.keys(window.newsTest.drafts()).length'),0);
     console.log('PASS Reset/navigation invalidates pending uploads; no old save or image is applied to the next article');
+    // Observe the real page callback and drive external content props through its
+    // React setter. Editor creation, subscriptions and cleanup remain production code.
+    const clean = () => evaluate("document.querySelector('header button:has(svg.lucide-save)').disabled");
+    const lifecycleSnapshot = () => evaluate('({sections:window.newsTest.sections(),updates:window.newsSectionUpdates})');
+    const typeInSection = async (id,text) => {
+      await click(sectionBody(id));await evaluate('window.newsEditors.get('+JSON.stringify(id)+').commands.focus("end")');await wait(70);
+      await call('Input.insertText',{text});await wait(70);
+    };
+    await t.test('schema-equivalent JSON never replaces the document, while real mark changes synchronize with rich structure intact',async()=>{
+      const article=structuredClone(initialArticle);
+      article.article_sections.sections[0].body={type:'doc',content:[
+        {type:'paragraph',content:[{type:'text',text:'  Bold ',marks:[{type:'bold'}]},{type:'text',text:'and italic',marks:[{type:'italic'}]},{type:'hardBreak'},{type:'text',text:' then both  ',marks:[{type:'bold'},{type:'italic'}]}]},
+        {type:'paragraph'},
+        {type:'paragraph',content:[{type:'text',text:'Final  paragraph.'}]},
+      ]};
+      await fixture(article);await click(sectionBody('a'));
+      const canonical=await evaluate('window.newsEditors.get("a").getJSON()');
+      // Reverse the root key order and express the same blank paragraph as [].
+      const equivalent={content:structuredClone(canonical.content),type:'doc'};equivalent.content[1].content=[];
+      await evaluate('window.equalityEditor=window.newsEditors.get("a");window.syncDocumentChanges=0;window.equalityEditor.on("transaction",({transaction})=>{if(transaction.docChanged)window.syncDocumentChanges++;});void 0;');
+      const synchronized=await evaluate('window.newsTest.sections()');synchronized.sections[0].body=equivalent;
+      await evaluate('window.newsTest.syncSections('+JSON.stringify(synchronized)+')');await wait(100);
+      assert.equal(await evaluate('window.syncDocumentChanges'),0,'equivalent props cause no document-changing transaction');
+      assert.equal(await evaluate('window.equalityEditor.can().undo() || window.equalityEditor.can().redo()'),false);
+      assert.deepEqual(await evaluate('window.equalityEditor.getJSON()'),canonical);assert.deepEqual(await evaluate('window.newsSectionUpdates'),[]);assert.equal(await clean(),true);
+      const changed=structuredClone(canonical);changed.content[0].content[0].marks.push({type:'italic'});synchronized.sections[0].body=changed;
+      await evaluate('window.newsTest.syncSections('+JSON.stringify(synchronized)+')');
+      await waitFor('window.equalityEditor.getJSON().content[0].content[0].marks.length===2','A real formatting-only change did not synchronize');
+      assert.deepEqual(await evaluate('window.equalityEditor.getJSON()'),changed,'spaces, hard breaks, marks and empty paragraphs survive synchronization');
+      assert.equal(await evaluate('window.syncDocumentChanges'),1);assert.equal(await evaluate('window.newsEditors.get("a")===window.equalityEditor'),true);
+      assert.deepEqual(await evaluate('window.newsSectionUpdates'),[]);assert.equal(await clean(),true);
+    });
+    await t.test('malformed and unsupported external content retains the existing quiet empty-document fallback',async()=>{
+      await fixture();await click(sectionBody('a'));
+      for(const input of [{type:'doc',content:[{type:'unsupported-block'}]},{type:'doc',content:[{type:'paragraph',content:[{type:'text',text:''}]}]},{type:'unsupported'},null]){
+        const synchronized=await evaluate('window.newsTest.sections()');synchronized.sections[0].body=input;
+        await evaluate('window.newsTest.syncSections('+JSON.stringify(synchronized)+')');await wait(100);
+        assert.deepEqual(await evaluate('window.newsEditors.get("a").getJSON()'),{type:'doc',content:[{type:'paragraph'}]});
+        assert.deepEqual(await evaluate('window.newsSectionUpdates'),[]);assert.equal(await clean(),true);
+      }
+    });
+    await t.test('external section synchronization is quiet and subsequent user callbacks retain the correct article and section',async()=>{
+      await fixture();await click(sectionBody('a'));
+      assert.equal(await clean(),true);assert.deepEqual(await evaluate('window.newsSectionUpdates'),[],'loading and selection emit no user edits');
+      const synchronized=await evaluate('window.newsTest.sections()');synchronized.sections[0].body=body('Externally synchronized section');
+      await evaluate('window.syncEditor=window.newsEditors.get("a");window.newsTest.syncSections('+JSON.stringify(synchronized)+')');
+      await waitFor('window.newsEditors.get("a").state.doc.textContent==="Externally synchronized section"','External content did not synchronize');
+      assert.deepEqual(await evaluate('window.newsEditors.get("a").getJSON()'),synchronized.sections[0].body,'compare document structure without depending on JSON property order');
+      assert.equal(await evaluate('window.newsEditors.get("a")===window.syncEditor'),true);
+      assert.equal(await clean(),true,'prop synchronization does not dirty the form');assert.deepEqual(await evaluate('window.newsSectionUpdates'),[]);
+      await typeInSection('a',' after synchronization');
+      const updates=await evaluate('window.newsSectionUpdates');assert.equal(updates.length,1);assert.equal(updates[0].articleId,'fixture');assert.equal(updates[0].sectionId,'a');
+      assert.deepEqual(updates[0].body,await bodyValue('a'));assert.deepEqual(await bodyValue('b'),initialArticle.article_sections.sections[1].body);
+      assert.equal(await clean(),false,'a real user edit still dirties the synchronized section');
+    });
+    await t.test('section switching preserves independent Undo and Redo, including edits after stable-ID reordering',async()=>{
+      await fixture();await typeInSection('a',' history A');const editedA=await bodyValue('a');
+      await typeInSection('b',' history B');const editedB=await bodyValue('b');
+      await evaluate('window.historyA=window.newsEditors.get("a");window.historyB=window.newsEditors.get("b");void 0;');
+      await click(sectionBody('a'));assert.equal(await evaluate('window.historyA.commands.undo()'),true);await wait(70);
+      assert.deepEqual(await bodyValue('a'),initialArticle.article_sections.sections[0].body);assert.deepEqual(await bodyValue('b'),editedB);
+      assert.equal(await evaluate('window.historyB.can().undo() && !window.historyB.can().redo()'),true,'Undo in A leaves B history untouched');
+      assert.equal(await evaluate('window.historyA.commands.redo()'),true);await wait(70);assert.deepEqual(await bodyValue('a'),editedA);
+      await click(sectionBody('b'));assert.equal(await evaluate('window.historyB.commands.undo()'),true);await wait(70);
+      assert.deepEqual(await bodyValue('b'),initialArticle.article_sections.sections[1].body);assert.deepEqual(await bodyValue('a'),editedA);
+      assert.equal(await evaluate('window.historyA.can().undo() && !window.historyA.can().redo()'),true,'Undo in B leaves A history untouched');
+      await evaluate('window.historyB.commands.redo();window.newsTest.reorder("b","a")');await wait(100);
+      assert.deepEqual(await evaluate('window.newsTest.sections().sections.map(section=>section.id)'),['b','a','c']);
+      await typeInSection('b',' after reorder');
+      assert.equal(await evaluate('window.newsEditors.get("a")===window.historyA && window.newsEditors.get("b")===window.historyB'),true);
+      assert.ok(JSON.stringify(await bodyValue('b')).includes('history B after reorder'));
+      assert.deepEqual(await bodyValue('a'),editedA);assert.deepEqual(await bodyValue('c'),initialArticle.article_sections.sections[2].body);
+      assert.equal(await evaluate('window.newsSectionUpdates.at(-1).sectionId'),'b');
+    });
+    await t.test('Reset destroys discarded history and republishes a usable editor even with unchanged saved ID and body',async()=>{
+      await fixture();await typeInSection('a',' discarded A');await typeInSection('b',' discarded B');
+      await evaluate('window.beforeResetEditors=[...window.newsEditors.values()];void 0;');
+      assert.equal(await evaluate('window.beforeResetEditors.every(editor=>editor.can().undo())'),true);
+      await reset();assert.deepEqual(await evaluate('window.newsTest.sections()'),initialArticle.article_sections);
+      assert.equal(await evaluate('window.beforeResetEditors.every(editor=>editor.isDestroyed)'),true);
+      const resetHistory=await evaluate(`Array.from(window.newsEditors,([id,editor])=>{
+        const saved=window.newsTest.sections().sections.find(section=>section.id===id).body;
+        return {id,undo:editor.can().undo(),redo:editor.can().redo(),sameDocument:editor.state.doc.eq(editor.schema.nodeFromJSON(saved)),sameJSONOrder:JSON.stringify(editor.getJSON())===JSON.stringify(saved)};
+      })`);
+      const resetState=await lifecycleSnapshot();
+      for(const id of ['a','b']){
+        await click(sectionBody(id));await evaluate('window.newsEditors.get('+JSON.stringify(id)+').commands.focus("end")');await wait(70);
+        await call('Input.dispatchKeyEvent',{type:'keyDown',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:2});
+        await call('Input.dispatchKeyEvent',{type:'keyUp',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:2});await wait(70);
+      }
+      const afterUndo=await lifecycleSnapshot();const cleanAfterUndo=await clean();
+      assert.deepEqual(afterUndo.sections.sections,resetState.sections.sections,'native Undo must not recover discarded section content');
+      await click(sectionBody('a'));await evaluate('window.unchangedBodyEditor=window.newsEditors.get("a");void 0;');
+      await editInput('#section-heading','Discard only a heading change');await reset();
+      assert.equal(await evaluate('window.unchangedBodyEditor.isDestroyed && window.newsEditors.get("a")!==window.unchangedBodyEditor'),true);
+      await typeInSection('a',' usable after Reset');
+      assert.ok(JSON.stringify(await bodyValue('a')).includes('usable after Reset'));assert.equal(await evaluate('window.newsSectionUpdates.at(-1).sectionId'),'a');
+      const typedAfterReset=await bodyValue('a');
+      assert.equal(await evaluate('window.newsEditors.get("a").commands.undo()'),true);await wait(70);
+      assert.deepEqual(await bodyValue('a'),initialArticle.article_sections.sections[0].body,'new typing can be undone to the saved body');
+      assert.equal(await evaluate('window.newsEditors.get("a").can().undo()'),false,'Undo stops at the Reset boundary');
+      assert.equal(await evaluate('window.newsEditors.get("a").commands.redo()'),true);await wait(70);
+      assert.deepEqual(await bodyValue('a'),typedAfterReset,'Redo restores the legitimate edit made after Reset');
+      await evaluate('window.newsEditors.get("a").commands.setTextSelection({from:1,to:6})');await nativeClick('aside [aria-label="Italic"]');
+      assert.deepEqual((await bodyValue('a')).content[0].content[0].marks.map(mark=>mark.type).sort(),['bold','italic'],'the republished editor also formats the saved text');
+      assert.deepEqual(await bodyValue('b'),initialArticle.article_sections.sections[1].body);
+      assert.ok(resetHistory.every(editor=>!editor.undo && !editor.redo),'Reset must start with empty history: '+JSON.stringify({resetHistory,updatesAfterNativeUndo:afterUndo.updates.length-resetState.updates.length,cleanAfterUndo}));
+      assert.deepEqual(afterUndo,resetState,'native Ctrl+Z cannot emit an edit after Reset');assert.equal(cleanAfterUndo,true);
+    });
+    await t.test('article changes destroy owned editors and isolate content and callbacks even when section IDs collide',async()=>{
+      await fixture();await typeInSection('a',' unsaved article A');await typeInSection('b',' unsaved article B');
+      const other={...initialArticle,id:'other',title:'Other article',slug:'other-article',article_sections:{...initialArticle.article_sections,sections:[{...initialArticle.article_sections.sections[0],body:body('Different article content')}]}};
+      await evaluate('window.articleEditors=[...window.newsEditors.values()];window.otherNewsFixture='+JSON.stringify(other)+';void 0;');
+      const updatesBefore=await evaluate('window.newsSectionUpdates.length');await evaluate('window.fixtureNavigate("other")');
+      await waitFor('document.querySelector("#news-title")?.value==="Other article" && window.newsEditors.get("a") && !window.articleEditors.includes(window.newsEditors.get("a")) && !window.newsEditors.get("a").isDestroyed','Article switch did not publish a fresh editor');
+      assert.equal(await evaluate('window.articleEditors.every(editor=>editor.isDestroyed)'),true);
+      assert.deepEqual(await evaluate('[...window.newsEditors.keys()]'),['a']);assert.deepEqual(await bodyValue('a'),other.article_sections.sections[0].body);
+      assert.equal(await evaluate('window.newsSectionUpdates.length'),updatesBefore,'article loading emits no user update');assert.equal(await clean(),true);
+      const loaded=await lifecycleSnapshot();await evaluate('window.articleEditors.forEach(editor=>editor.emit("update",{editor}))');await wait(70);
+      assert.deepEqual(await lifecycleSnapshot(),loaded,'old editors cannot update a new article with the same section ID');
+      await typeInSection('a',' current article edit');const currentUpdate=await evaluate('window.newsSectionUpdates.at(-1)');
+      assert.equal(currentUpdate.articleId,'other');assert.equal(currentUpdate.sectionId,'a');assert.deepEqual(currentUpdate.body,await bodyValue('a'));
+      await evaluate('window.otherEditor=window.newsEditors.get("a");window.fixtureNavigate("fixture")');
+      await waitFor('document.querySelector("#news-title")?.value==="Inspector fixture" && window.newsEditors.get("a") && window.newsEditors.get("a")!==window.otherEditor && !window.newsEditors.get("a").isDestroyed','Returning article did not reload a fresh editor');
+      assert.equal(await evaluate('window.otherEditor.isDestroyed'),true);
+      assert.deepEqual(await evaluate('window.newsTest.sections()'),initialArticle.article_sections,'returning loads saved content, not the old unsaved edits');assert.equal(await clean(),true);
+      const returned=await lifecycleSnapshot();await evaluate('window.otherEditor.emit("update",{editor:window.otherEditor});delete window.otherNewsFixture');await wait(70);
+      assert.deepEqual(await lifecycleSnapshot(),returned);
+    });
+    await t.test('unmount destroys all owned editors and detaches their update callbacks',async()=>{
+      await fixture();await click(sectionBody('b'));await evaluate('window.unmountEditors=[...window.newsEditors.values()];void 0;');
+      assert.equal(await evaluate('window.unmountEditors.length'),2);
+      const before=await lifecycleSnapshot();await evaluate('window.unmountNewsFixture()');await wait(70);
+      assert.equal(await evaluate('window.newsEditors.size===0 && window.unmountEditors.every(editor=>editor.isDestroyed) && document.querySelector("#app").childElementCount===0'),true);
+      await evaluate('window.unmountEditors.forEach(editor=>editor.emit("update",{editor}))');await wait(70);
+      assert.deepEqual(await lifecycleSnapshot(),before,'destroyed editors retain no page update subscriptions after unmount');
+    });
     assert.equal(exceptions.length,0,exceptions.join('\n'));
 
   } finally { if(socket)socket.close(); browser.kill();server.closeAllConnections();await new Promise(resolve=>server.close(resolve)); }

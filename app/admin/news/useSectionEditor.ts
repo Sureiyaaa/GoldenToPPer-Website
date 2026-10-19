@@ -1,6 +1,6 @@
 'use client';
 
-import { Editor } from '@tiptap/core';
+import { createDocument, Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { useEffect, useRef, useState } from 'react';
 import { parseArticleContent } from '@/lib/rendering/article-content';
@@ -87,12 +87,19 @@ export function useSectionEditor({
     editor.on('update', handleUpdate);
     setActiveEditor(editor);
     const newContent = parseInitialSectionContent(content);
-    const currentContent = editor.getJSON();
+    // Match setContent's schema parsing and invalid-input fallback. Comparing
+    // nodes also ignores JSON key order and equivalent empty-paragraph shapes.
+    const nextDocument = createDocument(newContent, editor.schema, {}, {
+      errorOnInvalidContent: editor.options.enableContentCheck,
+    });
 
-    if (JSON.stringify(newContent) !== JSON.stringify(currentContent)) {
+    if (!editor.state.doc.eq(nextDocument)) {
       isSyncingRef.current = true;
-      editor.commands.setContent(newContent);
-      isSyncingRef.current = false;
+      try {
+        editor.commands.setContent(nextDocument, false);
+      } finally {
+        isSyncingRef.current = false;
+      }
     }
     return () => { editor.off('update', handleUpdate); };
   }, [sectionId, content, editorsRegistry, registeredEditor]);

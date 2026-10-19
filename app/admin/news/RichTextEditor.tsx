@@ -1,6 +1,6 @@
 'use client';
 
-import { Editor } from '@tiptap/react';
+import { Editor, useEditorState } from '@tiptap/react';
 import { Bold, Italic } from 'lucide-react';
 
 interface FormattingToolbarProps {
@@ -16,6 +16,15 @@ export default function RichTextEditor({
 }: FormattingToolbarProps) {
   // Use section editor if editing a section, otherwise use article editor
   const activeEditor = isEditingSection && sectionEditor ? sectionEditor : editor;
+  const formatting = useEditorState({
+    editor: activeEditor,
+    selector: ({ editor: currentEditor }) => ({
+      isBold: currentEditor?.isActive('bold') ?? false,
+      isItalic: currentEditor?.isActive('italic') ?? false,
+      canBold: currentEditor?.can().chain().focus().toggleBold().run() ?? false,
+      canItalic: currentEditor?.can().chain().focus().toggleItalic().run() ?? false,
+    }),
+  });
   const compactToolbarClass = 'inline-flex items-center gap-2 align-top';
   const buttonClass = isEditingSection
     ? 'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2'
@@ -38,10 +47,7 @@ export default function RichTextEditor({
     activeEditor.chain().focus().toggleItalic().run();
   };
 
-  const canBold = activeEditor.can().chain().focus().toggleBold().run();
-  const canItalic = activeEditor.can().chain().focus().toggleItalic().run();
-  const isBold = activeEditor.isActive('bold');
-  const isItalic = activeEditor.isActive('italic');
+  const { canBold, canItalic, isBold, isItalic } = formatting!;
 
   return (
     <div
