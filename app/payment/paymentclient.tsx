@@ -48,7 +48,6 @@ const paymentSchema = z.object({
     .min(1, "Amount is required")
     .regex(/^\d+(\.\d{1,2})?$/, "Invalid format (e.g. 1000.00)")
     .refine((val) => parseFloat(val) > 0, "Amount must be greater than zero"),
-  paymentMethod: z.string().min(1, "Please select a payment method"),
 });
 
 type PaymentFormData = z.infer<typeof paymentSchema>;
@@ -143,17 +142,6 @@ const LEGACY_PROJECT_AMENITY_FALLBACK: Record<number, string[]> = {
 };
 
 const CAROUSEL_DURATION_MS = 5000;
-
-const PAYMENT_METHODS = [
-  { id: "mastercard", label: "Mastercard", logo: "/images/payment/mastercard.svg" },
-  { id: "bdo", label: "BDO Pay", logo: "/images/payment/bdo-pays.png" },
-  { id: "gcash", label: "GCash", logo: "/images/payment/gcash.svg" },
-  { id: "grabpay", label: "GrabPay", logo: "/images/payment/grabpay.png" },
-  { id: "alipay", label: "Alipay", logo: "/images/payment/alipay.svg" },
-  { id: "wechat", label: "WeChat Pay", logo: "/images/payment/wechatpay.png" },
-  { id: "maya", label: "Maya", logo: "/images/payment/maya.jpg" },
-  { id: "visa", label: "Visa", logo: "/images/payment/visa.svg" },
-];
 
 const STEPS = [
   { id: 1, label: 'Payer', title: 'Payer Information' },
@@ -399,13 +387,12 @@ export default function PaymentClient() {
     defaultValues: {
       firstName: '', lastName: '', email: '', contactNumber: '',
       projectId: '', towerId: '', unitTypeId: '', unitNumber: '',
-      paymentPurpose: '', amount: '', paymentMethod: '',
+      paymentPurpose: '', amount: '',
     }
   });
 
   const watchProjectId = watch("projectId");
   const watchTowerId = watch("towerId");
-  const watchPaymentMethod = watch("paymentMethod");
 
   // Load projects on mount
   useEffect(() => {
@@ -654,7 +641,7 @@ export default function PaymentClient() {
   // Step-specific field validation
   const step1Fields = ['firstName', 'lastName', 'email', 'contactNumber'] as const;
   const step2Fields = ['projectId', 'towerId', 'unitTypeId', 'unitNumber'] as const;
-  const step3Fields = ['paymentPurpose', 'amount', 'paymentMethod'] as const;
+  const step3Fields = ['paymentPurpose', 'amount'] as const;
 
   const validateAndMoveNext = async () => {
     let fieldsToValidate: readonly string[] = [];
@@ -1069,42 +1056,6 @@ export default function PaymentClient() {
             {errors.amount && <span className={errorStyles}><AlertCircle size={12} />{errors.amount.message}</span>}
           </div>
         </div>
-
-        <div>
-          <span id="payment-method-label" className={labelStyles}>Payment Method</span>
-          <div role="group" aria-labelledby="payment-method-label" className="grid grid-cols-2 @[28rem]:grid-cols-4 gap-3">
-            {PAYMENT_METHODS.map((method) => {
-              const isSelected = watchPaymentMethod === method.label;
-              return (
-                <button
-                  key={method.id}
-                  type="button"
-                  aria-pressed={isSelected}
-                  onClick={() => setValue("paymentMethod", method.label, { shouldValidate: true })}
-                  className={`relative flex h-[92px] min-w-0 flex-col items-center justify-center gap-2 rounded-lg border px-3 py-4 transition-[background-color,border-color,box-shadow] duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue ${
-                    isSelected
-                      ? 'border-brand-blue bg-brand-gold/10 shadow-[0_2px_8px_rgba(20,47,114,0.06)] ring-1 ring-brand-blue/10'
-                      : 'border-stone-200 bg-[#FDFBF7] hover:border-brand-gold/70 hover:bg-white hover:shadow-[0_2px_8px_rgba(20,47,114,0.04)]'
-                  }`}
-                  title={method.label}
-                >
-                  <span className="flex h-7 w-full max-w-24 items-center justify-center">
-                    <img
-                      src={method.logo}
-                      alt={method.label}
-                      className="max-h-6 max-w-full w-auto object-contain"
-                    />
-                  </span>
-                  <span className="text-xs font-medium text-brand-blue text-center">{method.label}</span>
-                  {isSelected && (
-                    <Check size={14} aria-hidden="true" className="absolute top-2 right-2 rounded-full bg-brand-gold/25 text-brand-blue" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-          {errors.paymentMethod && <span className={`${errorStyles} mt-2`}><AlertCircle size={12} />{errors.paymentMethod.message}</span>}
-        </div>
     </div>
   );
 
@@ -1114,7 +1065,6 @@ export default function PaymentClient() {
     const selectedProject = projects.find(p => p.id.toString() === formData.projectId);
     const selectedTower = towers.find(t => t.id.toString() === formData.towerId);
     const selectedUnitType = unitTypes.find(u => u.id.toString() === formData.unitTypeId);
-    const selectedPaymentMethod = PAYMENT_METHODS.find(m => m.label === formData.paymentMethod);
     const summaryCardStyles = "min-w-0 rounded-md border border-stone-200/70 bg-[#FDFBF7] p-4 transition-colors duration-200 hover:border-brand-gold/30";
     const summaryHeaderStyles = "mb-2.5 flex items-center justify-between gap-3 border-b border-stone-200/70 pb-1.5";
     const summaryLabelStyles = "text-xs leading-4 text-stone-500";
@@ -1158,10 +1108,6 @@ export default function PaymentClient() {
               <div>
                 <dt className={summaryLabelStyles}>Amount</dt>
                 <dd className={summaryValueStyles}><strong className="font-semibold text-brand-blue">₱{parseFloat(formData.amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong></dd>
-              </div>
-              <div>
-                <dt className={summaryLabelStyles}>Payment Method</dt>
-                <dd className={summaryValueStyles}>{selectedPaymentMethod?.label}</dd>
               </div>
             </dl>
           </section>
