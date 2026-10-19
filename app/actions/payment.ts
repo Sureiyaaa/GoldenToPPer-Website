@@ -31,13 +31,9 @@ const paymentSchema = z.object({
     .min(1, 'Amount is required')
     .regex(/^\d+(\.\d{1,2})?$/, 'Invalid amount format')
     .refine((val) => parseFloat(val) > 0, 'Amount must be greater than zero'),
-  paymentMethod: z.string().min(1, 'Payment method is required'),
 });
 
 type PaymentFormData = z.infer<typeof paymentSchema>;
-
-// Allowed payment methods
-const ALLOWED_PAYMENT_METHODS = ['BDO Pay', 'GCash', 'GrabPay', 'Alipay', 'WeChat Pay', 'Maya', 'Visa', 'Mastercard'];
 
 // Allowed payment purposes
 const ALLOWED_PAYMENT_PURPOSES = ['Downpayment', 'Monthly Due', 'Reservation Fee', 'CTS Reprinting Fee'];
@@ -252,11 +248,6 @@ async function verifyPaymentCaptchaToken(token: string): Promise<{ valid: boolea
 
 // Validate payment data server-side
 async function validatePaymentData(data: PaymentFormData): Promise<{ valid: boolean; error?: string }> {
-  // Validate payment method is in allowed list
-  if (!ALLOWED_PAYMENT_METHODS.includes(data.paymentMethod)) {
-    return { valid: false, error: 'Invalid payment method.' };
-  }
-
   // Validate payment purpose is in allowed list
   if (!ALLOWED_PAYMENT_PURPOSES.includes(data.paymentPurpose)) {
     return { valid: false, error: 'Invalid payment purpose.' };
