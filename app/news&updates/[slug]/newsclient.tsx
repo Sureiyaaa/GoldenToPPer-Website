@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useParams } from 'next/navigation';
 import Navbar from '@/app/components/navbar';
 import Footer from '@/app/components/footer';
 import PageTransition from '@/app/components/page-transitions';
@@ -36,16 +37,23 @@ interface NewsArticle {
   article_sections?: Record<string, any> | null;
 }
 
-export default function SingleNewsClient({ 
-  initialArticle 
-}: { 
+export default function SingleNewsClient({
+  initialArticle
+}: {
   initialArticle: NewsArticle | null;
 }) {
+  const params = useParams();
+  const currentSlug = params?.slug as string | undefined;
   const [recommendations, setRecommendations] = useState<NewsArticle[]>([]);
   const lenisRef = useRef<any>(null);
+  const lenisTickerCallbackRef = useRef<((time: number) => void) | null>(null);
   const cardsRef = useRef<(HTMLAnchorElement | null)[]>([]);
 
   cardsRef.current = [];
+
+  useIsomorphicLayoutEffect(() => {
+    window.history.scrollRestoration = 'manual';
+  }, []);
 
   // Show the latest other visible articles below the current story.
   useEffect(() => {
@@ -76,11 +84,17 @@ export default function SingleNewsClient({
 
   // --- Smooth Scrolling Setup ---
   useIsomorphicLayoutEffect(() => {
-    window.history.scrollRestoration = 'manual';
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-  }, [initialArticle]);
+  }, [currentSlug]);
 
   useEffect(() => {
+    if (lenisRef.current) {
+      lenisRef.current.destroy();
+    }
+    if (lenisTickerCallbackRef.current) {
+      gsap.ticker.remove(lenisTickerCallbackRef.current);
+    }
+
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
 
     const lenis = new Lenis({
@@ -94,13 +108,19 @@ export default function SingleNewsClient({
     lenis.scrollTo(0, { immediate: true });
 
     lenis.on('scroll', ScrollTrigger.update);
-    gsap.ticker.add((time) => { lenis.raf(time * 1000); });
+
+    const tickerCallback = (time: number) => { lenis.raf(time * 1000); };
+    lenisTickerCallbackRef.current = tickerCallback;
+    gsap.ticker.add(tickerCallback);
 
     return () => {
       lenis.destroy();
-      gsap.ticker.remove((time) => lenis.raf(time * 1000));
+      if (lenisTickerCallbackRef.current) {
+        gsap.ticker.remove(lenisTickerCallbackRef.current);
+        lenisTickerCallbackRef.current = null;
+      }
     };
-  }, [initialArticle]);
+  }, [currentSlug]);
 
   // --- Scroll Animations for Recommendations ---
   useEffect(() => {
