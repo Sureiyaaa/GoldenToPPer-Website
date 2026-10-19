@@ -66,9 +66,6 @@ export default function PreviewSkeleton({
       {/* Article Cover Image and Header */}
       {showCover && (
         <div data-news-cover className="relative h-screen min-h-[400px] w-full overflow-hidden bg-black">
-          <div className="pointer-events-none absolute left-0 top-0 z-20 flex h-16 w-full items-center bg-gradient-to-b from-black/80 to-transparent px-6 md:h-20">
-            <div className="h-8 w-32 rounded-sm bg-white/20 backdrop-blur-sm" />
-          </div>
           <img
             src={data.image}
             alt={data.title}

@@ -19,6 +19,7 @@ write('transition.jsx', 'import React from "react";export default function Trans
 write('image.jsx', 'import React from "react";export default function Image({fill,priority,sizes,...props}){return <img {...props}/>;}');
 write('animation.js', 'export default {registerPlugin(){},ticker:{add(){},remove(){}},context(){return {revert(){}}},fromTo(){}};export const ScrollTrigger={update(){},refresh(){}};');
 write('lenis.js', 'export default class Lenis{scrollTo(){}on(){}destroy(){}raf(){}}');
+write('navigation.js', 'export const useParams=()=>({slug:"spacing-fixture"});');
 write('data.js', 'export const createClient=()=>({from:()=>({select(){return this},neq(){return this},is(){return this},eq(){return this},order(){return this},limit:async()=>({data:[],error:null})})});');
 write('entry.jsx', `
 import React,{useRef,useEffect,useState} from 'react';import{createRoot}from'react-dom/client';
@@ -32,7 +33,7 @@ function Fixture({mode,article}){const doc=article.article_sections||adaptLegacy
 const root=createRoot(document.getElementById('app'));let key=0;window.renderNewsFixture=(mode,layout='text-only',hasImage=false,heading=false,kind='formatted')=>{let article=kind==='saved'?window.newsSaved:{...window.newsBase};if(kind==='formatted')article.article_sections={version:1,createdAt:'2026-10-19',updatedAt:'2026-10-19',sections:[{id:'section-a',heading:typeof heading==='string'?heading:'A section heading',headingEnabled:!!heading,layout,body:window.newsBody,image:hasImage?window.newsImage:undefined,order:0}]};if(kind==='legacy'){article.article_content=null;article.excerpt=window.newsBase.excerpt;}root.render(<Fixture key={++key} mode={mode} article={article}/>);};window.renderNewsFixture('readonly');
 `);
 async function main() {
-    await new Promise((resolve, reject) => webpack({ mode: 'development', context: root, entry: path.join(work, 'entry.jsx'), devtool: false, output: { path: work, filename: 'bundle.js' }, resolve: { extensions: ['.tsx', '.ts', '.jsx', '.js'], modules: [path.join(root, 'node_modules'), 'node_modules'], alias: { '@/app/components/navbar': path.join(work, 'empty.jsx'), '@/app/components/footer': path.join(work, 'empty.jsx'), '@/app/components/backtotop': path.join(work, 'empty.jsx'), '@/app/components/page-transitions': path.join(work, 'transition.jsx'), '@/lib/supabase/client': path.join(work, 'data.js'), 'next/link': path.join(work, 'link.jsx'), 'next/image': path.join(work, 'image.jsx'), 'lenis': path.join(work, 'lenis.js'), 'gsap/ScrollTrigger': path.join(work, 'animation.js'), 'gsap': path.join(work, 'animation.js'), '@': root } }, module: { rules: [{ test: /\.[jt]sx?$/, exclude: /node_modules/, use: path.join(work, 'loader.cjs') }] } }, (e, stats) => e || stats.hasErrors() ? reject(e || Error(stats.toString({ all: false, errors: true }))) : resolve()));
+    await new Promise((resolve, reject) => webpack({ mode: 'development', context: root, entry: path.join(work, 'entry.jsx'), devtool: false, output: { path: work, filename: 'bundle.js' }, resolve: { extensions: ['.tsx', '.ts', '.jsx', '.js'], modules: [path.join(root, 'node_modules'), 'node_modules'], alias: { '@/app/components/navbar': path.join(work, 'empty.jsx'), '@/app/components/footer': path.join(work, 'empty.jsx'), '@/app/components/backtotop': path.join(work, 'empty.jsx'), '@/app/components/page-transitions': path.join(work, 'transition.jsx'), '@/lib/supabase/client': path.join(work, 'data.js'), 'next/navigation': path.join(work, 'navigation.js'), 'next/link': path.join(work, 'link.jsx'), 'next/image': path.join(work, 'image.jsx'), 'lenis': path.join(work, 'lenis.js'), 'gsap/ScrollTrigger': path.join(work, 'animation.js'), 'gsap': path.join(work, 'animation.js'), '@': root } }, module: { rules: [{ test: /\.[jt]sx?$/, exclude: /node_modules/, use: path.join(work, 'loader.cjs') }] } }, (e, stats) => e || stats.hasErrors() ? reject(e || Error(stats.toString({ all: false, errors: true }))) : resolve()));
     const css = await postcss([tailwind({ base: root })]).process(fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8'), { from: path.join(root, 'app/globals.css') });
     write('styles.css', css.css);
     const fontDir = path.join(root, '.next/static/chunks');
@@ -269,6 +270,30 @@ async function main() {
         assert.equal(newlineRows[0].bodyHeight, newlineRows[1].bodyHeight, 'terminal literal newline matches read-only');
         assert.equal(newlineRows[0].bodyHeight, newlineRows[2].bodyHeight, 'terminal literal newline matches public');
         console.log('PASS Enter creates a paragraph, Shift+Enter creates a hard break, undo restores document structure, intentional spaces/blank lines/marks remain intact.');
+        const emptyDocuments = [
+            {type:'doc',content:[]},
+            {type:'doc',content:[{type:'paragraph'}]},
+            {type:'doc',content:[{type:'paragraph',content:[{type:'text',text:'   '},{type:'hardBreak'}]},{type:'paragraph'}]},
+        ];
+        for(const width of [1440,375]){
+            await size(width,900);
+            for(const doc of emptyDocuments){
+                await evaluate('window.newsBody='+JSON.stringify(doc));
+                for(const mode of ['editable','readonly','public']){
+                    await render(mode,'image-right',true,true);
+                    const cue=await evaluate(`(() => {const body=document.querySelector('.news-article-body');const surface=body.querySelector('.ProseMirror,.news-section-body-preview')||body;return {empty:body.dataset.empty==='true',hint:getComputedStyle(surface,'::before').content,minHeight:getComputedStyle(surface).minHeight,text:body.textContent};})()`);
+                    assert.equal(cue.empty,mode!=='public');
+                    assert.equal(cue.hint.includes("Click here to write your section's paragraph..."),mode!=='public');
+                    assert.equal(cue.text.includes('Click here'),false,'generated hint is never document text');
+                    if(mode==='public')assert.notEqual(cue.minHeight,'64px','public content has no editor minimum height');
+                    if(mode==='editable'){
+                        const content=await evaluate('window.fixtureEditor.getJSON()');
+                        if(doc.content.length)assert.deepEqual(content,doc,'whitespace, soft breaks and intentional empty paragraphs are untouched');
+                    }
+                }
+            }
+        }
+        console.log('PASS empty/whitespace-only document cue in editable and unselected admin previews only, preserved blank structure, no public cue or editor minimum height at desktop/mobile widths.');
         assert.equal(exceptions.length, 0, exceptions.join('\n'));
     }
     finally {

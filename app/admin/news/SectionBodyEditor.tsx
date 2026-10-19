@@ -36,7 +36,9 @@ export function SectionBodyEditor({
   // Observe the document without inserting placeholder content or changing history.
   const editorIsEmpty = useEditorState({
     editor: isEditing ? editor : null,
-    selector: ({ editor }) => editor ? !editor.state.doc.textContent.trim() : null,
+    selector: ({ editor: currentEditor }) => isEditing && currentEditor && currentEditor === editor
+      ? !currentEditor.state.doc.textContent.trim()
+      : null,
   });
   const isBodyEmpty = editorIsEmpty ?? !extractPlainText(section.body as TiptapDoc);
 

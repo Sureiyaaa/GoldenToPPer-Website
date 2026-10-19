@@ -218,6 +218,58 @@ async function main() {
       await call('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});await call('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});await wait(110);
     };
     const key = async value => {await call('Input.dispatchKeyEvent',{type:'keyDown',key:value,code:value});await call('Input.dispatchKeyEvent',{type:'keyUp',key:value,code:value});await wait(70);};
+    const emptyCue = id => evaluate('(() => {const body=document.querySelector('+JSON.stringify(sectionBody(id))+');const surface=body.querySelector(".ProseMirror,.news-section-body-preview");const hint=getComputedStyle(surface,"::before");return {empty:body.dataset.empty==="true",hint:hint.content,height:surface.getBoundingClientRect().height,pointerEvents:hint.pointerEvents,text:surface.textContent,description:body.getAttribute("aria-description")};})()');
+    const placeholder = "Click here to write your section's paragraph...";
+    const emptyArticle = structuredClone(initialArticle);
+    emptyArticle.article_sections.sections[1].body={type:'doc',content:[{type:'paragraph'}]};
+    for(const width of [1440,375]){
+      await size(width,900);await fixture(emptyArticle);
+      const savedEmpty=await bodyValue('b');
+      assert.equal((await emptyCue('b')).empty,true,'unselected empty body is discoverable');
+      // Native keyboard activation of the existing click-to-edit surface.
+      await evaluate('document.querySelector('+JSON.stringify(sectionBody('b'))+').focus()');await key('Enter');
+      assert.equal(await evaluate("document.querySelector('[data-news-preview-section=b] .ProseMirror')===document.activeElement"),true);
+      assert.equal(await evaluate("document.querySelector('header button:has(svg.lucide-save)').disabled"),true,'focus and selection stay clean');
+      assert.deepEqual(await bodyValue('b'),savedEmpty,'displaying/focusing the cue does not normalize the document');
+      await editInput('#section-heading','Optional heading');
+      for(const label of allChoices){
+        await placement(label);
+        for(const heading of [true,false]){
+          if(await evaluate("!document.querySelector('#section-heading').disabled")!==heading)await click('aside [aria-label="'+(heading?'Enable':'Disable')+' heading"]');
+          for(const hasImage of [true,false]){
+            if(!hasImage)await remove();
+            const cue=await emptyCue('b');assert.equal(cue.empty,true);assert.ok(cue.hint.includes(placeholder));assert.equal(cue.pointerEvents,'none');assert.ok(cue.height>=64);assert.equal(cue.text,'');assert.equal(cue.description,placeholder);
+            await nativeClick(sectionBody('b'));
+            assert.equal(await evaluate("document.querySelector('[data-news-preview-section=b] .ProseMirror')===document.activeElement"),true,'whole empty area accepts a native click');
+            if(!hasImage)await browse('browse-a.png');
+          }
+        }
+      }
+      await nativeClick(sectionBody('b'));await call('Input.insertText',{text:'A newly written paragraph'});await wait(100);
+      assert.equal((await emptyCue('b')).empty,false);assert.equal((await emptyCue('b')).hint,'none');
+      await wait(550); // Keep typing and clearing as separate undo steps.
+      await evaluate("window.emptyEditor=window.newsEditors.get('b');window.emptyEditor.commands.selectAll();void 0;");
+      await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Backspace',code:'Backspace',windowsVirtualKeyCode:8});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Backspace',code:'Backspace',windowsVirtualKeyCode:8});await wait(100);
+      assert.equal((await emptyCue('b')).empty,true,'clearing via keyboard restores the cue');
+      await evaluate('window.emptyEditor.commands.undo()');await wait(80);assert.equal((await emptyCue('b')).empty,false);
+      await evaluate('window.emptyEditor.commands.redo()');await wait(80);assert.equal((await emptyCue('b')).empty,true);
+      await click(sectionBody('a'));assert.equal((await emptyCue('a')).empty,false);assert.equal((await emptyCue('b')).empty,true);
+      await nativeClick(sectionBody('b'));assert.equal(await evaluate("window.newsEditors.get('b')===window.emptyEditor && window.emptyEditor.can().undo()"),true);
+      await back();await save();await completed();
+      assert.equal(await evaluate('JSON.stringify(window.lastSaved).includes('+JSON.stringify(placeholder)+')'),false,'placeholder is absent from saved JSON, excerpt and legacy content');
+      await call('Page.reload');await wait(200);await ready();assert.equal((await emptyCue('b')).empty,true);
+      await nativeClick(sectionBody('b'));await call('Input.insertText',{text:'Discard this edit'});await wait(100);assert.equal((await emptyCue('b')).empty,false);
+      await reset();assert.equal((await emptyCue('b')).empty,true);assert.equal(await evaluate("document.querySelector('header button:has(svg.lucide-save)').disabled"),true);
+    }
+    await size(1440,900);await fixture();
+    await evaluate("Array.from(document.querySelectorAll('aside button')).find(button=>button.textContent.includes('Add Section')).click()");await wait(100);
+    const emptyNewId=await evaluate('window.newsTest.sections().sections.at(-1).id');assert.equal((await emptyCue(emptyNewId)).empty,true);
+    await browse('browse-a.png');assert.equal((await emptyCue(emptyNewId)).empty,true,'image-first section retains its empty text cue');
+    await nativeClick(sectionBody(emptyNewId));await call('Input.insertText',{text:'Image first, then text'});await wait(100);assert.equal((await emptyCue(emptyNewId)).empty,false);await reset();
+    await evaluate("Array.from(document.querySelectorAll('aside button')).find(button=>button.textContent.includes('Add Section')).click()");await wait(100);
+    const textFirstId=await evaluate('window.newsTest.sections().sections.at(-1).id');await nativeClick(sectionBody(textFirstId));await call('Input.insertText',{text:'Text first, then image'});await wait(100);await browse('browse-a.png');assert.equal((await emptyCue(textFirstId)).empty,false);assert.ok(JSON.stringify(await bodyValue(textFirstId)).includes('Text first, then image'));await reset();
+    console.log('PASS empty cue, native click/type/clear and keyboard activation, image/text order, four placements with/without images/headings at desktop/mobile widths, clean focus, section switching, undo/redo and mock Save/reload/Reset; no persisted placeholder');
+    await fixture();
     const completeSectionSettings = async () => {
       assert.equal(await evaluate("document.querySelector('[data-news-panel]').dataset.newsPanel"),'sections');
       assert.equal(await evaluate("document.querySelector('aside h2').textContent.trim()"),'Section Settings');
