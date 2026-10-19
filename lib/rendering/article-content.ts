@@ -98,15 +98,26 @@ export function renderArticleContent(
 
   return doc.content.map((node, blockIdx) => {
     if (node.type === 'paragraph') {
+      const lastChild = node.content?.[node.content.length - 1];
+      const hasTrailingBreak = lastChild?.type === 'hardBreak' ||
+        (lastChild?.type === 'text' && /\n$/.test(lastChild.text));
       return React.createElement(
         'p',
         {
           key: blockIdx,
-          className: 'mb-6',
+          className: 'news-article-paragraph',
         },
         node.content && node.content.length > 0
-          ? renderContentNodes(node.content)
-          : ' ' // Non-breaking space for empty paragraph
+          ? React.createElement(
+              React.Fragment,
+              null,
+              renderContentNodes(node.content),
+              // Match Tiptap's trailing line box after a terminal line break.
+              hasTrailingBreak
+                ? React.createElement('br')
+                : null
+            )
+          : React.createElement('br') // Same empty line box as Tiptap; no added text.
       );
     }
     return null;

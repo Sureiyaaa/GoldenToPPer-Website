@@ -1,18 +1,20 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useParams } from 'next/navigation';
 import Navbar from '@/app/components/navbar';
 import Footer from '@/app/components/footer';
 import PageTransition from '@/app/components/page-transitions';
 import Image from 'next/image';
-import { motion } from 'framer-motion';
 import { AlertCircle, ArrowRight } from 'lucide-react';
 import Lenis from 'lenis';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import BackToTop from '@/app/components/backtotop';
 import { createClient } from '@/lib/supabase/client';
-import { renderArticleContent } from '@/lib/rendering/article-content';
+import { ArticleSections } from '@/app/components/news/ArticleSections';
+import { adaptLegacyArticleToSections, isValidSectionsDocument, type ArticleSectionsDocument } from '@/app/types/article-sections';
+import { parseArticleContent, type TiptapDoc } from '@/lib/rendering/article-content';
 import Link from 'next/link';
 
 if (typeof window !== 'undefined') {
@@ -28,20 +30,30 @@ interface NewsArticle {
   category: string;
   date: string;
   image: string | null;
+  show_cover_on_article?: boolean | null;
   excerpt: string | null;
-  article_content?: string | null;
+  article_content?: string | TiptapDoc | null; // Can be JSONB object or JSON string from Supabase
+  article_layout?: string;
+  article_sections?: Record<string, any> | null;
 }
 
-export default function SingleNewsClient({ 
-  initialArticle 
-}: { 
+export default function SingleNewsClient({
+  initialArticle
+}: {
   initialArticle: NewsArticle | null;
 }) {
+  const params = useParams();
+  const currentSlug = params?.slug as string | undefined;
   const [recommendations, setRecommendations] = useState<NewsArticle[]>([]);
   const lenisRef = useRef<any>(null);
+  const lenisTickerCallbackRef = useRef<((time: number) => void) | null>(null);
   const cardsRef = useRef<(HTMLAnchorElement | null)[]>([]);
 
   cardsRef.current = [];
+
+  useIsomorphicLayoutEffect(() => {
+    window.history.scrollRestoration = 'manual';
+  }, []);
 
   // Show the latest other visible articles below the current story.
   useEffect(() => {
@@ -72,11 +84,17 @@ export default function SingleNewsClient({
 
   // --- Smooth Scrolling Setup ---
   useIsomorphicLayoutEffect(() => {
-    window.history.scrollRestoration = 'manual';
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-  }, []);
+  }, [currentSlug]);
 
   useEffect(() => {
+    if (lenisRef.current) {
+      lenisRef.current.destroy();
+    }
+    if (lenisTickerCallbackRef.current) {
+      gsap.ticker.remove(lenisTickerCallbackRef.current);
+    }
+
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
 
     const lenis = new Lenis({
@@ -90,13 +108,19 @@ export default function SingleNewsClient({
     lenis.scrollTo(0, { immediate: true });
 
     lenis.on('scroll', ScrollTrigger.update);
-    gsap.ticker.add((time) => { lenis.raf(time * 1000); });
+
+    const tickerCallback = (time: number) => { lenis.raf(time * 1000); };
+    lenisTickerCallbackRef.current = tickerCallback;
+    gsap.ticker.add(tickerCallback);
 
     return () => {
       lenis.destroy();
-      gsap.ticker.remove((time) => lenis.raf(time * 1000));
+      if (lenisTickerCallbackRef.current) {
+        gsap.ticker.remove(lenisTickerCallbackRef.current);
+        lenisTickerCallbackRef.current = null;
+      }
     };
-  }, []);
+  }, [currentSlug]);
 
   // --- Scroll Animations for Recommendations ---
   useEffect(() => {
@@ -144,82 +168,74 @@ export default function SingleNewsClient({
     );
   }
 
+  // Check if article has sections (new model) or uses legacy layout (old model)
+  const hasSections = initialArticle.article_sections && isValidSectionsDocument(initialArticle.article_sections);
+
+  // If no sections, adapt legacy content to sections in-memory for unified rendering
+  const sectionsDoc: ArticleSectionsDocument = hasSections
+    ? (initialArticle.article_sections as ArticleSectionsDocument)
+    : adaptLegacyArticleToSections({
+        title: initialArticle.title,
+        excerpt: initialArticle.excerpt || '',
+        article_content: initialArticle.article_content ? parseArticleContent(initialArticle.article_content) : null,
+        image: initialArticle.image,
+        article_layout: initialArticle.article_layout,
+      });
+
+  const showCover = Boolean(initialArticle.image) && initialArticle.show_cover_on_article !== false;
+
   return (
     <PageTransition>
       <div className="relative min-h-screen bg-white font-sans text-gray-900 selection:bg-brand-gold selection:text-white flex flex-col" style={{ overflowAnchor: 'none' }}>
-        
-        <div className="absolute top-0 left-0 w-full z-[100]"><Navbar /></div>
-        
-        {/* --- 100VH HERO COVER --- */}
-        <section className="relative w-full h-screen z-10 bg-black">
-          {initialArticle.image ? (
+
+        {/* Article Header: Cover image, navbar, title, metadata */}
+        {!showCover && <Navbar />}
+        {showCover && (
+          <div data-news-cover className="relative h-screen min-h-[400px] w-full overflow-hidden bg-black">
+            <div className="pointer-events-none absolute top-0 left-0 w-full z-[100]"><Navbar /></div>
             <Image
-              src={initialArticle.image}
+              src={initialArticle.image!}
               alt={initialArticle.title}
               fill
               priority
               sizes="100vw"
               className="object-cover opacity-80"
             />
-          ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-brand-blue to-[#0d1b3e]" />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/20 z-10 pointer-events-none"></div>
-        </section>
-
-        {/* --- EDITORIAL ARTICLE CONTENT --- */}
-        <main className="w-full relative z-20 bg-white py-20 md:py-32">
-          {/* ALIGNMENT FIX: Changed max-w-[55rem] to max-w-[85rem] */}
-          <div className="max-w-[85rem] mx-auto px-6 md:px-12">
-            
-            <motion.header 
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.8 }}
-              className="mb-12 max-w-[70rem]" 
-            >
-              <p className="text-brand-gold text-[11px] md:text-xs font-bold uppercase tracking-widest mb-4">
-                {initialArticle.date}
-              </p>
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-serif text-brand-blue leading-[1.15] font-normal">
-                {initialArticle.title}
-              </h1>
-            </motion.header>
-
-            <motion.article
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 1, delay: 0.2 }}
-            className="mt-12 w-full"
-          >
-            <div className="text-base md:text-[17px] text-gray-700 leading-[1.85]">
-              {renderArticleContent(
-                initialArticle.article_content || initialArticle.excerpt
-              )}
-            </div>
-          </motion.article>
-
+            <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/20 z-10 pointer-events-none"></div>
           </div>
-        </main>
+        )}
+
+        {/* Title and Metadata */}
+        <div className="news-article-header relative z-20 w-full bg-white pt-16 md:pt-24">
+          <div className="mx-auto max-w-[85rem] px-6 md:px-12">
+            <p className="text-brand-gold text-[11px] md:text-xs font-bold uppercase tracking-widest mb-4">
+              {initialArticle.date}
+            </p>
+            <h1 className="news-article-title text-4xl md:text-5xl lg:text-6xl font-serif text-brand-blue leading-[1.15] font-normal">
+              {initialArticle.title}
+            </h1>
+          </div>
+        </div>
+
+        {/* Article Sections */}
+        <ArticleSections document={sectionsDoc} isEditing={false} />
 
         {/* --- THE LATEST UPDATES (RECOMMENDATIONS) --- */}
         {recommendations.length > 0 && (
-          <section className="relative z-[30] w-full py-24 md:py-32">
+          <section className="relative z-[30] w-full py-24 md:py-32 bg-white">
           <div className="max-w-[85rem] mx-auto px-6 md:px-12">
-            
+
             <h2 className="text-3xl md:text-4xl font-serif text-brand-blue text-center mb-16 font-normal">
               The Latest Updates
             </h2>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {recommendations.map((article, index) => (
-                  <Link 
+                  <Link
                     href={`/news&updates/${article.slug}`}
                     key={article.id}
                     ref={(el: HTMLAnchorElement | null) => { /* TS FIX: Added HTMLAnchorElement type */
-                      if (el) cardsRef.current[index] = el; 
+                      if (el) cardsRef.current[index] = el;
                     }}
                     className="group flex flex-col bg-white rounded-sm overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-500 outline-none"
                   >
@@ -243,17 +259,17 @@ export default function SingleNewsClient({
                       <span className="text-brand-gold text-xs font-bold mb-3 tracking-wide">
                         {article.date}
                       </span>
-                      
+
                       <h3 className="font-serif text-xl md:text-2xl text-brand-blue font-normal leading-snug mb-4 group-hover:text-brand-gold transition-colors duration-300 line-clamp-2">
                         {article.title}
                       </h3>
-                      
+
                       <p className="text-gray-500 font-light text-sm line-clamp-3 mb-8 flex-grow leading-relaxed">
                         {article.excerpt}
                       </p>
-                      
+
                       <div className="mt-auto flex items-center gap-2 text-brand-gold text-[10px] md:text-[11px] font-bold uppercase tracking-widest">
-                        READ MORE 
+                        READ MORE
                         <ArrowRight size={14} className="transform group-hover:translate-x-1 transition-transform duration-300" />
                       </div>
                     </div>
@@ -265,6 +281,7 @@ export default function SingleNewsClient({
           </section>
         )}
 
+        {/* --- FOOTER --- */}
         <Footer />
         <BackToTop />
       </div>

@@ -120,7 +120,6 @@ Moved the article body editing interface from the inspector panel into the live 
 2. `app/admin/news/RichTextEditor.tsx` - MODIFIED: Toolbar-only component
 3. `app/admin/news/PreviewSkeleton.tsx` - MODIFIED: Editable preview
 4. `app/admin/news/page.tsx` - MODIFIED: Editor management, inspector layout
-5. `app/admin/news/useArticleEditor.test.ts` - NEW: Test scenarios
 
 ## Backward Compatibility
 

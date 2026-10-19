@@ -6,6 +6,8 @@ export const NewsSchema = z.object({
   date: z.string().min(1, "Date is required"),
   category: z.string().min(1, "Please select a category"),
   image: z.string().optional(),
+  // Optional here so unrelated partial updates never reset a saved preference.
+  show_cover_on_article: z.boolean().optional(),
   excerpt: z.string().min(10, "Description must be at least 10 characters"),
   slug: z.string().min(1, "Slug is required (e.g., /news/your-title)"),
   // Rich text article content (optional; when present, excerpt is derived from it)
