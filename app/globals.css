@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./components/news/article-typography.css";
 
 :root {
   --background: #ffffff;

@@ -1,0 +1,121 @@
+/* News-only rhythm shared by public articles and both preview states. */
+.news-article-header {
+  padding-bottom: 0;
+}
+
+.news-article-title {
+  margin: 0;
+}
+
+.news-article-section {
+  padding-block: 2rem;
+}
+
+.news-article-sections > .news-article-section:first-child,
+.news-article-sections > :first-child > .news-article-section {
+  padding-top: 1.5rem;
+}
+
+.news-article-section-heading {
+  margin: 0 0 1.5rem;
+}
+
+.news-article-body {
+  font-size: 1rem;
+  line-height: 1.85;
+  letter-spacing: normal;
+  word-spacing: normal;
+  white-space: break-spaces;
+  text-align: justify;
+  display: flow-root;
+}
+
+.news-article-body .ProseMirror {
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+  font-size: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  white-space: inherit;
+}
+
+.news-article-body p {
+  margin: 0 0 1.5rem;
+  min-height: 1lh;
+}
+
+.news-article-body p:last-child {
+  margin-bottom: 0;
+}
+
+/* Admin-only empty body cue: generated content never enters the editor document. */
+.news-section-body-editor[data-empty="true"] :is(.ProseMirror, .news-section-body-preview) {
+  min-height: 4rem;
+}
+
+.news-section-body-editor[data-empty="true"] :is(.ProseMirror, .news-section-body-preview)::before {
+  content: var(--news-body-placeholder);
+  float: left;
+  width: 100%;
+  height: 0;
+  pointer-events: none;
+  color: var(--color-gray-400, #9ca3af);
+  font-size: 0.875rem;
+  font-weight: 400;
+  font-style: normal;
+  line-height: 1.5;
+  white-space: normal;
+  text-align: left;
+}
+
+.news-section-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.news-section-media,
+.news-section-text {
+  width: 100%;
+  min-width: 0;
+}
+
+.news-section-media {
+  align-self: start;
+}
+
+.news-section-layout[data-image-placement="image-below"] > .news-section-media {
+  order: 1;
+}
+
+.news-section-layout[data-image-placement="image-left"],
+.news-section-layout[data-image-placement="image-right"] {
+  gap: 1.5rem;
+}
+
+@media (min-width: 48rem) {
+  .news-article-section {
+    padding-block: 3rem;
+  }
+
+  .news-article-body {
+    font-size: 1.0625rem;
+  }
+
+  .news-section-layout[data-image-placement="image-left"],
+  .news-section-layout[data-image-placement="image-right"] {
+    display: grid;
+    align-items: start;
+    grid-template-columns: 40% minmax(0, 1fr);
+    gap: 3rem;
+  }
+
+  .news-section-layout[data-image-placement="image-right"] {
+    grid-template-columns: minmax(0, 1fr) 40%;
+  }
+
+  .news-section-layout[data-image-placement="image-right"] > .news-section-media {
+    order: 1;
+  }
+}

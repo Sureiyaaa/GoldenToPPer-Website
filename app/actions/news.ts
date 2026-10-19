@@ -4,6 +4,8 @@ import { createClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
 import { getCustomSession, getRBACProfile } from './auth';
 import { extractPlainTextFromContent, validateArticleContent } from '@/lib/validations/article-validation';
+import { isValidSectionsDocument, deriveExcerptFromSections, type ArticleSectionsDocument } from '@/app/types/article-sections';
+import { NEWS_IMAGE_STORAGE_CONFIG as STORAGE_CONFIG } from '@/lib/validations/news-image-upload';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,18 +18,13 @@ const supabaseAdmin = createClient(
 // Allowed fields per operation (prevents arbitrary column modification)
 const NEWS_FIELD_ALLOWLISTS: Record<string, Record<'create' | 'edit', Set<string>>> = {
   'news_updates': {
-    'create': new Set(['title', 'category', 'date', 'slug', 'excerpt', 'image', 'article_content']),
-    'edit': new Set(['title', 'category', 'date', 'slug', 'excerpt', 'image', 'article_content']),
+    'create': new Set(['title', 'category', 'date', 'slug', 'excerpt', 'image', 'show_cover_on_article', 'article_content', 'article_layout', 'article_sections']),
+    'edit': new Set(['title', 'category', 'date', 'slug', 'excerpt', 'image', 'show_cover_on_article', 'article_content', 'article_layout', 'article_sections']),
   }
 };
 
-// Storage validation
-const STORAGE_CONFIG = {
-  bucket: 'news_images',
-  maxFileSize: 10 * 1024 * 1024, // 10MB
-  allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
-  allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
-};
+// Valid layout preset identifiers
+const VALID_ARTICLE_LAYOUTS = new Set(['image-above', 'title-above', 'image-contained', 'sidebar-image-right', 'sidebar-image-left']);
 
 async function authorizeNewsOperation(operation: 'create' | 'edit' | 'delete') {
   const profile = await getRBACProfile();
@@ -126,6 +123,45 @@ export async function saveArticleToDB(payload: any, editId: string | null) {
     for (const [key, value] of Object.entries(payload)) {
       if (allowedFields.has(key)) {
         filteredPayload[key] = value;
+      }
+    }
+
+    // Omitted visibility is left untouched on edits; new records use the DB default.
+    if (filteredPayload.show_cover_on_article !== undefined && typeof filteredPayload.show_cover_on_article !== 'boolean') {
+      throw new Error('Cover visibility must be a boolean');
+    }
+
+    // Validate article_layout if provided (legacy)
+    if (filteredPayload.article_layout !== undefined && filteredPayload.article_layout !== null) {
+      if (!VALID_ARTICLE_LAYOUTS.has(filteredPayload.article_layout)) {
+        throw new Error(`Invalid layout preset: ${filteredPayload.article_layout}`);
+      }
+    } else if (filteredPayload.article_layout === undefined && !editId) {
+      // For new articles, default to image-above if not provided
+      filteredPayload.article_layout = 'image-above';
+    }
+
+    // Validate article_sections if provided (new section-based model)
+    if (filteredPayload.article_sections !== undefined && filteredPayload.article_sections !== null) {
+      try {
+        const sections = typeof filteredPayload.article_sections === 'string'
+          ? JSON.parse(filteredPayload.article_sections)
+          : filteredPayload.article_sections;
+
+        if (!isValidSectionsDocument(sections)) {
+          throw new Error('Invalid sections document structure');
+        }
+
+        // Update article_sections to validated JSON object (not string)
+        filteredPayload.article_sections = sections;
+
+        // Derive excerpt from sections for backward compatibility and search
+        const derivedExcerpt = deriveExcerptFromSections(sections as ArticleSectionsDocument);
+        if (derivedExcerpt) {
+          filteredPayload.excerpt = derivedExcerpt;
+        }
+      } catch (e: any) {
+        throw new Error(`Invalid article sections: ${e.message}`);
       }
     }
 
