@@ -24,7 +24,7 @@ export const loanSchema = z.object({
     .email('Please enter a valid email address'),
   phone: z.string().trim().regex(/^(09|\+639)\d{9}$/, 'Enter a valid PH mobile number'),
   isAgreed: z.boolean().refine(value => value === true, {
-    message: 'You must agree to the Terms and Conditions',
+    message: 'Please authorize the referral to your selected bank',
   }),
 });
 

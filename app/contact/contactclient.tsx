@@ -13,6 +13,7 @@ import * as z from 'zod';
 
 // ✅ Import the new Server Action
 import { submitContactAction } from '@/app/actions/admin_fetchers';
+import { FormPrivacyNotice, useCookieConsent } from '@/app/components/cookie-consent';
 
 // Zod Schema 
 const contactFormSchema = z.object({
@@ -30,6 +31,7 @@ const contactFormSchema = z.object({
 type ContactFormValues = z.infer<typeof contactFormSchema>;
 
 export default function ContactPage() {
+  const { requestFormConsent } = useCookieConsent();
   const [isSuccess, setIsSuccess] = useState(false);
   const router = useRouter();
 
@@ -62,6 +64,10 @@ export default function ContactPage() {
   const inquiryOptions = ['General Inquiry', 'Booking Inquiry', 'Property Sales', 'Partnerships', 'Customer Support'];
 
   const onSubmit = async (data: ContactFormValues) => {
+    if (!await requestFormConsent({
+      purpose: 'Contact request',
+      description: 'Your name, email address, phone number, inquiry type, and message will be used by the team responsible for your request to respond and provide assistance. Please do not include identification documents, health information, or other sensitive information in your message.',
+    })) return;
     setIsSuccess(false);
 
     try {
@@ -255,6 +261,7 @@ export default function ContactPage() {
                   >
                     {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : 'Contact Us'}
                   </button>
+                  <FormPrivacyNotice />
 
                 </motion.form>
               )}

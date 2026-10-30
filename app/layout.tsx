@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import "./globals.css";
+import CookieConsentProvider from './components/cookie-consent';
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -23,7 +24,7 @@ export default function RootLayout({
     <html lang="en"> 
       {/* Add font-sans here to set the default */}
       <body className={`${poppins.variable} font-sans antialiased`}>
-        {children}
+        <CookieConsentProvider>{children}</CookieConsentProvider>
       </body>
     </html>
   );

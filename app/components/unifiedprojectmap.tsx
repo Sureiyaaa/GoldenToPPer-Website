@@ -5,6 +5,7 @@ import { MapContainer, TileLayer, Marker, useMap, LayersControl, Polyline } from
 import * as LucideIcons from 'lucide-react';
 import { RefreshCw, ChevronDown, MapPinHouse, Car, Footprints, Plus, Minus, Route } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
+import { OptionalMediaNotice, useCookieConsent } from './cookie-consent';
 import L from 'leaflet';
 import { renderToString } from 'react-dom/server';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -209,6 +210,7 @@ const getUnifiedIcon = (type: string, isActive: boolean, iconValue: string) => {
 // MAIN COMPONENT
 // ==========================================
 export default function UnifiedProjectMap({ projectSlug }: UnifiedMapProps) {
+  const { optionalMedia } = useCookieConsent();
   
   const supabase = createClient();
 
@@ -289,7 +291,7 @@ export default function UnifiedProjectMap({ projectSlug }: UnifiedMapProps) {
   // FETCH ROUTE GEOMETRY
   useEffect(() => {
     async function fetchRoute() {
-      if (!activeLoc || activeLoc.type === 'project' || !mainProject) {
+      if (!optionalMedia || !activeLoc || activeLoc.type === 'project' || !mainProject) {
         setFullRouteData(null);
         return;
       }
@@ -305,7 +307,7 @@ export default function UnifiedProjectMap({ projectSlug }: UnifiedMapProps) {
       } catch (e) { setFullRouteData(null); }
     }
     fetchRoute();
-  }, [activeLoc, mainProject]);
+  }, [activeLoc, mainProject, optionalMedia]);
 
   // ANIMATE THE PATH (WITH CINEMATIC DELAY)
   useEffect(() => {
@@ -347,6 +349,7 @@ export default function UnifiedProjectMap({ projectSlug }: UnifiedMapProps) {
   useEffect(() => { setActiveId(null); setFullRouteData(null); }, [projectSlug]);
 
   if (!isMounted) return null;
+  if (!optionalMedia) return <div className="h-[600px] overflow-hidden rounded-2xl"><OptionalMediaNotice /></div>;
   if (isLoading) return <div className="w-full h-[600px] bg-brand-blue rounded-2xl flex items-center justify-center text-white/50 text-sm font-normal uppercase tracking-widest animate-pulse border border-brand-gold/30 shadow-2xl">Loading Live Map Data...</div>;
   if (!mainProject) return <div className="w-full h-[600px] bg-[#0A1128] rounded-2xl flex items-center justify-center text-white/50 border border-white/10">No map coordinates configured for this project.</div>;
 

@@ -14,6 +14,7 @@ import Navbar from './components/navbar';
 import Footer from './components/footer';
 import BackToTop from './components/backtotop';
 import PageTransition from './components/page-transitions';
+import { OptionalMediaNotice, useCookieConsent } from './components/cookie-consent';
 import Homepage from './data/homepage.json';
 
 function resolveImageUrl(src: string | undefined | null): string {
@@ -67,6 +68,7 @@ export default function HomeClient({
   initialProjects = [], 
   initialHomeContent 
 }: HomeClientProps) {
+  const { optionalMedia } = useCookieConsent();
 
   const heroProjects: any[] = (initialHomeContent?.heroSlides && initialHomeContent.heroSlides.length > 0)
     ? initialHomeContent.heroSlides 
@@ -847,7 +849,7 @@ export default function HomeClient({
               </div>
 
               <div className="impact-video-container absolute w-[90%] md:w-[70%] max-w-5xl aspect-video rounded-sm overflow-hidden shadow-[0_40px_80px_rgba(0,0,0,0.8)] bg-black border border-white/10 z-30">
-                {!isVideoPlaying ? (
+                {!optionalMedia ? <OptionalMediaNotice /> : !isVideoPlaying ? (
                   <button
                     onClick={() => setIsVideoPlaying(true)}
                     className="absolute inset-0 w-full h-full flex items-center justify-center group focus-visible:ring-4 focus-visible:ring-brand-gold outline-none cursor-pointer"

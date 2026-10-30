@@ -15,6 +15,7 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { submitLoanPreApplicationAction } from '@/app/actions/loan';
 import { loanSchema, type LoanFormData } from '@/lib/validations/loan';
+import { FormPrivacyNotice, useCookieConsent } from '@/app/components/cookie-consent';
 
 // --- REGISTER GSAP ---
 if (typeof window !== 'undefined') {
@@ -36,6 +37,7 @@ interface PartnerBanksClientProps {
 // INNER COMPONENT
 // ==========================================
 function PartnerBanksContent({ initialProjects, initialBanks, initialMappings }: PartnerBanksClientProps) {
+  const { requestFormConsent } = useCookieConsent();
   const searchParams = useSearchParams();
   const lenisRef = useRef<any>(null); 
   
@@ -45,13 +47,17 @@ function PartnerBanksContent({ initialProjects, initialBanks, initialMappings }:
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  const { register, handleSubmit, trigger, reset, formState: { errors, isSubmitting } } = useForm<LoanFormData>({
+  const { register, handleSubmit, trigger, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm<LoanFormData>({
     resolver: zodResolver(loanSchema),
     defaultValues: {
       condo: '', bank: '', tower: '', unit: '', floor: '',
       buyerName: '', coBuyerName: '', email: '', phone: '', isAgreed: false,
     }
   });
+
+  const selectedBankId = watch('bank');
+  const selectedBankName = initialBanks.find(bank => String(bank.id) === selectedBankId)?.bank_name;
+  useEffect(() => { setValue('isAgreed', false); }, [selectedBankId, setValue]);
 
   // Handle URL Params for Modal Initialization
   useEffect(() => {
@@ -99,6 +105,12 @@ function PartnerBanksContent({ initialProjects, initialBanks, initialMappings }:
   };
 
   const onSubmit = async (data: LoanFormData) => {
+    const bankName = initialBanks.find(bank => String(bank.id) === data.bank)?.bank_name;
+    if (!bankName) return;
+    if (!await requestFormConsent({
+      purpose: `Bank referral to ${bankName}`,
+      description: `Your buyer and co-buyer names, contact details, selected project, tower, floor, and unit details will be recorded by Golden Topper to coordinate your requested referral to ${bankName}. Your referral authorization covers disclosure of these details to this selected bank for its loan assessment under its own privacy notice. Referral does not guarantee approval. Only provide a co-buyer's details if you are authorized to do so and have directed them to the Privacy Policy.`,
+    })) return;
     setErrorMessage('');
     setSuccessMessage('');
     try {
@@ -372,10 +384,11 @@ function PartnerBanksContent({ initialProjects, initialBanks, initialMappings }:
                         <label className="flex items-start gap-3 cursor-pointer group">
                           <input type="checkbox" {...register("isAgreed")} className="mt-1 accent-brand-blue" />
                           <span className="text-xs text-slate-500 leading-relaxed group-hover:text-slate-700 transition-colors">
-                            I agree to the <span className="text-brand-blue font-bold">Terms of Use</span> and <span className="text-brand-blue font-bold">Privacy Policy</span>
+                            I authorize Golden Topper to disclose my buyer and co-buyer names, contact details, and property details to <strong className="text-brand-blue">{selectedBankName || 'the bank I select'}</strong> to coordinate my requested loan referral. I am authorized to provide any co-buyer information. I understand the bank evaluates my application under its own privacy notice and approval is not guaranteed. Read the <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-brand-blue underline">Privacy Policy</a>.
                           </span>
                         </label>
                         {errors.isAgreed && <p className="text-red-500 text-xs mt-2 flex items-center gap-1"><AlertCircle size={12} />{errors.isAgreed.message}</p>}
+                        <FormPrivacyNotice />
                       </div>
                     </form>
                   )}

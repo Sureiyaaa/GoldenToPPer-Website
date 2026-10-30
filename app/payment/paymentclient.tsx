@@ -10,6 +10,7 @@ import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight, Check, Edit2, Mail
 import PageTransition from "../components/page-transitions";
 import { submitPaymentAction, fetchProjectsForPayment, fetchTowersForProject, fetchUnitTypesForTower } from "@/app/actions/payment";
 import { fetchDefaultCarouselSlidesAction, fetchProjectCarouselSlidesAction, PaymentCarouselSlide } from "@/app/actions/payment-carousel";
+import { FormPrivacyNotice, useCookieConsent } from '@/app/components/cookie-consent';
 
 declare global {
   interface Window {
@@ -348,6 +349,7 @@ function PaymentCarousel({ images, projectName }: { images: CarouselImage[]; pro
 }
 
 export default function PaymentClient() {
+  const { requestFormConsent } = useCookieConsent();
   const [currentStep, setCurrentStep] = useState(1);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
 
@@ -686,11 +688,26 @@ export default function PaymentClient() {
       return;
     }
 
+    if (!await requestFormConsent({
+      purpose: 'Payment information',
+      description: 'Your name, contact details, property details, payment purpose, and amount are used to handle your requested payment. A payment provider may process transaction information under its own privacy notice when a payment service is connected.',
+    })) return;
+
     try {
+      // Verification may expire while the visitor reviews the privacy notice.
+      const widgetId = turnstileWidgetIdRef.current;
+      const currentCaptchaToken = widgetId !== undefined && window.turnstile
+        ? window.turnstile.getResponse(widgetId)
+        : '';
+      if (!currentCaptchaToken) {
+        setCaptchaToken(null);
+        setCaptchaError('Verification expired. Please complete the verification again.');
+        return;
+      }
       setServerError('');
       console.log('[PAYMENT] Submitting payment with CAPTCHA token');
 
-      const result = await submitPaymentAction(data, captchaToken);
+      const result = await submitPaymentAction(data, currentCaptchaToken);
 
       if (result?.error) {
         console.log(`[PAYMENT] Server returned error: ${result.error}`);
@@ -1165,6 +1182,7 @@ export default function PaymentClient() {
           </p>
         </div>
 
+        <FormPrivacyNotice />
       </div>
     );
   };

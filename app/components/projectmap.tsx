@@ -5,6 +5,7 @@ import { MapContainer, TileLayer, Marker, useMap, LayersControl } from 'react-le
 import * as LucideIcons from 'lucide-react';
 import { RefreshCw, ChevronDown, Car, Footprints, MapPin, ArrowRight, Plus, Minus } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
+import { OptionalMediaNotice, useCookieConsent } from './cookie-consent';
 import L from 'leaflet';
 import { renderToString } from 'react-dom/server';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -197,6 +198,7 @@ const getUnifiedIcon = (type: string, isActive: boolean, iconValue: string) => {
 // MAIN COMPONENT
 // ==========================================
 export default function ProjectMap({ projectKey, onProjectSelect }: UnifiedMapProps) {
+  const { optionalMedia } = useCookieConsent();
 
   const supabase = createClient();
 
@@ -310,6 +312,7 @@ export default function ProjectMap({ projectKey, onProjectSelect }: UnifiedMapPr
   }, [projectKey]);
 
   if (!isMounted) return null;
+  if (!optionalMedia) return <div className="h-[600px] overflow-hidden rounded-2xl"><OptionalMediaNotice /></div>;
 
   const mainProject = projects.find(p => p.type === 'project');
   const defaultCenter: [number, number] = (isUnifiedMode && mainProject)
