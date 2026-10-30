@@ -64,7 +64,7 @@ export default function AdminLogin() {
         if (container && window.turnstile) {
           // Render explicit widget
           const widgetId = window.turnstile.render('#captcha-container', {
-            sitekey: process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY,
+            sitekey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
             theme: 'light',
             callback: handleCaptchaSuccess,
             'expired-callback': handleCaptchaExpire,
@@ -227,7 +227,7 @@ export default function AdminLogin() {
     }
   };
 
-  const siteKey = process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY;
+  const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
   const hasConfiguredTurnstile = siteKey && siteKey.trim().length > 0;
 
   const canSubmit =
@@ -360,7 +360,7 @@ export default function AdminLogin() {
               ) : (
                 <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
                   <p className="text-sm text-yellow-800">
-                    ⚠️ Turnstile not configured. Add <code className="font-mono text-xs">NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY</code> to .env.local
+                    ⚠️ Turnstile not configured. Add <code className="font-mono text-xs">NEXT_PUBLIC_TURNSTILE_SITE_KEY</code> to .env.local
                   </p>
                 </div>
               )}
