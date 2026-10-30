@@ -20,6 +20,12 @@ existing `loan_preapp.is_agreed` field continues to store the authorization flag
   it must never authorize a user or contain personal information.
 - `custom_admin_session` remains the separate HttpOnly admin login cookie.
   Submitting a public form does not create an account or authentication session.
+- Cloudflare Turnstile protects payment submission and admin login independently
+  of optional media. Its default single-use verification token expires after
+  five minutes and is not a login cookie. `cf_clearance` depends on Cloudflare
+  pre-clearance settings and must not be assigned the token's five-minute life.
+- Supabase responses can request Cloudflare's `__cf_bm` security cookie. This is
+  separate from Turnstile. Browser acceptance varies; see the deployed audit.
 - YouTube iframe/thumbnail and Google map components are not mounted until
   optional media is enabled. Changing Cookie settings to necessary-only removes
   them. Previously set provider cookies must be cleared through browser controls.
@@ -35,6 +41,11 @@ been published over the existing Privacy Policy. Legal needs to supply those
 facts before that separate policy update. The Cookie Notice documents the
 implemented local behavior; actual third-party cookies, hosting cookies, and
 retention require a check of the deployed site.
+
+An anonymous browser audit of the current Vercel deployment is recorded in
+[the October 30, 2026 audit](deployed-cookie-audit-2026-10-30.md). The deployed
+build does not yet expose this checkout's Cookie Notice or settings. Repeat the
+audit after deploying the changes and again on the turnover domain.
 
 This UI is not a server-side consent ledger or a replacement for authorization,
 CSRF protection, or submission validation. Cookie preferences are not proof of

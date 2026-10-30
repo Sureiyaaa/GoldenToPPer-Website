@@ -110,7 +110,7 @@ export default function CookieConsentProvider({ children }: { children: ReactNod
             <div className="my-5 space-y-3">
               <div className="rounded-lg border border-gray-200 bg-slate-50 p-4 text-sm">
                 <div className="flex items-center justify-between gap-3 font-semibold text-brand-blue"><span>Necessary cookies</span><span className="text-xs">Always available</span></div>
-                <p className="mt-2 leading-relaxed">The preference cookie remembers this choice. A separate authentication cookie is used only when an administrator signs in.</p>
+                <p className="mt-2 leading-relaxed">The preference cookie remembers this choice. Admin login uses a separate authentication cookie. Cloudflare Turnstile protects payment submissions and admin login independently of optional media. See the <a href="/cookie-notice#security-verification" target="_blank" rel="noopener noreferrer" className="font-medium text-brand-blue underline">security verification notice (new tab)</a>.</p>
               </div>
               <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-4 text-sm">
                 <input type="checkbox" checked={draftMedia} onChange={(event) => setDraftMedia(event.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-brand-blue" />
