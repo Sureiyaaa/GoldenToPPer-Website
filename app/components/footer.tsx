@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Facebook, Instagram, Youtube } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client'; // Ensure this matches your project's path
 import { TikTok_Sans } from 'next/font/google';
+import { CookieSettingsButton } from './cookie-consent';
 
 export default function Footer() {
 
@@ -179,6 +180,8 @@ export default function Footer() {
             
             <ul className="flex flex-col gap-4 text-sm text-gray-100 font-light">
               <li><Link href="/privacy-policy" className="hover:text-brand-gold transition-colors outline-none cursor-pointer">Privacy Policy</Link></li>
+              <li><Link href="/cookie-notice" className="hover:text-brand-gold transition-colors">Cookie Notice</Link></li>
+              <li><CookieSettingsButton className="hover:text-brand-gold transition-colors" /></li>
               <li><Link href="/terms-of-use" className="hover:text-brand-gold transition-colors outline-none cursor-pointer">Terms of Use</Link></li>
             </ul>
           </div>

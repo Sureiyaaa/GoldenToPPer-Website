@@ -228,7 +228,7 @@ test('persisted loan fields feed existing Customer Inbox normalization', async (
   for (const field of ['tower', 'unit_no', 'floor_no', 'co_buyer_name', 'is_agreed']) assert.equal(item[field], row[field]);
 });
 
-function clientSubmit(action) {
+function clientSubmit(action, { accepted = true, banks = [{ id: 2, bank_name: 'Selected Bank' }] } = {}) {
   const source = fs.readFileSync(path.join(__dirname, '..', 'app/partnerbanks/partnerbanksclient.tsx'), 'utf8');
   const ast = ts.createSourceFile('client.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let initializer;
@@ -240,12 +240,15 @@ function clientSubmit(action) {
   const code = ts.transpileModule('module.exports = ' + initializer, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText;
-  const calls = [], module = { exports: {} };
-  new Function('module', 'submitLoanPreApplicationAction', 'alert', 'reset', 'setIsModalOpen', 'console', 'process', code)(
-    module, action, message => calls.push(['alert', message]), () => calls.push(['reset']),
-    value => calls.push(['modal', value]), { error() {} }, { env: { NODE_ENV: 'production' } },
+  const calls = [], notices = [], timers = [], module = { exports: {} };
+  new Function('module', 'submitLoanPreApplicationAction', 'initialBanks', 'requestFormConsent', 'reset', 'setIsModalOpen', 'setErrorMessage', 'setSuccessMessage', 'setTimeout', 'console', 'process', code)(
+    module, action, banks, async notice => { notices.push(notice); return accepted; },
+    () => calls.push(['reset']), value => calls.push(['modal', value]),
+    value => calls.push(['error', value]), value => calls.push(['success', value]),
+    (callback, delay) => timers.push({ callback, delay }),
+    { error() {} }, { env: { NODE_ENV: 'production' } },
   );
-  return { submit: module.exports, calls, source };
+  return { submit: module.exports, calls, notices, timers, source };
 }
 
 test('client success keeps the success message, resets form and closes modal', async () => {
@@ -253,7 +256,11 @@ test('client success keeps the success message, resets form and closes modal', a
   const ui = clientSubmit(async data => { submitted = data; return { success: true }; });
   await ui.submit(valid);
   assert.deepEqual(submitted, valid);
-  assert.deepEqual(ui.calls, [['alert', 'Application submitted successfully!'], ['reset'], ['modal', false]]);
+  assert.deepEqual(ui.calls, [['error', ''], ['success', ''], ['success', 'Application submitted successfully!'], ['reset']]);
+  assert.equal(ui.notices[0].purpose, 'Bank referral to Selected Bank');
+  assert.equal(ui.timers[0].delay, 1500);
+  ui.timers[0].callback();
+  assert.deepEqual(ui.calls.at(-1), ['modal', false]);
   assert.doesNotMatch(ui.source, /from\(['"](?:client|loan_preapp)['"]\)|SUPABASE_SERVICE_ROLE_KEY|createClient/);
 });
 
@@ -264,8 +271,26 @@ test('controlled and transport failures keep modal/form open and hide technical 
   ]) {
     const ui = clientSubmit(action);
     await ui.submit(valid);
-    assert.deepEqual(ui.calls, [['alert', "We couldn't submit your application. Please try again."]]);
+    assert.deepEqual(ui.calls, [['error', ''], ['success', ''], ['error', "We couldn't submit your application. Please try again."]]);
+    assert.equal(ui.timers.length, 0);
   }
+});
+
+test('cancelling loan privacy notice does not submit or reset the form', async () => {
+  let submissions = 0;
+  const ui = clientSubmit(async () => { submissions++; return { success: true }; }, { accepted: false });
+  await ui.submit(valid);
+  assert.equal(submissions, 0);
+  assert.equal(ui.notices.length, 1);
+  assert.deepEqual(ui.calls, []);
+  assert.deepEqual(ui.timers, []);
+});
+
+test('an unavailable selected bank never produces a referral notice or submission', async () => {
+  const ui = clientSubmit(async () => { assert.fail('Must not submit an unavailable bank'); }, { banks: [] });
+  await ui.submit(valid);
+  assert.deepEqual(ui.notices, []);
+  assert.deepEqual(ui.calls, []);
 });
 
 test('loan INSERT event refreshes the shared bell/inbox state through the existing provider', async () => {

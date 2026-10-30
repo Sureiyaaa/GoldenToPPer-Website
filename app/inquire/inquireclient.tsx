@@ -18,6 +18,7 @@ import { motion } from 'framer-motion';
 
 import PageTransition from '../components/page-transitions';
 import { submitInquiryAction } from '@/app/actions/admin_fetchers';
+import { FormPrivacyNotice, useCookieConsent } from '@/app/components/cookie-consent';
 
 // ============================================================
 // FORM VALIDATION
@@ -74,6 +75,7 @@ export default function InquireClient({
   projects: ProjectOption[];
 }) {
   const router = useRouter();
+  const { requestFormConsent } = useCookieConsent();
   const searchParams = useSearchParams();
 
   // ============================================================
@@ -198,6 +200,11 @@ export default function InquireClient({
   const onSubmit = async (
     data: InquiryFormData
   ) => {
+    const projectTitle = projects.find(project => String(project.id) === data.project)?.title || 'your selected project';
+    if (!await requestFormConsent({
+      purpose: 'Project inquiry',
+      description: `Your name, email address, phone number, and selected project will be used by the team responsible for ${projectTitle} to respond to your inquiry and arrange any assistance you request.`,
+    })) return;
     try {
       const result =
         await submitInquiryAction(data);
@@ -662,8 +669,7 @@ export default function InquireClient({
                 </button>
 
                 <p className="text-[11px] text-gray-500 mt-4 leading-relaxed tracking-wide font-light text-center">
-                  By submitting this form,
-                  you agree to our{' '}
+                  Before submitting, review our{' '}
                   <a
                     href="/terms-of-use"
                     className="underline hover:text-brand-gold transition-colors"
@@ -679,6 +685,7 @@ export default function InquireClient({
                   </a>
                   .
                 </p>
+                <FormPrivacyNotice />
               </div>
             </form>
           </div>
