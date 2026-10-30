@@ -135,10 +135,10 @@ async function verifyPaymentCaptchaToken(token: string): Promise<{ valid: boolea
     return { valid: false, error: 'CAPTCHA token is invalid.' };
   }
 
-  // Get secret key from environment - PAYMENT-SPECIFIC
-  const secretKey = process.env.PAYMENT_TURNSTILE_SECRET_KEY;
+  // Get secret key from environment
+  const secretKey = process.env.TURNSTILE_SECRET_KEY;
   if (!secretKey) {
-    console.error('[PAYMENT] PAYMENT_TURNSTILE_SECRET_KEY not configured');
+    console.error('[PAYMENT] TURNSTILE_SECRET_KEY not configured');
     return { valid: false, error: 'Security verification is not configured. Please contact support.' };
   }
 

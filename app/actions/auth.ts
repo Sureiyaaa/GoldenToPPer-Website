@@ -37,7 +37,7 @@ async function verifyCaptchaToken(token: string): Promise<{ valid: boolean; erro
   }
 
   // Get secret key from environment
-  const secretKey = process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY;
+  const secretKey = process.env.TURNSTILE_SECRET_KEY;
   if (!secretKey) {
     console.error('[AUTH] CAPTCHA_SECRET_KEY not configured');
     return { valid: false, error: 'Security verification is not configured. Please contact support.' };
