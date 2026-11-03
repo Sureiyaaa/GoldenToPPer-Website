@@ -8,9 +8,16 @@ import * as z from "zod";
 import Navbar from "@/app/components/navbar";
 import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight, Check, Edit2, Mail, Phone, Pause, Play } from "lucide-react";
 import PageTransition from "../components/page-transitions";
-import { submitPaymentAction, fetchProjectsForPayment, fetchTowersForProject, fetchUnitTypesForTower } from "@/app/actions/payment";
+import { submitPaymentAction, fetchProjectsForPayment } from "@/app/actions/payment";
 import { fetchDefaultCarouselSlidesAction, fetchProjectCarouselSlidesAction, PaymentCarouselSlide } from "@/app/actions/payment-carousel";
 import { FormPrivacyNotice, useCookieConsent } from '@/app/components/cookie-consent';
+import {
+  getProjectMerchantId,
+  isValidPhilippineMobileSubscriber,
+  normalizePhilippineMobileSubscriber,
+  toPaymentApiContactNumber,
+} from '@/lib/payment-form';
+import type { PaymentProject } from '@/lib/payment-form';
 
 declare global {
   interface Window {
@@ -30,14 +37,12 @@ const paymentSchema = z.object({
   lastName: z.string().min(1, "Last name is required").regex(/^[a-zA-Z\s\-']+$/, "Invalid characters"),
   email: z.string().email("Enter a valid email address"),
   contactNumber: z.string()
-    .min(11, "Contact number must be 11 digits")
-    .max(11, "Contact number must be 11 digits")
-    .regex(/^\d+$/, "Numbers only"),
+    .refine(isValidPhilippineMobileSubscriber, "Enter 10 digits beginning with 9"),
 
-  // Step 2: Property Details - use stable IDs
+  // Step 2: Property Details
   projectId: z.string().min(1, "Please select a project").regex(/^\d+$/, "Invalid project"),
-  towerId: z.string().min(1, "Tower is required").regex(/^\d+$/, "Invalid tower"),
-  unitTypeId: z.string().min(1, "Unit type is required").regex(/^\d+$/, "Invalid unit type"),
+  merchantId: z.string().trim().min(1, "Invalid merchant ID").nullable(),
+  tower: z.string().trim().min(1, "Tower is required").max(100, "Tower is too long"),
   unitNumber: z.string()
     .min(1, "Unit number is required")
     .regex(/^\d+$/, "Must be digits only")
@@ -361,13 +366,9 @@ export default function PaymentClient() {
   const [captchaError, setCaptchaError] = useState('');
   const [serverError, setServerError] = useState('');
 
-  // Project/Tower/UnitType data loading state
-  const [projects, setProjects] = useState<Array<{ id: number; title: string; image?: string }>>([]);
-  const [towers, setTowers] = useState<Array<{ id: number; name: string }>>([]);
-  const [unitTypes, setUnitTypes] = useState<Array<{ id: number; title: string }>>([]);
+  // Project data loading state
+  const [projects, setProjects] = useState<PaymentProject[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
-  const [loadingTowers, setLoadingTowers] = useState(false);
-  const [loadingUnitTypes, setLoadingUnitTypes] = useState(false);
 
   // Carousel state - CMS-driven slides with focal point metadata
   const [carouselSlides, setCarouselSlides] = useState<CarouselImage[]>([]);
@@ -388,13 +389,14 @@ export default function PaymentClient() {
     mode: "onBlur",
     defaultValues: {
       firstName: '', lastName: '', email: '', contactNumber: '',
-      projectId: '', towerId: '', unitTypeId: '', unitNumber: '',
+      projectId: '', merchantId: null, tower: '', unitNumber: '',
       paymentPurpose: '', amount: '',
     }
   });
 
   const watchProjectId = watch("projectId");
-  const watchTowerId = watch("towerId");
+  const contactNumberField = register("contactNumber");
+  const projectField = register("projectId");
 
   // Load projects on mount
   useEffect(() => {
@@ -456,22 +458,26 @@ export default function PaymentClient() {
     loadDefaultCarousel();
   }, []);
 
-  // Load towers and carousel when project changes
+  // Keep the selected project's merchant association in form state. Null is a
+  // supported value while the backend column is still being rolled out.
+  useEffect(() => {
+    setValue('merchantId', getProjectMerchantId(watchProjectId, projects), {
+      shouldValidate: false,
+    });
+  }, [watchProjectId, projects, setValue]);
+
+  // Load carousel when project changes
   useEffect(() => {
     if (!watchProjectId) {
       // Protect deselection with request counter (project → no project)
       ++projectRequestIdRef.current;
       selectedProjectIdRef.current = null;
-      setTowers([]);
-      setUnitTypes([]);
       // Reset carousel to resolved default when no project selected
       if (resolvedDefaultSlidesRef.current) {
         setCarouselSlides(resolvedDefaultSlidesRef.current);
       } else {
         setCarouselSlides(convertLegacyDefaultShowcase());
       }
-      setValue('towerId', '', { shouldValidate: false });
-      setValue('unitTypeId', '', { shouldValidate: false });
       return;
     }
 
@@ -480,13 +486,8 @@ export default function PaymentClient() {
     const currentRequestId = ++projectRequestIdRef.current;
 
     const loadData = async () => {
-      setLoadingTowers(true);
       setCarouselLoading(true);
       try {
-        // Load towers
-        const towerData = await fetchTowersForProject(projectId);
-        setTowers(towerData);
-
         // Load project carousel slides
         const result = await fetchProjectCarouselSlidesAction(projectId);
 
@@ -583,43 +584,12 @@ export default function PaymentClient() {
           }
         }
       } finally {
-        setLoadingTowers(false);
         setCarouselLoading(false);
       }
     };
 
     loadData();
-  }, [watchProjectId, setValue, projects]);
-
-  // Load unit types when tower changes
-  useEffect(() => {
-    if (!watchTowerId || !watchProjectId) {
-      setUnitTypes([]);
-      setValue('unitTypeId', '', { shouldValidate: false });
-      return;
-    }
-
-    const loadUnitTypes = async () => {
-      setLoadingUnitTypes(true);
-      try {
-        const projectId = parseInt(watchProjectId);
-        const towerIdNum = parseInt(watchTowerId);
-        const tower = towers.find(t => t.id === towerIdNum);
-        if (!tower) {
-          setUnitTypes([]);
-          return;
-        }
-        const data = await fetchUnitTypesForTower(projectId, tower.name);
-        setUnitTypes(data);
-      } catch (err) {
-        console.error('Error loading unit types:', err);
-      } finally {
-        setLoadingUnitTypes(false);
-      }
-    };
-
-    loadUnitTypes();
-  }, [watchTowerId, watchProjectId, towers, setValue]);
+  }, [watchProjectId, projects]);
 
   // Get selected project name
   const getSelectedProjectName = (): string | null => {
@@ -642,7 +612,7 @@ export default function PaymentClient() {
 
   // Step-specific field validation
   const step1Fields = ['firstName', 'lastName', 'email', 'contactNumber'] as const;
-  const step2Fields = ['projectId', 'towerId', 'unitTypeId', 'unitNumber'] as const;
+  const step2Fields = ['projectId', 'tower', 'unitNumber'] as const;
   const step3Fields = ['paymentPurpose', 'amount'] as const;
 
   const validateAndMoveNext = async () => {
@@ -707,7 +677,10 @@ export default function PaymentClient() {
       setServerError('');
       console.log('[PAYMENT] Submitting payment with CAPTCHA token');
 
-      const result = await submitPaymentAction(data, currentCaptchaToken);
+      const result = await submitPaymentAction({
+        ...data,
+        contactNumber: toPaymentApiContactNumber(data.contactNumber),
+      }, currentCaptchaToken);
 
       if (result?.error) {
         console.log(`[PAYMENT] Server returned error: ${result.error}`);
@@ -926,19 +899,33 @@ export default function PaymentClient() {
           </div>
 
           <div className="flex flex-col">
-            <label htmlFor="payment-contact" className={labelStyles}>Contact Number</label>
-            <div className="relative">
-              <Phone size={16} strokeWidth={1.5} aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
+            <label htmlFor="payment-contact" className={labelStyles}>Mobile Number</label>
+            <div className="flex">
+              <span
+                aria-hidden="true"
+                className="flex h-[50px] shrink-0 items-center gap-2 rounded-l-md border border-r-0 border-stone-200 bg-stone-100 px-4 text-sm text-gray-700"
+              >
+                <Phone size={16} strokeWidth={1.5} className="text-stone-400" />
+                +63
+              </span>
               <input
                 id="payment-contact"
-                {...register("contactNumber")}
+                {...contactNumberField}
+                onChange={(event) => {
+                  event.target.value = normalizePhilippineMobileSubscriber(event.target.value);
+                  contactNumberField.onChange(event);
+                }}
                 type="tel"
                 inputMode="numeric"
-                maxLength={11}
-                className={`${inputStyles} pl-11 ${errors.contactNumber ? inputErrorStyles : ''}`}
-                placeholder="09XXXXXXXXX"
+                autoComplete="tel-national"
+                maxLength={10}
+                aria-describedby="payment-contact-help"
+                aria-invalid={Boolean(errors.contactNumber)}
+                className={`${inputStyles} rounded-l-none ${errors.contactNumber ? inputErrorStyles : ''}`}
+                placeholder="9XXXXXXXXX"
               />
             </div>
+            <span id="payment-contact-help" className="mt-1.5 text-xs leading-4 text-stone-500">Enter the 10 digits after +63.</span>
             {errors.contactNumber && <span className={errorStyles}><AlertCircle size={12} />{errors.contactNumber.message}</span>}
           </div>
         </div>
@@ -955,7 +942,13 @@ export default function PaymentClient() {
           <div className="relative">
             <select
               id="payment-project"
-              {...register("projectId")}
+              {...projectField}
+              onChange={(event) => {
+                projectField.onChange(event);
+                setValue('merchantId', getProjectMerchantId(event.target.value, projects), {
+                  shouldValidate: false,
+                });
+              }}
               className={`${selectStyles} ${errors.projectId ? inputErrorStyles : ''}`}
               disabled={loadingProjects}
             >
@@ -974,62 +967,29 @@ export default function PaymentClient() {
         <div className="grid grid-cols-1 @[28rem]:grid-cols-2 gap-7">
           <div className="flex flex-col">
             <label htmlFor="payment-tower" className={labelStyles}>Tower</label>
-            <div className="relative">
-              <select
-                id="payment-tower"
-                {...register("towerId")}
-                className={`${selectStyles} ${errors.towerId ? inputErrorStyles : ''}`}
-                disabled={!watchProjectId || loadingTowers}
-              >
-                <option value="">
-                  {!watchProjectId ? 'Select project first' : 'Select Tower'}
-                </option>
-                {towers.map((tower) => (
-                  <option key={tower.id} value={tower.id.toString()}>
-                    {tower.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={16} strokeWidth={1.5} aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-brand-blue/50" />
-            </div>
-            {errors.towerId && <span className={errorStyles}><AlertCircle size={12} />{errors.towerId.message}</span>}
+            <input
+              id="payment-tower"
+              {...register("tower")}
+              type="text"
+              maxLength={100}
+              className={`${inputStyles} ${errors.tower ? inputErrorStyles : ''}`}
+              placeholder="e.g. Tower A"
+            />
+            {errors.tower && <span className={errorStyles}><AlertCircle size={12} />{errors.tower.message}</span>}
           </div>
 
           <div className="flex flex-col">
-            <label htmlFor="payment-unit-type" className={labelStyles}>Unit Type</label>
-            <div className="relative">
-              <select
-                id="payment-unit-type"
-                {...register("unitTypeId")}
-                className={`${selectStyles} ${errors.unitTypeId ? inputErrorStyles : ''}`}
-                disabled={!watchTowerId || loadingUnitTypes}
-              >
-                <option value="">
-                  {!watchTowerId ? 'Select tower first' : 'Select Unit Type'}
-                </option>
-                {unitTypes.map((unit) => (
-                  <option key={unit.id} value={unit.id.toString()}>
-                    {unit.title}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={16} strokeWidth={1.5} aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-brand-blue/50" />
-            </div>
-            {errors.unitTypeId && <span className={errorStyles}><AlertCircle size={12} />{errors.unitTypeId.message}</span>}
+            <label htmlFor="payment-unit-number" className={labelStyles}>Unit Number</label>
+            <input
+              id="payment-unit-number"
+              {...register("unitNumber")}
+              type="text"
+              inputMode="numeric"
+              className={`${inputStyles} ${errors.unitNumber ? inputErrorStyles : ''}`}
+              placeholder="e.g. 1008"
+            />
+            {errors.unitNumber && <span className={errorStyles}><AlertCircle size={12} />{errors.unitNumber.message}</span>}
           </div>
-        </div>
-
-        <div className="flex flex-col">
-          <label htmlFor="payment-unit-number" className={labelStyles}>Unit Number</label>
-          <input
-            id="payment-unit-number"
-            {...register("unitNumber")}
-            type="text"
-            inputMode="numeric"
-            className={`${inputStyles} ${errors.unitNumber ? inputErrorStyles : ''}`}
-            placeholder="e.g. 1008"
-          />
-          {errors.unitNumber && <span className={errorStyles}><AlertCircle size={12} />{errors.unitNumber.message}</span>}
         </div>
     </div>
   );
@@ -1080,8 +1040,6 @@ export default function PaymentClient() {
   const Step4Content = () => {
     const formData = watch();
     const selectedProject = projects.find(p => p.id.toString() === formData.projectId);
-    const selectedTower = towers.find(t => t.id.toString() === formData.towerId);
-    const selectedUnitType = unitTypes.find(u => u.id.toString() === formData.unitTypeId);
     const summaryCardStyles = "min-w-0 rounded-md border border-stone-200/70 bg-[#FDFBF7] p-4 transition-colors duration-200 hover:border-brand-gold/30";
     const summaryHeaderStyles = "mb-2.5 flex items-center justify-between gap-3 border-b border-stone-200/70 pb-1.5";
     const summaryLabelStyles = "text-xs leading-4 text-stone-500";
@@ -1107,7 +1065,7 @@ export default function PaymentClient() {
               </div>
               <div>
                 <dt className={summaryLabelStyles}>Contact</dt>
-                <dd className={summaryValueStyles}>{formData.contactNumber}</dd>
+                <dd className={summaryValueStyles}>+63 {formData.contactNumber}</dd>
               </div>
             </dl>
           </section>
@@ -1136,8 +1094,7 @@ export default function PaymentClient() {
             </div>
             <dl className="grid grid-cols-1 @[28rem]:grid-cols-2 gap-x-6 gap-y-2.5 text-[13px] sm:text-sm leading-[18px] [&>div]:grid [&>div]:grid-cols-[5rem_minmax(0,1fr)] [&>div]:gap-x-3 [&_dt]:text-xs [&_dt]:text-stone-500 [&_dd]:min-w-0 [&_dd]:font-medium [&_dd]:text-gray-900 [&_dd]:[overflow-wrap:anywhere]">
               <div><dt>Project</dt><dd>{selectedProject?.title}</dd></div>
-              <div><dt>Tower</dt><dd>{selectedTower?.name}</dd></div>
-              <div><dt>Unit Type</dt><dd>{selectedUnitType?.title}</dd></div>
+              <div><dt>Tower</dt><dd>{formData.tower}</dd></div>
               <div><dt>Unit Number</dt><dd>{formData.unitNumber}</dd></div>
             </dl>
           </section>

@@ -2,6 +2,7 @@
 
 import * as z from 'zod';
 import { createClient } from '@supabase/supabase-js';
+import type { PaymentProject } from '@/lib/payment-form';
 
 // Cloudflare Turnstile verification response type
 interface TurnstileVerifyResponse {
@@ -19,12 +20,10 @@ const paymentSchema = z.object({
   lastName: z.string().min(1, 'Last name is required').regex(/^[a-zA-Z\s\-']+$/, 'Invalid characters in last name'),
   email: z.string().email('Invalid email address'),
   contactNumber: z.string()
-    .min(11, 'Contact number must be 11 digits')
-    .max(11, 'Contact number must be 11 digits')
-    .regex(/^\d+$/, 'Contact number must contain only digits'),
+    .regex(/^09\d{9}$/, 'Contact number must be a valid Philippine mobile number'),
   projectId: z.string().min(1, 'Project is required').regex(/^\d+$/, 'Invalid project ID'),
-  towerId: z.string().min(1, 'Tower is required').regex(/^\d+$/, 'Invalid tower ID'),
-  unitTypeId: z.string().min(1, 'Unit type is required').regex(/^\d+$/, 'Invalid unit type ID'),
+  merchantId: z.string().trim().min(1, 'Invalid merchant ID').nullable().optional(),
+  tower: z.string().trim().min(1, 'Tower is required').max(100, 'Tower is too long'),
   unitNumber: z.string().min(1, 'Unit number is required').regex(/^\d+$/, 'Unit number must be digits only').refine((val) => parseInt(val) > 0, 'Unit number must be positive'),
   paymentPurpose: z.string().min(1, 'Payment purpose is required'),
   amount: z.string()
@@ -45,11 +44,11 @@ const supabaseAdmin = createClient(
 );
 
 // Fetch all active projects for payment form
-export async function fetchProjectsForPayment(): Promise<Array<{ id: number; title: string; image?: string }>> {
+export async function fetchProjectsForPayment(): Promise<PaymentProject[]> {
   try {
     const { data, error } = await supabaseAdmin
       .from('project_table')
-      .select('id, title, image')
+      .select('id, title, image, merchant_id')
       .eq('is_active', true)
       .is('deleted_at', null)
       .order('title', { ascending: true });
@@ -59,64 +58,16 @@ export async function fetchProjectsForPayment(): Promise<Array<{ id: number; tit
       return [];
     }
 
-    return data || [];
+    return (data || []).map((project) => ({
+      id: project.id,
+      title: project.title,
+      image: project.image,
+      merchantId: project.merchant_id ?? null,
+    }));
   } catch (err) {
     console.error('[PAYMENT] Unexpected error fetching projects:', err);
     return [];
   }
-}
-
-// Fetch towers for a specific project
-export async function fetchTowersForProject(projectId: number): Promise<Array<{ id: number; name: string }>> {
-  if (!projectId) return [];
-
-  try {
-    const { data, error } = await supabaseAdmin
-      .from('project_towers')
-      .select('id, name')
-      .eq('project_id', projectId)
-      .order('sort_order', { ascending: true })
-      .order('id', { ascending: true });
-
-    if (error) {
-      console.error('[PAYMENT] Error fetching towers:', error.message);
-      return [];
-    }
-
-    return data || [];
-  } catch (err) {
-    console.error('[PAYMENT] Unexpected error fetching towers:', err);
-    return [];
-  }
-}
-
-// Fetch unit types for a specific tower (renamed from fetchUnitsForTower for clarity)
-export async function fetchUnitTypesForTower(projectId: number, towerName: string): Promise<Array<{ id: number; title: string }>> {
-  if (!projectId || !towerName) return [];
-
-  try {
-    const { data, error } = await supabaseAdmin
-      .from('unit_layout')
-      .select('id, title')
-      .eq('project_id', projectId)
-      .eq('tower_name', towerName)
-      .order('id', { ascending: true });
-
-    if (error) {
-      console.error('[PAYMENT] Error fetching unit types:', error.message);
-      return [];
-    }
-
-    return data || [];
-  } catch (err) {
-    console.error('[PAYMENT] Unexpected error fetching unit types:', err);
-    return [];
-  }
-}
-
-// Deprecated: Use fetchUnitTypesForTower instead
-export async function fetchUnitsForTower(projectId: number, towerName: string): Promise<Array<{ id: number; title: string }>> {
-  return fetchUnitTypesForTower(projectId, towerName);
 }
 
 // Verify CAPTCHA token with Cloudflare Siteverify API - Payment version
@@ -263,7 +214,7 @@ async function validatePaymentData(data: PaymentFormData): Promise<{ valid: bool
   try {
     const { data: projectData, error: projError } = await supabaseAdmin
       .from('project_table')
-      .select('id')
+      .select('id, merchant_id')
       .eq('id', parseInt(data.projectId))
       .eq('is_active', true)
       .is('deleted_at', null)
@@ -272,43 +223,15 @@ async function validatePaymentData(data: PaymentFormData): Promise<{ valid: bool
     if (projError || !projectData) {
       return { valid: false, error: 'Invalid project selection.' };
     }
+
+    const authoritativeMerchantId = projectData.merchant_id ?? null;
+    const submittedMerchantId = data.merchantId ?? null;
+    if (authoritativeMerchantId !== submittedMerchantId) {
+      return { valid: false, error: 'The project merchant association has changed. Please reselect the project.' };
+    }
   } catch (err) {
     console.error('[PAYMENT] Error validating project:', err);
     return { valid: false, error: 'Unable to validate project. Please try again.' };
-  }
-
-  // Validate tower belongs to the selected project
-  try {
-    const { data: towerData, error: towerError } = await supabaseAdmin
-      .from('project_towers')
-      .select('id')
-      .eq('project_id', parseInt(data.projectId))
-      .eq('id', parseInt(data.towerId))
-      .maybeSingle();
-
-    if (towerError || !towerData) {
-      return { valid: false, error: 'Invalid tower selection for the selected project.' };
-    }
-  } catch (err) {
-    console.error('[PAYMENT] Error validating tower:', err);
-    return { valid: false, error: 'Unable to validate tower. Please try again.' };
-  }
-
-  // Validate unit type belongs to the selected tower/project
-  try {
-    const { data: unitTypeData, error: unitTypeError } = await supabaseAdmin
-      .from('unit_layout')
-      .select('id')
-      .eq('project_id', parseInt(data.projectId))
-      .eq('id', parseInt(data.unitTypeId))
-      .maybeSingle();
-
-    if (unitTypeError || !unitTypeData) {
-      return { valid: false, error: 'Invalid unit type selection for the selected tower.' };
-    }
-  } catch (err) {
-    console.error('[PAYMENT] Error validating unit type:', err);
-    return { valid: false, error: 'Unable to validate unit type. Please try again.' };
   }
 
   // Note: unitNumber is user-entered and not validated against inventory
