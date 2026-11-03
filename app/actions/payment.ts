@@ -3,6 +3,7 @@
 import * as z from 'zod';
 import { createClient } from '@supabase/supabase-js';
 import type { PaymentProject } from '@/lib/payment-form';
+import { normalizeServerContactNumber } from '@/lib/payment-form';
 
 // Cloudflare Turnstile verification response type
 interface TurnstileVerifyResponse {
@@ -20,7 +21,8 @@ const paymentSchema = z.object({
   lastName: z.string().min(1, 'Last name is required').regex(/^[a-zA-Z\s\-']+$/, 'Invalid characters in last name'),
   email: z.string().email('Invalid email address'),
   contactNumber: z.string()
-    .regex(/^09\d{9}$/, 'Contact number must be a valid Philippine mobile number'),
+    .refine((value) => normalizeServerContactNumber(value) !== null, 'Contact number must be a valid international phone number')
+    .transform((value) => normalizeServerContactNumber(value)!),
   projectId: z.string().min(1, 'Project is required').regex(/^\d+$/, 'Invalid project ID'),
   merchantId: z.string().trim().min(1, 'Invalid merchant ID').nullable().optional(),
   tower: z.string().trim().min(1, 'Tower is required').max(100, 'Tower is too long'),

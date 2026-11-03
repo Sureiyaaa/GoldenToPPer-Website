@@ -6,18 +6,28 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Navbar from "@/app/components/navbar";
-import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight, Check, Edit2, Mail, Phone, Pause, Play } from "lucide-react";
+import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight, Check, Edit2, Mail, Pause, Play } from "lucide-react";
 import PageTransition from "../components/page-transitions";
 import { submitPaymentAction, fetchProjectsForPayment } from "@/app/actions/payment";
 import { fetchDefaultCarouselSlidesAction, fetchProjectCarouselSlidesAction, PaymentCarouselSlide } from "@/app/actions/payment-carousel";
 import { FormPrivacyNotice, useCookieConsent } from '@/app/components/cookie-consent';
 import {
+  DEFAULT_PHONE_COUNTRY,
+  countPhoneDigits,
+  getDialingPrefix,
+  getPhoneLengthHint,
+  getPhoneLengthInfo,
+  getPhoneValidationError,
   getProjectMerchantId,
-  isValidPhilippineMobileSubscriber,
-  normalizePhilippineMobileSubscriber,
-  toPaymentApiContactNumber,
+  isSupportedPhoneCountry,
+  normalizePhoneInput,
+  PHONE_COUNTRY_OPTIONS,
+  searchPhoneCountries,
+  toE164PhoneNumber,
+  wouldExceedPhoneDigitLimit,
 } from '@/lib/payment-form';
 import type { PaymentProject } from '@/lib/payment-form';
+import type { CountryCode } from 'libphonenumber-js';
 
 declare global {
   interface Window {
@@ -36,8 +46,8 @@ const paymentSchema = z.object({
   firstName: z.string().min(1, "First name is required").regex(/^[a-zA-Z\s\-']+$/, "Invalid characters"),
   lastName: z.string().min(1, "Last name is required").regex(/^[a-zA-Z\s\-']+$/, "Invalid characters"),
   email: z.string().email("Enter a valid email address"),
-  contactNumber: z.string()
-    .refine(isValidPhilippineMobileSubscriber, "Enter 10 digits beginning with 9"),
+  phoneCountry: z.string().refine(isSupportedPhoneCountry, "Select a valid country code"),
+  contactNumber: z.string(),
 
   // Step 2: Property Details
   projectId: z.string().min(1, "Please select a project").regex(/^\d+$/, "Invalid project"),
@@ -54,6 +64,12 @@ const paymentSchema = z.object({
     .min(1, "Amount is required")
     .regex(/^\d+(\.\d{1,2})?$/, "Invalid format (e.g. 1000.00)")
     .refine((val) => parseFloat(val) > 0, "Amount must be greater than zero"),
+}).superRefine((data, ctx) => {
+  if (!isSupportedPhoneCountry(data.phoneCountry)) return;
+  const message = getPhoneValidationError(data.contactNumber, data.phoneCountry as CountryCode);
+  if (message) {
+    ctx.addIssue({ code: 'custom', path: ['contactNumber'], message });
+  }
 });
 
 type PaymentFormData = z.infer<typeof paymentSchema>;
@@ -64,6 +80,126 @@ interface CarouselImage {
   altText?: string | null;
   focalX: number;
   focalY: number;
+}
+
+function CountryCodeSelector({
+  selected,
+  onSelect,
+  hasError,
+}: {
+  selected: CountryCode;
+  onSelect: (country: CountryCode) => void;
+  hasError: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const selectedOption = PHONE_COUNTRY_OPTIONS.find((option) => option.iso === selected)!;
+  const filteredOptions = searchPhoneCountries(search);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    searchRef.current?.focus();
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!wrapperRef.current?.contains(event.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isOpen]);
+
+  useEffect(() => {
+    setHighlightedIndex(0);
+  }, [search]);
+
+  const chooseCountry = (country: CountryCode) => {
+    onSelect(country);
+    setSearch('');
+    setIsOpen(false);
+  };
+
+  const handleKeyboard = (event: React.KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setIsOpen(false);
+      return;
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!isOpen) {
+        setIsOpen(true);
+        return;
+      }
+      const direction = event.key === 'ArrowDown' ? 1 : -1;
+      setHighlightedIndex((index) => (
+        (index + direction + filteredOptions.length) % Math.max(filteredOptions.length, 1)
+      ));
+      return;
+    }
+    if (event.key === 'Enter' && isOpen && filteredOptions[highlightedIndex]) {
+      event.preventDefault();
+      chooseCountry(filteredOptions[highlightedIndex].iso);
+    }
+  };
+
+  return (
+    <div ref={wrapperRef} className="relative shrink-0" onKeyDown={handleKeyboard}>
+      <button
+        type="button"
+        aria-label={`Country code, ${selectedOption.name} ${selectedOption.dialPrefix}`}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((open) => !open)}
+        onKeyDown={(event) => {
+          if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+            setSearch(event.key);
+            setIsOpen(true);
+          }
+        }}
+        className={`flex h-[50px] items-center gap-2 rounded-l-md border border-r-0 bg-stone-100 px-3 text-sm text-gray-700 outline-none transition-colors hover:bg-white focus-visible:ring-2 focus-visible:ring-brand-blue/20 ${hasError ? 'border-red-300' : 'border-stone-200'}`}
+      >
+        <span aria-hidden="true" className="text-base">{selectedOption.flag}</span>
+        <span>{selectedOption.dialPrefix}</span>
+        <ChevronDown size={14} aria-hidden="true" className="text-brand-blue/50" />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 top-full z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-md border border-stone-200 bg-white shadow-xl">
+          <div className="border-b border-stone-100 p-2">
+            <input
+              ref={searchRef}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              aria-label="Search countries"
+              placeholder="Search country, ISO, or +code"
+              className="h-10 w-full rounded-md border border-stone-200 px-3 text-sm text-gray-900 outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/10"
+            />
+          </div>
+          <ul role="listbox" aria-label="Country calling codes" className="max-h-64 overflow-y-auto p-1">
+            {filteredOptions.length > 0 ? filteredOptions.map((option, index) => (
+              <li key={option.iso}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={option.iso === selected}
+                  onMouseEnter={() => setHighlightedIndex(index)}
+                  onClick={() => chooseCountry(option.iso)}
+                  className={`flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm ${index === highlightedIndex ? 'bg-brand-blue/5 text-brand-blue' : 'text-gray-700 hover:bg-stone-50'}`}
+                >
+                  <span aria-hidden="true" className="text-base">{option.flag}</span>
+                  <span className="min-w-0 flex-1 truncate">{option.name}</span>
+                  <span className="shrink-0 text-xs text-stone-500">{option.iso} · {option.dialPrefix}</span>
+                </button>
+              </li>
+            )) : (
+              <li className="px-3 py-4 text-center text-sm text-stone-500">No countries found</li>
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Convert legacy fallback images to carousel format with centered focal point (no CMS alt text available)
@@ -365,6 +501,8 @@ export default function PaymentClient() {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaError, setCaptchaError] = useState('');
   const [serverError, setServerError] = useState('');
+  const [phoneLengthFeedback, setPhoneLengthFeedback] = useState('');
+  const phonePasteRef = useRef(false);
 
   // Project data loading state
   const [projects, setProjects] = useState<PaymentProject[]>([]);
@@ -388,13 +526,15 @@ export default function PaymentClient() {
     resolver: zodResolver(paymentSchema),
     mode: "onBlur",
     defaultValues: {
-      firstName: '', lastName: '', email: '', contactNumber: '',
+      firstName: '', lastName: '', email: '', phoneCountry: DEFAULT_PHONE_COUNTRY, contactNumber: '',
       projectId: '', merchantId: null, tower: '', unitNumber: '',
       paymentPurpose: '', amount: '',
     }
   });
 
   const watchProjectId = watch("projectId");
+  const watchPhoneCountry = watch("phoneCountry") as CountryCode;
+  const watchContactNumber = watch("contactNumber");
   const contactNumberField = register("contactNumber");
   const projectField = register("projectId");
 
@@ -575,7 +715,7 @@ export default function PaymentClient() {
   const primaryButtonStyles = "inline-flex h-12 min-w-[11rem] items-center justify-center gap-2 rounded-md border border-transparent bg-brand-blue px-4 text-sm font-medium text-white shadow-[0_2px_8px_rgba(20,47,114,0.08)] transition-[background-color,border-color,box-shadow,filter] duration-200 enabled:hover:border-brand-gold/60 enabled:hover:brightness-95 enabled:hover:shadow-[0_4px_14px_rgba(20,47,114,0.14)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-blue disabled:cursor-not-allowed disabled:bg-gray-400 disabled:shadow-none";
 
   // Step-specific field validation
-  const step1Fields = ['firstName', 'lastName', 'email', 'contactNumber'] as const;
+  const step1Fields = ['firstName', 'lastName', 'email', 'phoneCountry', 'contactNumber'] as const;
   const step2Fields = ['projectId', 'tower', 'unitNumber'] as const;
   const step3Fields = ['paymentPurpose', 'amount'] as const;
 
@@ -641,9 +781,16 @@ export default function PaymentClient() {
       setServerError('');
       console.log('[PAYMENT] Submitting payment with CAPTCHA token');
 
+      const country = data.phoneCountry as CountryCode;
+      const normalizedContactNumber = toE164PhoneNumber(data.contactNumber, country);
+      if (!normalizedContactNumber) {
+        setServerError('Please enter a valid mobile number.');
+        return;
+      }
+      const { phoneCountry: _phoneCountry, ...paymentData } = data;
       const result = await submitPaymentAction({
-        ...data,
-        contactNumber: toPaymentApiContactNumber(data.contactNumber),
+        ...paymentData,
+        contactNumber: normalizedContactNumber,
       }, currentCaptchaToken);
 
       if (result?.error) {
@@ -865,31 +1012,83 @@ export default function PaymentClient() {
           <div className="flex flex-col">
             <label htmlFor="payment-contact" className={labelStyles}>Mobile Number</label>
             <div className="flex">
-              <span
-                aria-hidden="true"
-                className="flex h-[50px] shrink-0 items-center gap-2 rounded-l-md border border-r-0 border-stone-200 bg-stone-100 px-4 text-sm text-gray-700"
-              >
-                <Phone size={16} strokeWidth={1.5} className="text-stone-400" />
-                +63
-              </span>
+              <input type="hidden" {...register("phoneCountry")} />
+              <CountryCodeSelector
+                selected={watchPhoneCountry}
+                hasError={Boolean(errors.contactNumber)}
+                onSelect={(country) => {
+                  setValue('phoneCountry', country, { shouldDirty: true });
+                  const normalized = normalizePhoneInput(watchContactNumber, country);
+                  const { max } = getPhoneLengthInfo(country);
+                  const digitCount = countPhoneDigits(normalized.input);
+                  setPhoneLengthFeedback(
+                    digitCount > max ? `This number exceeds the ${max}-digit limit for the selected country.` : ''
+                  );
+                  setValue('contactNumber', normalized.input, {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  });
+                }}
+              />
               <input
                 id="payment-contact"
                 {...contactNumberField}
+                onPaste={() => {
+                  phonePasteRef.current = true;
+                }}
+                onBeforeInput={(event) => {
+                  const inputEvent = event.nativeEvent as InputEvent;
+                  if (inputEvent.inputType !== 'insertText') return;
+                  const addedDigits = countPhoneDigits(inputEvent.data || '');
+                  if (addedDigits === 0) return;
+                  const input = event.currentTarget;
+                  const selectionStart = input.selectionStart ?? input.value.length;
+                  const selectionEnd = input.selectionEnd ?? selectionStart;
+                  if (wouldExceedPhoneDigitLimit(
+                    input.value,
+                    input.value.slice(selectionStart, selectionEnd),
+                    inputEvent.data || '',
+                    watchPhoneCountry
+                  )) event.preventDefault();
+                }}
                 onChange={(event) => {
-                  event.target.value = normalizePhilippineMobileSubscriber(event.target.value);
+                  const normalized = normalizePhoneInput(event.target.value, watchPhoneCountry);
+                  const inputType = (event.nativeEvent as InputEvent).inputType;
+                  const isPaste = inputType === 'insertFromPaste' || phonePasteRef.current;
+                  phonePasteRef.current = false;
+                  const { max } = getPhoneLengthInfo(normalized.country);
+                  const digitCount = countPhoneDigits(normalized.input);
+                  if (digitCount > max && !isPaste) {
+                    event.target.value = watchContactNumber;
+                    return;
+                  }
+                  setPhoneLengthFeedback(
+                    digitCount > max ? `Pasted number exceeds the ${max}-digit limit for the selected country.` : ''
+                  );
+                  if (normalized.country !== watchPhoneCountry) {
+                    setValue('phoneCountry', normalized.country, { shouldDirty: true });
+                  }
+                  event.target.value = normalized.input;
                   contactNumberField.onChange(event);
                 }}
                 type="tel"
-                inputMode="numeric"
-                autoComplete="tel-national"
-                maxLength={10}
-                aria-describedby="payment-contact-help"
+                inputMode="tel"
+                autoComplete="tel"
+                aria-describedby="payment-contact-help payment-contact-length"
                 aria-invalid={Boolean(errors.contactNumber)}
                 className={`${inputStyles} rounded-l-none ${errors.contactNumber ? inputErrorStyles : ''}`}
-                placeholder="9XXXXXXXXX"
+                placeholder="Mobile number"
               />
             </div>
-            <span id="payment-contact-help" className="mt-1.5 text-xs leading-4 text-stone-500">Enter the 10 digits after +63.</span>
+            <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs leading-4 text-stone-500">
+              <span id="payment-contact-help">Enter a national number, or paste a complete international number.</span>
+              <span id="payment-contact-length" className="text-stone-400">
+                {getPhoneLengthHint(watchContactNumber, watchPhoneCountry)}
+              </span>
+            </div>
+            {phoneLengthFeedback && (
+              <span className="mt-1 text-xs leading-4 text-amber-600">{phoneLengthFeedback}</span>
+            )}
             {errors.contactNumber && <span className={errorStyles}><AlertCircle size={12} />{errors.contactNumber.message}</span>}
           </div>
         </div>
@@ -1029,7 +1228,7 @@ export default function PaymentClient() {
               </div>
               <div>
                 <dt className={summaryLabelStyles}>Contact</dt>
-                <dd className={summaryValueStyles}>+63 {formData.contactNumber}</dd>
+                <dd className={summaryValueStyles}>{toE164PhoneNumber(formData.contactNumber, formData.phoneCountry as CountryCode) || `${getDialingPrefix(formData.phoneCountry as CountryCode)} ${formData.contactNumber}`}</dd>
               </div>
             </dl>
           </section>
