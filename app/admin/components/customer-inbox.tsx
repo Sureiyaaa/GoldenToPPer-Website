@@ -3,7 +3,6 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bell, Building2, CheckCircle2, CornerUpLeft, Landmark, Loader2, Mail, MailOpen, RefreshCw, Search, X } from 'lucide-react';
-import { createClient } from '@/utils/supabase/client';
 import { fetchNotificationsAction, toggleNotificationReadAction } from '@/app/actions/admin_fetchers';
 import {
   customerInboxContext, customerInboxKey, customerInboxReplyHref, customerInboxTypeLabels,
@@ -21,7 +20,7 @@ const typeIcons = { inquiry: Building2, loan_application: Landmark, customer_sup
 
 type InboxState = {
   items: CustomerInboxItem[]; isLoading: boolean; error: string; readError: string;
-  liveUnavailable: boolean; pendingKeys: Set<string>; unreadCount: number;
+  pendingKeys: Set<string>; unreadCount: number;
   refresh: () => Promise<void>; openItem: (item: CustomerInboxItem) => void;
   toggleRead: (item: CustomerInboxItem) => Promise<void>;
 };
@@ -33,12 +32,10 @@ function useCustomerInbox() {
 }
 
 export function CustomerInboxProvider({ enabled, children }: { enabled: boolean; children: ReactNode }) {
-  const [supabase] = useState(() => createClient());
   const [items, setItems] = useState<CustomerInboxItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [readError, setReadError] = useState('');
-  const [liveUnavailable, setLiveUnavailable] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [pendingKeys, setPendingKeys] = useState<Set<string>>(new Set());
   const mounted = useRef(false);
@@ -86,21 +83,17 @@ export function CustomerInboxProvider({ enabled, children }: { enabled: boolean;
     if (!enabled) return;
     mounted.current = true;
     void refresh();
-    const channel = supabase.channel('customer-inbox')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'inquire' }, () => void refresh())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'contact' }, () => void refresh())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'loan_preapp' }, () => void refresh())
-      .subscribe(status => {
-        if (mounted.current) setLiveUnavailable(status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED');
-      });
+    // Customer tables are intentionally unavailable to browser roles. Poll the
+    // authenticated server action instead of subscribing with the anon client.
+    const pollTimer = window.setInterval(() => void refresh(), 30_000);
     const onFocus = () => void refresh();
     window.addEventListener('focus', onFocus);
     return () => {
       mounted.current = false;
+      window.clearInterval(pollTimer);
       window.removeEventListener('focus', onFocus);
-      void supabase.removeChannel(channel);
     };
-  }, [enabled, refresh, supabase]);
+  }, [enabled, refresh]);
 
   const setRead = useCallback(async (item: CustomerInboxItem, isRead: boolean) => {
     const key = customerInboxKey(item);
@@ -137,7 +130,7 @@ export function CustomerInboxProvider({ enabled, children }: { enabled: boolean;
   };
   const selected = items.find(item => customerInboxKey(item) === selectedKey);
   const value: InboxState = {
-    items, isLoading, error, readError, liveUnavailable, pendingKeys,
+    items, isLoading, error, readError, pendingKeys,
     unreadCount: items.filter(item => !item.is_read).length,
     refresh, openItem, toggleRead: item => setRead(item, !item.is_read),
   };
@@ -251,7 +244,7 @@ export function NotificationCenter() {
 }
 
 export function CustomerInboxManager() {
-  const { items, isLoading, error, readError, liveUnavailable, unreadCount, refresh, openItem } = useCustomerInbox();
+  const { items, isLoading, error, readError, unreadCount, refresh, openItem } = useCustomerInbox();
   const [search, setSearch] = useState('');
   const [type, setType] = useState<CustomerInboxItemType | 'all'>('all');
   const [read, setRead] = useState<CustomerInboxReadFilter>('all');
@@ -314,10 +307,9 @@ export function CustomerInboxManager() {
           </button>
         </div>
       </div>
-      {(error || readError || liveUnavailable) && <div data-inbox-notice className="mb-4 shrink-0 space-y-3">
+      {(error || readError) && <div data-inbox-notice className="mb-4 shrink-0 space-y-3">
         {error && <InboxError message={error} onRetry={() => void refresh()} />}
         {readError && <InboxError message={readError} />}
-        {liveUnavailable && <p role="status" className="text-xs text-gray-500">Live updates are unavailable. Use Refresh to check for new messages.</p>}
       </div>}
       <div className="flex min-h-0 shrink-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm" aria-busy={isLoading}>
         {isLoading && items.length === 0 ? (

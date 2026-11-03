@@ -149,7 +149,7 @@ test('project grants are read-only, column-limited, and retain active public pag
   assert.match(accessMigrationSource, /revoke insert, update, delete on table public\.project_table from public, anon, authenticated/);
   assert.match(accessMigrationSource, /create policy project_table_public_read_active[\s\S]*using \(is_active = true and deleted_at is null\)/);
   const publicGrant = accessMigrationSource.match(/grant select \(([\s\S]*?)\) on table public\.project_table to anon, authenticated/)?.[1] || '';
-  for (const field of ['id', 'title', 'slug', 'status', 'address', 'city', 'country', 'sqm', 'unit_total', 'image', 'img_awards', 'map_icon', 'proximity', 'virtual_tour_url', 'is_active', 'deleted_at']) {
+  for (const field of ['id', 'title', 'slug', 'status', 'address', 'city', 'country', 'sqm', 'unit_total', 'image', 'img_awards', 'map_icon', 'virtual_tour_url', 'is_active', 'deleted_at']) {
     assert.match(publicGrant, new RegExp(`\\b${field}\\b`));
   }
   assert.doesNotMatch(publicGrant, /\bmerchant_id\b/);

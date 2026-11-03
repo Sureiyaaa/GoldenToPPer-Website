@@ -293,13 +293,15 @@ test('an unavailable selected bank never produces a referral notice or submissio
   assert.deepEqual(ui.calls, []);
 });
 
-test('loan INSERT event refreshes the shared bell/inbox state through the existing provider', async () => {
+test('authenticated inbox polling refreshes the shared bell after a loan submission', async () => {
   const h = harness();
-  const slots = [], effects = [], events = [], listeners = new Map();
-  let cursor = 0, effectsRegistered = false, fetches = 0, removed = false;
+  const slots = [], effects = [], listeners = new Map();
+  let cursor = 0, effectsRegistered = false, fetches = 0, poll = null, cleared = false;
   const browser = {
     addEventListener: (type, callback) => listeners.set(type, callback),
     removeEventListener: type => listeners.delete(type),
+    setInterval: callback => { poll = callback; return 1; },
+    clearInterval: timer => { if (timer === 1) cleared = true; },
   };
   const react = {
     createContext: () => ({ Provider: 'provider' }),
@@ -316,20 +318,10 @@ test('loan INSERT event refreshes the shared bell/inbox state through the existi
     useCallback: callback => callback,
     useEffect: effect => { if (!effectsRegistered) effects.push(effect); },
   };
-  const channel = {
-    on: (_name, filter, callback) => { events.push({ filter, callback }); return channel; },
-    subscribe: callback => { callback('SUBSCRIBED'); return channel; },
-  };
   const provider = loadTs('app/admin/components/customer-inbox.tsx', {
     react,
     'next/navigation': {},
     'lucide-react': {},
-    '@/utils/supabase/client': {
-      createClient: () => ({
-        channel: () => channel,
-        removeChannel: async () => { removed = true; },
-      }),
-    },
     '@/app/actions/admin_fetchers': {
       fetchNotificationsAction: async () => {
         fetches++;
@@ -352,9 +344,8 @@ test('loan INSERT event refreshes the shared bell/inbox state through the existi
     await initial.refresh();
     assert.equal(render().items.length, 0);
     assert.deepEqual(await h.actions.submitLoanPreApplicationAction(valid), { success: true });
-    const event = events.find(event => event.filter.table === 'loan_preapp');
-    assert.deepEqual(event.filter, { event: 'INSERT', schema: 'public', table: 'loan_preapp' });
-    event.callback();
+    assert.equal(typeof poll, 'function');
+    poll();
     await initial.refresh();
     const updated = render();
     assert.equal(updated.items[0].type, 'loan_application');
@@ -364,6 +355,6 @@ test('loan INSERT event refreshes the shared bell/inbox state through the existi
   } finally {
     cleanup();
   }
-  assert.equal(removed, true);
+  assert.equal(cleared, true);
   assert.equal(listeners.size, 0);
 });

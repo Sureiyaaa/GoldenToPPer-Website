@@ -20,7 +20,6 @@ async function prepare() {
   fs.mkdirSync(work, { recursive: true });
   fs.writeFileSync(path.join(work, 'ts-loader.cjs'), `const ts = require('typescript'); module.exports = function(source) { return ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText; };`);
   fs.writeFileSync(path.join(work, 'navigation.js'), `export const useRouter = () => ({push() {}});`);
-  fs.writeFileSync(path.join(work, 'supabase.js'), `export const createClient = () => ({ channel: () => ({ on() { return this; }, subscribe(callback) { window.inboxLiveStatus = callback; return this; } }), removeChannel() {} });`);
   fs.writeFileSync(path.join(work, 'actions.js'), `export async function fetchNotificationsAction() { if (window.inboxFetchError) throw new Error('Fixture fetch failure'); return window.inboxItems; } export async function toggleNotificationReadAction() {}`);
   const dashboard = fs.readFileSync(path.join(root, 'app/admin/dashboard/page.tsx'), 'utf8');
   const contentClass = dashboard.match(/<div className=\{\x60(min-h-0 flex-1 \[scrollbar-gutter:stable\][^\x60]+)\x60\}>/)[1];
@@ -51,7 +50,6 @@ async function prepare() {
     mode: 'development', context: root, entry: path.join(work, 'entry.jsx'),
     devtool: false, output: { path: work, filename: 'bundle.js' },
     resolve: { extensions: ['.tsx', '.ts', '.jsx', '.js'], alias: {
-      '@/utils/supabase/client': path.join(work, 'supabase.js'),
       '@/app/actions/admin_fetchers': path.join(work, 'actions.js'),
       'next/navigation': path.join(work, 'navigation.js'), '@': root,
     } },
@@ -292,12 +290,7 @@ async function main() {
     await wait(300);
     assert.ok((await inspect()).viewport.scrollTop > 0, 'Touch swipe scrolls mobile cards');
     await size(1024, 768);
-    await evaluate(`window.inboxLiveStatus('CHANNEL_ERROR')`);
-    await wait(100);
-    assert.equal(await evaluate(`getComputedStyle(document.querySelector('[data-dashboard-content]')).overflowY`), 'auto', 'Live-update notice permits accessible outer scrolling');
-    await evaluate(`document.querySelector('[data-dashboard-content]').scrollTop = 99999`);
-    assert.ok((await inspect()).card.bottom <= 768, 'Records card remains accessible with live-update notice');
-    await evaluate(`window.inboxLiveStatus('SUBSCRIBED'); window.inboxFetchError = true; window.dispatchEvent(new Event('focus'))`);
+    await evaluate(`window.inboxFetchError = true; window.dispatchEvent(new Event('focus'))`);
     await wait(100);
     assert.equal(await evaluate(`!!document.querySelector('[data-inbox-notice] [role="alert"]')`), true, 'Refresh failure retains records and shows existing error state');
     await evaluate(`document.querySelector('[data-dashboard-content]').scrollTop = 99999`);
