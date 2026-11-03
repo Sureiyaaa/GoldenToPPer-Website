@@ -36,6 +36,13 @@ function serverHarness(options = {}) {
       const data = source.slice(this.start, Math.min(this.end + 1, this.start + (options.responseCap ?? 500)));
       return { data, count: this.opts.count ? source.length : null, error: null };
     }
+    async maybeSingle() {
+      calls.push({ op: 'select-one', table: this.table, selection: this.selection, filters: this.filters });
+      if (options.fetchError === this.table) return { data: null, error: { message: 'Database failed' } };
+      const idFilter = this.filters.find(([column]) => column === 'id');
+      const data = (sources[this.table] || []).find(row => !idFilter || Number(row.id) === Number(idFilter[1])) || null;
+      return { data, error: null };
+    }
     async upsert(values, opts) { calls.push({ op: 'upsert', table: this.table, values, opts }); return { error: options.writeError ? { message: 'Failed' } : null }; }
     delete() { return { match: async values => { calls.push({ op: 'delete', table: this.table, values }); return { error: options.writeError ? { message: 'Failed' } : null }; } }; }
   }
@@ -129,12 +136,37 @@ test('paging deduplicates records with the same source ID', async () => {
   assert.equal(items.filter(item => item.type === 'inquiry').length, 1);
 });
 
-test('missing session and denied permission stop both fetch and mutation before database access', async () => {
+test('missing session and denied permission stop list, detail, and mutation access before database access', async () => {
   for (const auth of [{ session: null }, { profile: null }, { profile: { permissions: {} } }, { profile: { permissions: { notifications_code: { can_view: false } } } }]) {
     const harness = serverHarness({ auth });
     await assert.rejects(harness.actions.fetchNotificationsAction(), /Unauthorized|permission/);
+    await assert.rejects(harness.actions.fetchContactDetailAction(1), /Unauthorized|permission/);
+    await assert.rejects(harness.actions.fetchInquiryDetailAction(1), /Unauthorized|permission/);
     await assert.rejects(harness.actions.toggleNotificationReadAction(1, 'inquiry', true), /Unauthorized|permission/);
     assert.equal(harness.calls.length, 0);
+  }
+});
+
+test('authorized detail actions return only the requested customer message through the server', async () => {
+  const harness = serverHarness();
+  const contactDetail = await harness.actions.fetchContactDetailAction(1);
+  const inquiryDetail = await harness.actions.fetchInquiryDetailAction(1);
+  assert.equal(contactDetail.client.email, client.email);
+  assert.equal(contactDetail.message, support.message);
+  assert.equal(inquiryDetail.client.email, client.email);
+  assert.equal(inquiryDetail.project_table.title, 'City Clou');
+  assert.deepEqual(harness.calls.map(call => [call.op, call.table]), [
+    ['select-one', 'contact'],
+    ['select-one', 'inquire'],
+  ]);
+});
+
+test('admin detail pages do not query customer tables with the browser anon client', () => {
+  for (const file of ['app/admin/contacts/page.tsx', 'app/admin/inquiries/page.tsx']) {
+    const source = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+    assert.doesNotMatch(source, /createClient|\.from\(['"](?:contact|inquire)['"]\)/);
+    assert.match(source, /fetch(?:Contact|Inquiry)DetailAction/);
+    assert.match(source, /toggleNotificationReadAction/);
   }
 });
 
@@ -170,4 +202,18 @@ test('source and write failures propagate instead of reporting success or silent
   await assert.rejects(fetch.actions.fetchNotificationsAction(), /Could not load loan_preapp/);
   const write = serverHarness({ writeError: true });
   await assert.rejects(write.actions.toggleNotificationReadAction(1, 'inquiry', true), /Could not save/);
+});
+
+test('access hardening removes direct browser DML while preserving service-role customer access', () => {
+  const migration = fs.readFileSync(path.join(
+    __dirname,
+    '../supabase/migrations/20261103000000_harden_customer_and_project_access.sql'
+  ), 'utf8');
+  for (const table of ['client', 'contact', 'inquire', 'loan_preapp']) {
+    assert.match(migration, new RegExp(`public\\.${table}`));
+  }
+  assert.match(migration, /revoke select, insert, update, delete on table[\s\S]*from public, anon, authenticated/);
+  assert.match(migration, /grant select, insert, update, delete on table[\s\S]*to service_role/);
+  assert.match(migration, /tablename in \('client', 'contact', 'inquire', 'loan_preapp'\)[\s\S]*cmd in \('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'ALL'\)/);
+  assert.doesNotMatch(migration, /delete\s+from\s+public\.(?:client|contact|inquire|loan_preapp)/i);
 });

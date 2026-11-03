@@ -790,6 +790,64 @@ async function requireNotificationAccess() {
   return adminId;
 }
 
+function normalizeCustomerMessageId(messageId: number | string): number {
+  if ((typeof messageId !== 'number' && typeof messageId !== 'string') ||
+      (typeof messageId === 'string' && !/^\d+$/.test(messageId.trim()))) {
+    throw new Error('Invalid customer message ID.');
+  }
+
+  const normalizedId = Number(messageId);
+  if (!Number.isSafeInteger(normalizedId) || normalizedId <= 0) {
+    throw new Error('Invalid customer message ID.');
+  }
+  return normalizedId;
+}
+
+function normalizeJoinedRecord<T>(value: T | T[] | null | undefined): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value ?? null;
+}
+
+export async function fetchContactDetailAction(messageId: number | string) {
+  await requireNotificationAccess();
+  const normalizedId = normalizeCustomerMessageId(messageId);
+  const { data, error } = await supabaseAdmin
+    .from('contact')
+    .select('id, created_at, "type of inquiry", message, client!client_id(first_name, last_name, email, phone_number)')
+    .eq('id', normalizedId)
+    .maybeSingle();
+
+  if (error) throw new Error('Could not load this customer message.');
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    created_at: data.created_at,
+    'type of inquiry': data['type of inquiry'],
+    message: data.message,
+    client: normalizeJoinedRecord(data.client),
+  };
+}
+
+export async function fetchInquiryDetailAction(messageId: number | string) {
+  await requireNotificationAccess();
+  const normalizedId = normalizeCustomerMessageId(messageId);
+  const { data, error } = await supabaseAdmin
+    .from('inquire')
+    .select('id, created_at, client!client_id(first_name, last_name, email, phone_number), project_table!project_id(title)')
+    .eq('id', normalizedId)
+    .maybeSingle();
+
+  if (error) throw new Error('Could not load this customer inquiry.');
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    created_at: data.created_at,
+    client: normalizeJoinedRecord(data.client),
+    project_table: normalizeJoinedRecord(data.project_table),
+  };
+}
+
 async function fetchInboxSource<T extends { id: number | string }>(
   table: 'inquire' | 'contact' | 'loan_preapp', selection: string,
   adminId: string, readRelation?: 'admin_inquire_reads' | 'admin_contact_reads' | 'admin_loan_preapp_reads',

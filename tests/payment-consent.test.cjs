@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
+const { parsePhoneNumberFromString } = require('libphonenumber-js');
 
 function submission({ accepted = true, initialToken = 'verified-token', currentToken = 'verified-token', result = { success: true } } = {}) {
   const source = fs.readFileSync(path.join(__dirname, '../app/payment/paymentclient.tsx'), 'utf8');
@@ -27,7 +28,7 @@ function submission({ accepted = true, initialToken = 'verified-token', currentT
     setCaptchaToken: value => tokens.push(value),
     setServerError: value => errors.push(value),
     submitPaymentAction: async (...args) => { requests.push(args); return result; },
-    toPaymentApiContactNumber: subscriber => `0${subscriber}`,
+    toE164PhoneNumber: (value, country) => parsePhoneNumberFromString(value, country)?.number || null,
     console: { log() {}, error() {} },
     alert: value => alerts.push(value),
   };
@@ -36,8 +37,9 @@ function submission({ accepted = true, initialToken = 'verified-token', currentT
   return { submit: module.exports, requests, notices, errors, resets, tokens, alerts };
 }
 
-const payment = { firstName: 'Test', lastName: 'Payer', email: 'test@example.invalid', contactNumber: '9123456789', projectId: '1', merchantId: null, tower: 'Tower A', unitNumber: '101', paymentPurpose: 'Reservation Fee', amount: '1000' };
-const submittedPayment = { ...payment, contactNumber: '09123456789' };
+const payment = { firstName: 'Test', lastName: 'Payer', email: 'test@example.invalid', phoneCountry: 'PH', contactNumber: '0917 123 4567', projectId: '1', merchantId: null, tower: 'Tower A', unitNumber: '101', paymentPurpose: 'Reservation Fee', amount: '1000' };
+const { phoneCountry: _phoneCountry, ...submittedFields } = payment;
+const submittedPayment = { ...submittedFields, contactNumber: '+639171234567' };
 
 test('payment requires verification before requesting cookie/privacy choices', async () => {
   const ui = submission({ initialToken: null });
@@ -69,6 +71,14 @@ test('accepted payment uses the current verification response and API-compatible
   await ui.submit(payment);
   assert.deepEqual(ui.requests, [[submittedPayment, 'fresh-response']]);
   assert.deepEqual(ui.alerts, ['Payment processed successfully!']);
+});
+
+test('international payment numbers submit as E.164', async () => {
+  const ui = submission({ currentToken: 'fresh-response' });
+  const internationalPayment = { ...payment, phoneCountry: 'US', contactNumber: '(415) 555-2671' };
+  await ui.submit(internationalPayment);
+  assert.equal(ui.requests[0][0].contactNumber, '+14155552671');
+  assert.equal(Object.hasOwn(ui.requests[0][0], 'phoneCountry'), false);
 });
 
 test('server rejection retains the existing payment retry behavior', async () => {

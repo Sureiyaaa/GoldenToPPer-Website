@@ -3,6 +3,7 @@
 import * as z from 'zod';
 import { createClient } from '@supabase/supabase-js';
 import type { PaymentProject } from '@/lib/payment-form';
+import { normalizeServerContactNumber } from '@/lib/payment-form';
 
 // Cloudflare Turnstile verification response type
 interface TurnstileVerifyResponse {
@@ -20,7 +21,8 @@ const paymentSchema = z.object({
   lastName: z.string().min(1, 'Last name is required').regex(/^[a-zA-Z\s\-']+$/, 'Invalid characters in last name'),
   email: z.string().email('Invalid email address'),
   contactNumber: z.string()
-    .regex(/^09\d{9}$/, 'Contact number must be a valid Philippine mobile number'),
+    .refine((value) => normalizeServerContactNumber(value) !== null, 'Contact number must be a valid international phone number')
+    .transform((value) => normalizeServerContactNumber(value)!),
   projectId: z.string().min(1, 'Project is required').regex(/^\d+$/, 'Invalid project ID'),
   merchantId: z.string().trim().min(1, 'Invalid merchant ID').nullable().optional(),
   tower: z.string().trim().min(1, 'Tower is required').max(100, 'Tower is too long'),
@@ -48,7 +50,7 @@ export async function fetchProjectsForPayment(): Promise<PaymentProject[]> {
   try {
     const { data, error } = await supabaseAdmin
       .from('project_table')
-      .select('id, title, image, merchant_id')
+      .select('id, title, merchant_id')
       .eq('is_active', true)
       .is('deleted_at', null)
       .order('title', { ascending: true });
@@ -59,10 +61,9 @@ export async function fetchProjectsForPayment(): Promise<PaymentProject[]> {
     }
 
     return (data || []).map((project) => ({
-      id: project.id,
-      title: project.title,
-      image: project.image,
-      merchantId: project.merchant_id ?? null,
+      project_name: project.title,
+      project_id: project.id,
+      merchant_id: project.merchant_id ?? null,
     }));
   } catch (err) {
     console.error('[PAYMENT] Unexpected error fetching projects:', err);
@@ -270,7 +271,7 @@ export async function submitPaymentAction(
     const schemaValidation = paymentSchema.safeParse(paymentData);
 
     if (!schemaValidation.success) {
-      console.log('[PAYMENT] Schema validation failed:', schemaValidation.error);
+      console.warn('[PAYMENT] Schema validation failed');
       return { error: 'Invalid payment data. Please check your form.' };
     }
 
@@ -305,8 +306,8 @@ export async function submitPaymentAction(
     return {
       error: 'Payment processing is not yet configured. Please contact support.',
     };
-  } catch (err: any) {
-    console.error('[PAYMENT] FATAL SERVER ERROR:', err);
-    return { error: err.message || 'An unexpected error occurred. Please try again.' };
+  } catch {
+    console.error('[PAYMENT] Unexpected server error');
+    return { error: 'An unexpected error occurred. Please try again.' };
   }
 }

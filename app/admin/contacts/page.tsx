@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, UserCircle2, CornerUpLeft, Loader2, Calendar, Mail, Phone } from 'lucide-react';
-import { createClient } from '@/utils/supabase/client';
+import { fetchContactDetailAction, toggleNotificationReadAction } from '@/app/actions/admin_fetchers';
 
 function ContactDetail() {
   const router = useRouter();
@@ -11,7 +11,6 @@ function ContactDetail() {
   const id = searchParams.get('id'); // Grabs ?id=123 from the URL
   const [contact, setContact] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const supabase = createClient();
 
   useEffect(() => {
     if (!id) {
@@ -20,31 +19,25 @@ function ContactDetail() {
     }
 
     const fetchContact = async () => {
-      const { data } = await supabase
-        .from('contact')
-        .select(`id, created_at, is_read, "type of inquiry", message, client (first_name, last_name, email, phone_number)`)
-        .eq('id', id)
-        .single();
-        
-      if (data) {
-        // 1. FIX: Normalize Supabase returning arrays for foreign keys
-        const clientData = Array.isArray(data.client) ? data.client[0] : data.client;
-
-        setContact({
-          ...data,
-          client: clientData
-        });
-
-        // 2. FIX: Automatically mark as read if visited directly
-        if (!data.is_read) {
-          await supabase.from('contact').update({ is_read: true }).eq('id', id);
+      try {
+        const data = await fetchContactDetailAction(id);
+        setContact(data);
+        if (data) {
+          try {
+            await toggleNotificationReadAction(id, 'customer_support', true);
+          } catch {
+            // Keep the authorized detail visible if only read-state persistence fails.
+          }
         }
+      } catch {
+        setContact(null);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
     
-    fetchContact();
-  }, [id, supabase]);
+    void fetchContact();
+  }, [id]);
 
   if (isLoading) return <div className="flex justify-center items-center min-h-screen bg-white"><Loader2 className="animate-spin text-[#142f72]" size={32} /></div>;
   if (!contact) return <div className="min-h-screen bg-white flex flex-col justify-center items-center text-gray-500"><p className="mb-4">Message not found.</p><button onClick={() => router.push('/admin/dashboard')} className="text-[#142f72] font-bold hover:underline">Return to Dashboard</button></div>;

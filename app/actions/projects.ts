@@ -10,7 +10,7 @@ const supabaseAdmin = createClient(
 );
 
 // Phase 2.3C: Server-controlled field allowlists (prevent arbitrary column modifications)
-const PROJECT_TABLE_FIELDS = new Set(['title', 'slug', 'status', 'address', 'city', 'country', 'sqm', 'unit_total', 'image', 'img_awards', 'map_icon']);
+const PROJECT_TABLE_FIELDS = new Set(['title', 'slug', 'status', 'address', 'city', 'country', 'sqm', 'unit_total', 'merchant_id', 'image', 'img_awards', 'map_icon']);
 const EXTENDED_DESCRIPTION_FIELDS = new Set(['editorial_title', 'editorial_long', 'editorial_img', 'editorial_title_color', 'editorial_desc_color', 'editorial_bg_color', 'amenities_title', 'amenities_title_gold', 'map_subtitle']);
 const UNIT_LAYOUT_FIELDS = new Set(['title', 'tower_name', 'description', 'thumbnail', 'min_sqm', 'max_sqm', 'bg_color', 'sort_order', 'show_on_map_card', 'map_card_order', 'show_on_project_page', 'project_page_order']);
 const AMENITY_FIELDS = new Set(['title', 'description', 'thumbnail', 'tower']);
@@ -860,6 +860,7 @@ function buildProjectAuditRows(before: ProjectSnapshot, after: ProjectSnapshot, 
   const projectFields: Record<string, string> = {
     title: 'Project title', slug: 'URL slug', status: 'Project status', address: 'Address',
     city: 'City', country: 'Country', sqm: 'Site area', unit_total: 'Total units',
+    merchant_id: 'Paynamics Merchant ID',
     image: 'Featured image', img_awards: 'Award image', map_icon: 'Map icon',
   };
   for (const [field, label] of Object.entries(projectFields)) {

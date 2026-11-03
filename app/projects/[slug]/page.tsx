@@ -93,7 +93,7 @@ export default async function DynamicProjectPage({ params }: Props) {
 
   const { data: project, error } = await supabase
     .from('project_table')
-    .select('*, amenities (*), unit_layout (*), project_tag(tags(tag_name)), virtual_tours (*)')
+    .select('id, title, slug, image, city, country, sqm, status, unit_total, img_awards, amenities (*), unit_layout (*), project_tag(tags(tag_name)), virtual_tours (*)')
     .ilike('slug', formattedSlug) 
     .maybeSingle(); 
 
@@ -153,7 +153,7 @@ export default async function DynamicProjectPage({ params }: Props) {
     );
   }
 
-  const finalData = {
+  const finalData: any = {
     ...project,
     extended_description: extendedDescriptionResult.data || [],
     project_towers: towerResult.data || [],
