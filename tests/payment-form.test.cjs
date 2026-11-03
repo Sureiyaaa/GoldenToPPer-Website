@@ -45,8 +45,8 @@ test('validates Philippine subscriber numbers and preserves the local API contra
 
 test('merchant association updates and clears with project selection', () => {
   const projects = [
-    { id: 1, title: 'One', merchantId: 'merchant-one' },
-    { id: 2, title: 'Two', merchantId: null },
+    { project_id: 1, project_name: 'One', merchant_id: 'merchant-one' },
+    { project_id: 2, project_name: 'Two', merchant_id: null },
   ];
 
   assert.equal(getProjectMerchantId('1', projects), 'merchant-one');
@@ -57,10 +57,62 @@ test('merchant association updates and clears with project selection', () => {
 
 test('project retrieval and submission use the database merchant association', () => {
   const action = fs.readFileSync(path.join(__dirname, '../app/actions/payment.ts'), 'utf8');
-  assert.match(action, /select\('id, title, image, merchant_id'\)/);
+  assert.match(action, /select\('id, title, merchant_id'\)/);
   assert.match(action, /select\('id, merchant_id'\)/);
   assert.match(action, /projectData\.merchant_id \?\? null/);
   assert.match(action, /authoritativeMerchantId !== submittedMerchantId/);
+});
+
+test('payment project response is server-allowlisted to the three approved fields', async () => {
+  const actionSource = fs.readFileSync(path.join(__dirname, '../app/actions/payment.ts'), 'utf8');
+  const actionCode = ts.transpileModule(actionSource, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  }).outputText;
+
+  class Query {
+    select() { return this; }
+    eq() { return this; }
+    is() { return this; }
+    order() { return this; }
+    then(resolve) {
+      return Promise.resolve({
+        data: [
+          { id: 1, title: 'City Clou', merchant_id: 'test-merchant', image: 'private-image', email: 'payer@example.invalid', unit_number: '1008' },
+          { id: 2, title: 'No Merchant', merchant_id: null, contact_number: '09123456789' },
+        ],
+        error: null,
+      }).then(resolve);
+    }
+  }
+
+  const actionModule = { exports: {} };
+  new Function('require', 'module', 'exports', actionCode)(
+    (name) => {
+      if (name === '@supabase/supabase-js') {
+        return { createClient: () => ({ from: () => new Query() }) };
+      }
+      if (name === 'zod') return require('zod');
+      throw new Error(`Unexpected import: ${name}`);
+    },
+    actionModule,
+    actionModule.exports
+  );
+
+  const result = await actionModule.exports.fetchProjectsForPayment();
+  assert.deepEqual(result, [
+    { project_name: 'City Clou', project_id: 1, merchant_id: 'test-merchant' },
+    { project_name: 'No Merchant', project_id: 2, merchant_id: null },
+  ]);
+  assert.ok(result.every((project) => (
+    Object.keys(project).sort().join(',') === 'merchant_id,project_id,project_name'
+  )));
+});
+
+test('payment submission responses do not echo payer or property data', () => {
+  const action = fs.readFileSync(path.join(__dirname, '../app/actions/payment.ts'), 'utf8');
+  assert.doesNotMatch(action, /return\s*\{[^}]*paymentData/s);
+  assert.doesNotMatch(action, /return\s*\{[^}]*contactNumber/s);
+  assert.doesNotMatch(action, /console\.(?:log|warn|error)\([^\n]*paymentData/);
 });
 
 test('payment UI no longer requests tower or unit-type records', () => {

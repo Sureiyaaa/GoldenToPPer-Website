@@ -496,17 +496,6 @@ export default function PaymentClient() {
           return;
         }
 
-        // Get canonical hero from selected project
-        const selectedProject = projects.find(p => p.id === projectId);
-        const effectiveHero = selectedProject?.image
-          ? {
-              imageUrl: selectedProject.image,
-              altText: `${selectedProject.title} project image`,
-              focalX: 50,
-              focalY: 50,
-            }
-          : null;
-
         if (result.success) {
           // CMS fetch succeeded
           const carouselImages = result.slides.map(slide => ({
@@ -517,13 +506,7 @@ export default function PaymentClient() {
           }));
 
           // Compose based on what we have
-          if (effectiveHero && carouselImages.length > 0) {
-            // Hero + custom slides
-            setCarouselSlides([effectiveHero, ...carouselImages]);
-          } else if (effectiveHero) {
-            // Hero only (success + empty custom)
-            setCarouselSlides([effectiveHero]);
-          } else if (carouselImages.length > 0) {
+          if (carouselImages.length > 0) {
             // Custom slides only (no hero)
             setCarouselSlides(carouselImages);
           } else {
@@ -538,13 +521,7 @@ export default function PaymentClient() {
           // CMS fetch failed → emergency legacy fallback
           const legacyAmenities = convertLegacyProjectAmenities(projectId);
 
-          if (effectiveHero && legacyAmenities.length > 0) {
-            // Hero + legacy amenities
-            setCarouselSlides([effectiveHero, ...legacyAmenities]);
-          } else if (effectiveHero) {
-            // Hero only (no legacy amenities available)
-            setCarouselSlides([effectiveHero]);
-          } else if (legacyAmenities.length > 0) {
+          if (legacyAmenities.length > 0) {
             // Legacy amenities only (no hero)
             setCarouselSlides(legacyAmenities);
           } else {
@@ -559,22 +536,9 @@ export default function PaymentClient() {
       } catch (err) {
         console.error('Error loading project data:', err);
         // Network/unknown error → emergency legacy fallback
-        const selectedProject = projects.find(p => p.id === projectId);
-        const effectiveHero = selectedProject?.image
-          ? {
-              imageUrl: selectedProject.image,
-              altText: `${selectedProject.title} project image`,
-              focalX: 50,
-              focalY: 50,
-            }
-          : null;
         const legacyAmenities = convertLegacyProjectAmenities(projectId);
 
-        if (effectiveHero && legacyAmenities.length > 0) {
-          setCarouselSlides([effectiveHero, ...legacyAmenities]);
-        } else if (effectiveHero) {
-          setCarouselSlides([effectiveHero]);
-        } else if (legacyAmenities.length > 0) {
+        if (legacyAmenities.length > 0) {
           setCarouselSlides(legacyAmenities);
         } else {
           if (resolvedDefaultSlidesRef.current) {
@@ -589,15 +553,15 @@ export default function PaymentClient() {
     };
 
     loadData();
-  }, [watchProjectId, projects]);
+  }, [watchProjectId]);
 
   // Get selected project name
   const getSelectedProjectName = (): string | null => {
     if (!watchProjectId) {
       return null;
     }
-    const project = projects.find(p => p.id.toString() === watchProjectId);
-    return project?.title || null;
+    const project = projects.find(p => p.project_id.toString() === watchProjectId);
+    return project?.project_name || null;
   };
 
   const selectedProjectName = getSelectedProjectName();
@@ -954,8 +918,8 @@ export default function PaymentClient() {
             >
               <option value="">Select Project</option>
               {projects.map((proj) => (
-                <option key={proj.id} value={proj.id.toString()}>
-                  {proj.title}
+                <option key={proj.project_id} value={proj.project_id.toString()}>
+                  {proj.project_name}
                 </option>
               ))}
             </select>
@@ -1039,7 +1003,7 @@ export default function PaymentClient() {
   // Step 4: Review & Confirm
   const Step4Content = () => {
     const formData = watch();
-    const selectedProject = projects.find(p => p.id.toString() === formData.projectId);
+    const selectedProject = projects.find(p => p.project_id.toString() === formData.projectId);
     const summaryCardStyles = "min-w-0 rounded-md border border-stone-200/70 bg-[#FDFBF7] p-4 transition-colors duration-200 hover:border-brand-gold/30";
     const summaryHeaderStyles = "mb-2.5 flex items-center justify-between gap-3 border-b border-stone-200/70 pb-1.5";
     const summaryLabelStyles = "text-xs leading-4 text-stone-500";
@@ -1093,7 +1057,7 @@ export default function PaymentClient() {
               <EditButton onClick={() => goToStep(2)} label="Edit" />
             </div>
             <dl className="grid grid-cols-1 @[28rem]:grid-cols-2 gap-x-6 gap-y-2.5 text-[13px] sm:text-sm leading-[18px] [&>div]:grid [&>div]:grid-cols-[5rem_minmax(0,1fr)] [&>div]:gap-x-3 [&_dt]:text-xs [&_dt]:text-stone-500 [&_dd]:min-w-0 [&_dd]:font-medium [&_dd]:text-gray-900 [&_dd]:[overflow-wrap:anywhere]">
-              <div><dt>Project</dt><dd>{selectedProject?.title}</dd></div>
+              <div><dt>Project</dt><dd>{selectedProject?.project_name}</dd></div>
               <div><dt>Tower</dt><dd>{formData.tower}</dd></div>
               <div><dt>Unit Number</dt><dd>{formData.unitNumber}</dd></div>
             </dl>

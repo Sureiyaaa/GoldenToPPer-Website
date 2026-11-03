@@ -1,8 +1,7 @@
 export interface PaymentProject {
-  id: number;
-  title: string;
-  image?: string | null;
-  merchantId: string | null;
+  project_name: string;
+  project_id: number;
+  merchant_id: string | null;
 }
 
 /**
@@ -45,5 +44,5 @@ export function getProjectMerchantId(
   projects: PaymentProject[]
 ): string | null {
   if (!projectId) return null;
-  return projects.find((project) => String(project.id) === projectId)?.merchantId ?? null;
+  return projects.find((project) => String(project.project_id) === projectId)?.merchant_id ?? null;
 }

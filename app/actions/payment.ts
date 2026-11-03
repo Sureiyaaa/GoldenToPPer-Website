@@ -48,7 +48,7 @@ export async function fetchProjectsForPayment(): Promise<PaymentProject[]> {
   try {
     const { data, error } = await supabaseAdmin
       .from('project_table')
-      .select('id, title, image, merchant_id')
+      .select('id, title, merchant_id')
       .eq('is_active', true)
       .is('deleted_at', null)
       .order('title', { ascending: true });
@@ -59,10 +59,9 @@ export async function fetchProjectsForPayment(): Promise<PaymentProject[]> {
     }
 
     return (data || []).map((project) => ({
-      id: project.id,
-      title: project.title,
-      image: project.image,
-      merchantId: project.merchant_id ?? null,
+      project_name: project.title,
+      project_id: project.id,
+      merchant_id: project.merchant_id ?? null,
     }));
   } catch (err) {
     console.error('[PAYMENT] Unexpected error fetching projects:', err);
@@ -270,7 +269,7 @@ export async function submitPaymentAction(
     const schemaValidation = paymentSchema.safeParse(paymentData);
 
     if (!schemaValidation.success) {
-      console.log('[PAYMENT] Schema validation failed:', schemaValidation.error);
+      console.warn('[PAYMENT] Schema validation failed');
       return { error: 'Invalid payment data. Please check your form.' };
     }
 
@@ -305,8 +304,8 @@ export async function submitPaymentAction(
     return {
       error: 'Payment processing is not yet configured. Please contact support.',
     };
-  } catch (err: any) {
-    console.error('[PAYMENT] FATAL SERVER ERROR:', err);
-    return { error: err.message || 'An unexpected error occurred. Please try again.' };
+  } catch {
+    console.error('[PAYMENT] Unexpected server error');
+    return { error: 'An unexpected error occurred. Please try again.' };
   }
 }

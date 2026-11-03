@@ -33,6 +33,7 @@ const projectSchema = z.object({
   country: z.string().min(1, "Country is required"),
   sqm: z.string().min(1, "Total SQM is required"),
   unit_total: z.string().min(1, "Total Units is required"),
+  merchant_id: z.string().trim().max(255, "Merchant ID is too long"),
 
   image: z.string(),
   img_awards: z.string(),
@@ -477,7 +478,7 @@ function ProjectManager() {
     resolver: zodResolver(projectSchema),
     defaultValues: {
       title: "", slug: "", status: "", address: "", city: "", country: "Philippines",
-      sqm: "", unit_total: "", image: "", img_awards: "",
+      sqm: "", unit_total: "", merchant_id: "", image: "", img_awards: "",
       editorial_title: "", editorial_long: "", editorial_img: "",
       editorial_title_color: "#132243", editorial_desc_color: "#4B5563", editorial_bg_color: "transparent",
       amenities_title: "Experience A Fresh", amenities_title_gold: "Way Of Living in this project.",
@@ -568,6 +569,7 @@ function ProjectManager() {
           country: data.projData.country || "Philippines",
           sqm: data.projData.sqm ? String(data.projData.sqm) : "",
           unit_total: data.projData.unit_total ? String(data.projData.unit_total) : "",
+          merchant_id: data.projData.merchant_id || "",
           map_latitude: data.parentData?.latitude ? String(data.parentData.latitude) : "",
           map_longitude: data.parentData?.longitude ? String(data.parentData.longitude) : "",
           map_icon: data.projData.map_icon || "", map_subtitle: data.extData?.map_subtitle || "Everything you need, strategically positioned right around your sanctuary.",
@@ -1092,6 +1094,7 @@ function ProjectManager() {
         title: finalData.title, slug: finalData.slug, status: finalData.status,
         address: finalData.address, city: finalData.city, country: finalData.country || "Philippines",
         sqm: finalData.sqm || null, unit_total: finalData.unit_total || null,
+        merchant_id: finalData.merchant_id?.trim() || null,
         image: finalData.image, img_awards: finalData.img_awards || null,
         map_icon: finalData.map_icon || null
       };
@@ -7041,6 +7044,44 @@ function ProjectManager() {
                         and addressed on the
                         website.
                       </p>
+                    </div>
+
+                    {/* PAYNAMICS */}
+                    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                      <div className="border-b border-gray-100 px-4 py-4">
+                        <p className="text-sm font-bold text-brand-blue">
+                          Paynamics
+                        </p>
+                        <p className="mt-1 text-[10px] leading-relaxed text-gray-400">
+                          Project-specific payment configuration. Saving this value does not enable payment routing.
+                        </p>
+                      </div>
+
+                      <div className="px-4 py-4">
+                        <label
+                          htmlFor="project-merchant-id"
+                          className="mb-2 block text-[9px] font-bold uppercase tracking-wider text-gray-400"
+                        >
+                          Merchant ID
+                        </label>
+                        <input
+                          id="project-merchant-id"
+                          type="text"
+                          autoComplete="off"
+                          maxLength={255}
+                          {...register('merchant_id')}
+                          className={`w-full rounded-lg border bg-gray-50 px-3 py-2.5 text-xs text-brand-blue outline-none transition-colors focus:bg-white ${errors.merchant_id
+                            ? 'border-red-300 focus:border-red-400'
+                            : 'border-gray-200 focus:border-brand-gold'
+                            }`}
+                          placeholder="Leave blank for no merchant ID"
+                        />
+                        {errors.merchant_id && (
+                          <p className="mt-2 text-[9px] font-medium text-red-500">
+                            {errors.merchant_id.message}
+                          </p>
+                        )}
+                      </div>
                     </div>
 
                     {/* PROJECT TOWERS */}
