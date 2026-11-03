@@ -802,12 +802,12 @@ export default function PaymentClient() {
 
   // Each visit to Review owns a fresh widget and clears it on exit/unmount.
   useEffect(() => {
-    if (currentStep !== 4 || !turnstileReady || !process.env.NEXT_PUBLIC_PAYMENT_TURNSTILE_SITE_KEY) return;
+    if (currentStep !== 4 || !turnstileReady || !process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY) return;
     const container = document.getElementById('payment-captcha-container');
     if (!container || !window.turnstile) return;
 
     const widgetId = window.turnstile.render(container, {
-      sitekey: process.env.NEXT_PUBLIC_PAYMENT_TURNSTILE_SITE_KEY,
+      sitekey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
       theme: 'light',
       action: 'payment',
       callback: handleCaptchaSuccess,
@@ -1155,7 +1155,7 @@ export default function PaymentClient() {
         )}
 
         {/* Turnstile Widget */}
-        {process.env.NEXT_PUBLIC_PAYMENT_TURNSTILE_SITE_KEY ? (
+        {process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ? (
           <div className="mt-6 flex flex-col items-center">
             <div className="flex justify-center w-full">
               <div id="payment-captcha-container" className="min-h-[65px]" />
@@ -1170,7 +1170,7 @@ export default function PaymentClient() {
         ) : (
           <div className="bg-yellow-50 p-3 rounded border border-yellow-200 mt-6">
             <p className="text-xs text-yellow-800">
-              ⚠️ Payment verification not configured. Add <code className="font-mono text-[10px]">NEXT_PUBLIC_PAYMENT_TURNSTILE_SITE_KEY</code> to .env.local
+              ⚠️ Payment verification not configured. Add <code className="font-mono text-[10px]">NEXT_PUBLIC_TURNSTILE_SITE_KEY</code> to .env.local
             </p>
           </div>
         )}
@@ -1237,7 +1237,7 @@ export default function PaymentClient() {
                 {currentStep === 4 ? (
                   <button
                     type="submit"
-                    disabled={isSubmitting || !captchaToken || !process.env.NEXT_PUBLIC_PAYMENT_TURNSTILE_SITE_KEY}
+                    disabled={isSubmitting || !captchaToken || !process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
                     className={primaryButtonStyles}
                   >
                     {isSubmitting ? 'Processing...' : 'Pay Now'}
