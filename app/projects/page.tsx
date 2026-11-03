@@ -58,7 +58,15 @@ export default async function ProjectsPage() {
   const { data, error } = await supabase
     .from('project_table')
     .select(`
-      *,
+      id,
+      title,
+      address,
+      city,
+      slug,
+      image,
+      proximity,
+      status,
+      virtual_tour_url,
       unit_layout (
         id,
         title,

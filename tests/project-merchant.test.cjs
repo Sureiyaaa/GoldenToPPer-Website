@@ -7,6 +7,7 @@ const ts = require('typescript');
 const root = path.join(__dirname, '..');
 const actionSource = fs.readFileSync(path.join(root, 'app/actions/projects.ts'), 'utf8');
 const pageSource = fs.readFileSync(path.join(root, 'app/admin/projects/page.tsx'), 'utf8');
+const accessMigrationSource = fs.readFileSync(path.join(root, 'supabase/migrations/20261103000000_harden_customer_and_project_access.sql'), 'utf8');
 
 function projectActions({ session = true, canEdit = true } = {}) {
   const state = {
@@ -142,4 +143,19 @@ test('merchant updates remain behind the project allowlist and server edit autho
   const authorization = actionSource.indexOf('await authorizeProjectOperation(operation)');
   const projectUpdate = actionSource.indexOf('.update(filteredCleanData)', authorization);
   assert.ok(authorization >= 0 && projectUpdate > authorization);
+});
+
+test('project grants are read-only, column-limited, and retain active public pages', () => {
+  assert.match(accessMigrationSource, /revoke insert, update, delete on table public\.project_table from public, anon, authenticated/);
+  assert.match(accessMigrationSource, /create policy project_table_public_read_active[\s\S]*using \(is_active = true and deleted_at is null\)/);
+  const publicGrant = accessMigrationSource.match(/grant select \(([\s\S]*?)\) on table public\.project_table to anon, authenticated/)?.[1] || '';
+  for (const field of ['id', 'title', 'slug', 'status', 'address', 'city', 'country', 'sqm', 'unit_total', 'image', 'img_awards', 'map_icon', 'proximity', 'virtual_tour_url', 'is_active', 'deleted_at']) {
+    assert.match(publicGrant, new RegExp(`\\b${field}\\b`));
+  }
+  assert.doesNotMatch(publicGrant, /\bmerchant_id\b/);
+
+  for (const file of ['app/projects/page.tsx', 'app/projects/[slug]/page.tsx']) {
+    const source = fs.readFileSync(path.join(root, file), 'utf8');
+    assert.doesNotMatch(source, /from\('project_table'\)[\s\S]{0,100}select\((?:'|`)\s*\*/);
+  }
 });
