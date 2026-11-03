@@ -1081,7 +1081,7 @@ export default function PaymentClient() {
               />
             </div>
             <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs leading-4 text-stone-500">
-              <span id="payment-contact-help">Enter a national number, or paste a complete international number.</span>
+              {/* <span id="payment-contact-help">Enter a national number, or paste a complete international number.</span> */}
               <span id="payment-contact-length" className="text-stone-400">
                 {getPhoneLengthHint(watchContactNumber, watchPhoneCountry)}
               </span>
