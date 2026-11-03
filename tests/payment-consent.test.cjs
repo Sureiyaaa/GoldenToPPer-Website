@@ -27,6 +27,7 @@ function submission({ accepted = true, initialToken = 'verified-token', currentT
     setCaptchaToken: value => tokens.push(value),
     setServerError: value => errors.push(value),
     submitPaymentAction: async (...args) => { requests.push(args); return result; },
+    toPaymentApiContactNumber: subscriber => `0${subscriber}`,
     console: { log() {}, error() {} },
     alert: value => alerts.push(value),
   };
@@ -35,7 +36,8 @@ function submission({ accepted = true, initialToken = 'verified-token', currentT
   return { submit: module.exports, requests, notices, errors, resets, tokens, alerts };
 }
 
-const payment = { firstName: 'Test', lastName: 'Payer', email: 'test@example.invalid', contactNumber: '09123456789', projectId: '1', towerId: '2', unitTypeId: '3', unitNumber: '101', paymentPurpose: 'Reservation Fee', amount: '1000' };
+const payment = { firstName: 'Test', lastName: 'Payer', email: 'test@example.invalid', contactNumber: '9123456789', projectId: '1', merchantId: null, tower: 'Tower A', unitNumber: '101', paymentPurpose: 'Reservation Fee', amount: '1000' };
+const submittedPayment = { ...payment, contactNumber: '09123456789' };
 
 test('payment requires verification before requesting cookie/privacy choices', async () => {
   const ui = submission({ initialToken: null });
@@ -62,10 +64,10 @@ test('verification expiring during privacy review blocks submission and asks for
   assert.deepEqual(ui.errors, ['Verification expired. Please complete the verification again.']);
 });
 
-test('accepted payment uses the current verification response and original form values', async () => {
+test('accepted payment uses the current verification response and API-compatible contact number', async () => {
   const ui = submission({ currentToken: 'fresh-response' });
   await ui.submit(payment);
-  assert.deepEqual(ui.requests, [[payment, 'fresh-response']]);
+  assert.deepEqual(ui.requests, [[submittedPayment, 'fresh-response']]);
   assert.deepEqual(ui.alerts, ['Payment processed successfully!']);
 });
 
