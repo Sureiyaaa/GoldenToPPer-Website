@@ -3,8 +3,19 @@
 ## Project merchant ID
 
 The deployed `project_table.merchant_id` column is nullable text. The payment
-project query reads it directly and maps it to `merchantId: string | null`, so
-projects without an assigned merchant ID continue to work.
+project Server Action applies a server-side allowlist before its result is
+serialized in the Next.js RSC response. Each returned item has exactly this
+shape:
+
+```json
+{
+  "project_name": "City Clou",
+  "project_id": 1,
+  "merchant_id": "GTCC2026"
+}
+```
+
+Projects without an assigned merchant ID return `"merchant_id": null`.
 
 On submission, the payment server action fetches the selected active project's
 authoritative `merchant_id` and compares it with the nullable value preserved
