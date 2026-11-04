@@ -4,6 +4,7 @@ import * as z from 'zod';
 import { createClient } from '@supabase/supabase-js';
 import type { PaymentProject } from '@/lib/payment-form';
 import { normalizeServerContactNumber } from '@/lib/payment-form';
+import { createPaynamicsTransaction } from '@/lib/paynamics/client';
 
 // Cloudflare Turnstile verification response type
 interface TurnstileVerifyResponse {
@@ -45,7 +46,8 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Fetch all active projects for payment form
+// Fetch active projects for payment form. Projects without a merchant_id can't
+// be paid for yet, so they're excluded rather than shown and failing at submit.
 export async function fetchProjectsForPayment(): Promise<PaymentProject[]> {
   try {
     const { data, error } = await supabaseAdmin
@@ -53,6 +55,7 @@ export async function fetchProjectsForPayment(): Promise<PaymentProject[]> {
       .select('id, title, merchant_id')
       .eq('is_active', true)
       .is('deleted_at', null)
+      .not('merchant_id', 'is', null)
       .order('title', { ascending: true });
 
     if (error) {
@@ -199,7 +202,9 @@ async function verifyPaymentCaptchaToken(token: string): Promise<{ valid: boolea
 }
 
 // Validate payment data server-side
-async function validatePaymentData(data: PaymentFormData): Promise<{ valid: boolean; error?: string }> {
+async function validatePaymentData(
+  data: PaymentFormData
+): Promise<{ valid: boolean; error?: string; merchantId?: string | null; projectName?: string }> {
   // Validate payment purpose is in allowed list
   if (!ALLOWED_PAYMENT_PURPOSES.includes(data.paymentPurpose)) {
     return { valid: false, error: 'Invalid payment purpose.' };
@@ -211,11 +216,14 @@ async function validatePaymentData(data: PaymentFormData): Promise<{ valid: bool
     return { valid: false, error: 'Amount must be a valid positive number.' };
   }
 
-  // Validate project exists and is active
+  // Validate project exists and is active; the returned merchant_id is the
+  // authoritative value used for the Paynamics request, not the client-submitted one.
+  let authoritativeMerchantId: string | null;
+  let projectName: string;
   try {
     const { data: projectData, error: projError } = await supabaseAdmin
       .from('project_table')
-      .select('id, merchant_id')
+      .select('id, title, merchant_id')
       .eq('id', parseInt(data.projectId))
       .eq('is_active', true)
       .is('deleted_at', null)
@@ -225,7 +233,8 @@ async function validatePaymentData(data: PaymentFormData): Promise<{ valid: bool
       return { valid: false, error: 'Invalid project selection.' };
     }
 
-    const authoritativeMerchantId = projectData.merchant_id ?? null;
+    authoritativeMerchantId = projectData.merchant_id ?? null;
+    projectName = projectData.title;
     const submittedMerchantId = data.merchantId ?? null;
     if (authoritativeMerchantId !== submittedMerchantId) {
       return { valid: false, error: 'The project merchant association has changed. Please reselect the project.' };
@@ -244,14 +253,14 @@ async function validatePaymentData(data: PaymentFormData): Promise<{ valid: bool
   // should be performed against the actual pricing model.
   // For now, we accept any positive amount as the pricing model does not yet exist.
 
-  return { valid: true };
+  return { valid: true, merchantId: authoritativeMerchantId, projectName };
 }
 
 // Main payment submission action
 export async function submitPaymentAction(
   paymentData: PaymentFormData,
   captchaToken: string
-): Promise<{ success?: boolean; error?: string }> {
+): Promise<{ success?: boolean; error?: string; redirectUrl?: string }> {
   console.log('[PAYMENT] 1. Payment submission initiated');
 
   try {
@@ -288,24 +297,55 @@ export async function submitPaymentAction(
 
     console.log('[PAYMENT] 7. Business validation successful');
 
-    // Step 4: Payment gateway boundary
-    // TODO: Payment Gateway Integration
-    // The following is the integration boundary where a real payment gateway would be called.
-    // Currently, no payment gateway is configured.
-    // Future implementation should:
-    // 1. Call the appropriate payment provider API (Stripe, Xendit, PayMongo, etc.)
-    // 2. Create a transaction record in the database
-    // 3. Handle payment provider responses and error codes
-    // 4. Update project/unit/customer records as needed
-    // 5. Send confirmation emails
-    //
-    // For now, return a clear message that payment processing is not configured.
+    // Step 4: Payment gateway boundary — merchant_id is the authoritative value
+    // validatePaymentData resolved from the project, never the client-submitted one.
+    const merchantId = businessValidation.merchantId;
+    if (!merchantId) {
+      console.warn('[PAYMENT] Project has no merchant_id configured for Paynamics');
+      return { error: 'This project is not yet set up for online payment. Please contact support.' };
+    }
 
-    console.log('[PAYMENT] 8. Reached payment gateway boundary - gateway not yet configured');
+    const { firstName, lastName, email, contactNumber, paymentPurpose, tower, unitNumber, amount } = schemaValidation.data;
+    const projectName = businessValidation.projectName;
 
-    return {
-      error: 'Payment processing is not yet configured. Please contact support.',
-    };
+    console.log('[PAYMENT] 8. Creating Paynamics transaction...');
+    try {
+      const transaction = await createPaynamicsTransaction({
+        merchantId,
+        amount,
+        customer: {
+          fname: firstName,
+          lname: lastName,
+          email,
+          phone: contactNumber,
+          mobile: contactNumber,
+        },
+        order: {
+          orders: [{
+            itemname: `${projectName} | Tower ${tower} | ${unitNumber} - ${paymentPurpose}`,
+            quantity: 1,
+            unitprice: amount,
+            totalprice: amount,
+          }],
+          subtotalprice: amount,
+          totalorderamount: amount,
+        },
+      });
+
+      // TODO: persist request_id/merchantId/amount against a transaction record
+      // once a transactions table exists, so the callback route can reconcile it.
+
+      if (!transaction.redirectUrl) {
+        console.error('[PAYMENT] Paynamics did not return a redirect_url:', transaction.gatewayResponse);
+        return { error: 'Payment gateway did not return a payment link. Please try again.' };
+      }
+
+      console.log('[PAYMENT] 9. Paynamics transaction created, redirecting to gateway');
+      return { success: true, redirectUrl: transaction.redirectUrl };
+    } catch (err) {
+      console.error('[PAYMENT] Paynamics request failed:', err);
+      return { error: 'Unable to reach the payment gateway. Please try again.' };
+    }
   } catch {
     console.error('[PAYMENT] Unexpected server error');
     return { error: 'An unexpected error occurred. Please try again.' };

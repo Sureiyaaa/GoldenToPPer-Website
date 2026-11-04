@@ -807,8 +807,12 @@ export default function PaymentClient() {
         }
         setCaptchaToken(null);
       } else if (result?.success) {
-        console.log('[PAYMENT] Payment successful');
-        alert('Payment processed successfully!');
+        console.log('[PAYMENT] Payment created, redirecting to gateway');
+        if (result.redirectUrl) {
+          window.location.href = result.redirectUrl;
+        } else {
+          setServerError('Payment gateway did not return a payment link. Please try again.');
+        }
       } else {
         setServerError('Unexpected response from server.');
         if (turnstileWidgetIdRef.current && window.turnstile) {
