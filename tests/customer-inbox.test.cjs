@@ -50,6 +50,7 @@ function serverHarness(options = {}) {
     '@supabase/supabase-js': { createClient: () => ({ from: table => new Query(table) }) },
     './auth': { getCustomSession: async () => auth.session, getRBACProfile: async () => auth.profile },
     '@/lib/customer-inbox': model,
+    '@/lib/security/form-turnstile': {},
   });
   return { actions, calls, auth };
 }

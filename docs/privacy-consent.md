@@ -20,10 +20,20 @@ existing `loan_preapp.is_agreed` field continues to store the authorization flag
   it must never authorize a user or contain personal information.
 - `custom_admin_session` remains the separate HttpOnly admin login cookie.
   Submitting a public form does not create an account or authentication session.
-- Cloudflare Turnstile protects payment submission and admin login independently
+- `admin-login-retry-until` is a tab-scoped session-storage timestamp that keeps
+  the admin login cooldown visible after refresh. It contains no credentials or
+  username and is removed when the countdown expires. The server independently
+  enforces the lockout even if browser storage is cleared or unavailable.
+- Cloudflare Turnstile protects payment submissions, loan applications, project
+  inquiries, contact requests, and admin login independently
   of optional media. Its default single-use verification token expires after
   five minutes and is not a login cookie. `cf_clearance` depends on Cloudflare
   pre-clearance settings and must not be assigned the token's five-minute life.
+- Loan, inquiry, and contact submissions require verification before the privacy
+  notice and re-read the widget response after acceptance. Cancelling preserves
+  the form and verification; completed submission attempts reset the widget.
+  Their server actions verify the token, form action, and deployed hostname
+  before any customer lookup or write. See [public form verification](form-turnstile.md).
 - Supabase responses can request Cloudflare's `__cf_bm` security cookie. This is
   separate from Turnstile. Browser acceptance varies; see the deployed audit.
 - YouTube iframe/thumbnail and Google map components are not mounted until

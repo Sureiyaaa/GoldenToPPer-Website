@@ -87,6 +87,7 @@ function harness(options = {}) {
     '@supabase/supabase-js': supabase,
     '@/lib/validations/loan': validation,
     '@/lib/customer-inbox': inbox,
+    '@/lib/security/form-turnstile': { verifyFormTurnstile: async () => ({ valid: true }) },
     './auth': {},
   };
   const logger = { error: (...args) => logs.push(args) };
@@ -241,12 +242,13 @@ function clientSubmit(action, { accepted = true, banks = [{ id: 2, bank_name: 'S
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText;
   const calls = [], notices = [], timers = [], module = { exports: {} };
-  new Function('module', 'submitLoanPreApplicationAction', 'initialBanks', 'requestFormConsent', 'reset', 'setIsModalOpen', 'setErrorMessage', 'setSuccessMessage', 'setTimeout', 'console', 'process', code)(
+  new Function('module', 'submitLoanPreApplicationAction', 'initialBanks', 'requestFormConsent', 'reset', 'setIsModalOpen', 'setErrorMessage', 'setSuccessMessage', 'setTimeout', 'console', 'process', 'verification', code)(
     module, action, banks, async notice => { notices.push(notice); return accepted; },
     () => calls.push(['reset']), value => calls.push(['modal', value]),
     value => calls.push(['error', value]), value => calls.push(['success', value]),
     (callback, delay) => timers.push({ callback, delay }),
     { error() {} }, { env: { NODE_ENV: 'production' } },
+    { getToken: () => 'verified-token', reset() {} },
   );
   return { submit: module.exports, calls, notices, timers, source };
 }

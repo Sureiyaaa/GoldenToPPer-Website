@@ -14,6 +14,7 @@ import * as z from 'zod';
 // ✅ Import the new Server Action
 import { submitContactAction } from '@/app/actions/admin_fetchers';
 import { FormPrivacyNotice, useCookieConsent } from '@/app/components/cookie-consent';
+import { FormTurnstile, useFormTurnstile } from '@/app/components/form-turnstile';
 
 // Zod Schema 
 const contactFormSchema = z.object({
@@ -32,6 +33,7 @@ type ContactFormValues = z.infer<typeof contactFormSchema>;
 
 export default function ContactPage() {
   const { requestFormConsent } = useCookieConsent();
+  const verification = useFormTurnstile('contact');
   const [isSuccess, setIsSuccess] = useState(false);
   const router = useRouter();
 
@@ -64,15 +66,18 @@ export default function ContactPage() {
   const inquiryOptions = ['General Inquiry', 'Booking Inquiry', 'Property Sales', 'Partnerships', 'Customer Support'];
 
   const onSubmit = async (data: ContactFormValues) => {
+    if (!verification.getToken()) return;
     if (!await requestFormConsent({
       purpose: 'Contact request',
       description: 'Your name, email address, phone number, inquiry type, and message will be used by the team responsible for your request to respond and provide assistance. Please do not include identification documents, health information, or other sensitive information in your message.',
     })) return;
+    const captchaToken = verification.getToken();
+    if (!captchaToken) return;
     setIsSuccess(false);
 
     try {
       // ✅ Call the Server Action securely
-      const result = await submitContactAction(data);
+      const result = await submitContactAction(data, captchaToken);
 
       if (!result.success) {
         throw new Error(result.error);
@@ -91,6 +96,8 @@ export default function ContactPage() {
         isOpen: true,
         message: error.message || 'Something went wrong while submitting your inquiry. Please try again later.'
       });
+    } finally {
+      verification.reset();
     }
   };
 
@@ -255,8 +262,9 @@ export default function ContactPage() {
                     {errors.message && <span className="absolute -bottom-4 left-4 text-[9px] text-red-500">{errors.message.message}</span>}
                   </div>
 
+                  <FormTurnstile verification={verification} />
                   <button
-                    type="submit" disabled={isSubmitting}
+                    type="submit" disabled={isSubmitting || !verification.token}
                     className="w-full mt-4 py-4 rounded-md border border-brand-blue bg-brand-blue text-white text-sm font-semibold hover:border-brand-gold hover:bg-brand-gold transition-all duration-300 outline-none flex justify-center items-center gap-2 disabled:opacity-70 shadow-lg shadow-brand-blue/20 hover:shadow-brand-gold/30"
                   >
                     {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : 'Contact Us'}

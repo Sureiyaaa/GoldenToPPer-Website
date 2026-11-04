@@ -3,6 +3,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { getCustomSession, getCurrentUser, getRBACProfile } from './auth';
+import { verifyFormTurnstile } from '@/lib/security/form-turnstile';
 import {
   normalizeCustomerInbox,
   type CustomerInboxItem,
@@ -728,8 +729,10 @@ export async function saveWebsiteSectionStatesAction(
   return { success: true };
 }
 
-export async function submitInquiryAction(data: any) {
+export async function submitInquiryAction(data: any, captchaToken: unknown) {
   try {
+    const verification = await verifyFormTurnstile(captchaToken, 'inquiry');
+    if (!verification.valid) return { success: false, error: verification.error };
     let currentClientId = null;
 
     // 1. Check if the client already exists by email
@@ -921,8 +924,10 @@ export async function toggleNotificationReadAction(
 // ==========================================
 // PUBLIC CONTACT US ACTION
 // ==========================================
-export async function submitContactAction(data: any) {
+export async function submitContactAction(data: any, captchaToken: unknown) {
   try {
+    const verification = await verifyFormTurnstile(captchaToken, 'contact');
+    if (!verification.valid) return { success: false, error: verification.error };
     let currentClientId = null;
 
     // 1. Check if the client already exists by email

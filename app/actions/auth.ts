@@ -2,9 +2,10 @@
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import bcrypt from 'bcryptjs';
 import { createHmac, timingSafeEqual } from 'crypto';
+import { beginLoginAttempt, completeLoginAttempt, consumeLoginRateLimit, getLoginClientAddress } from '@/lib/auth/login-rate-limit';
 
 // Dummy hash used for timing-safe password checking with non-existent users
 // Ensures login attempts take similar time regardless of user existence
@@ -162,7 +163,29 @@ export async function loginAction(formData: FormData) {
     );
     console.log("[AUTH] 2. Supabase Admin Client Initialized");
 
-    // CAPTCHA verification happens FIRST, before any credential checks
+    let clientAddress: string;
+    try {
+      clientAddress = getLoginClientAddress(await headers());
+    } catch {
+      console.error('[AUTH] Trusted client address is unavailable.');
+      return { error: 'Sign-in is temporarily unavailable. Please try again later.' };
+    }
+    // Count every request before CAPTCHA verification, including invalid tokens.
+    const ipLimit = await consumeLoginRateLimit(supabaseAdmin, 'ip', clientAddress);
+    if (!ipLimit.allowed) {
+      return { error: ipLimit.error, retryAfterSeconds: ipLimit.retryAfterSeconds };
+    }
+
+    // Bound untrusted inputs before making external calls or hashing passwords.
+    const username = formData.get('username');
+    const password = formData.get('password');
+    if (typeof username !== 'string' || typeof password !== 'string' ||
+        !username.trim() || !password || username.length > 256 || password.length > 1024) {
+      return { error: 'Enter a valid username and password.' };
+    }
+    const cleanUsername = username.trim().toLowerCase();
+
+    // CAPTCHA verification still precedes all credential checks.
     console.log("[AUTH] 3. Verifying CAPTCHA token...");
     const captchaToken = formData.get('captchaToken') as string;
     const captchaVerification = await verifyCaptchaToken(captchaToken);
@@ -174,25 +197,25 @@ export async function loginAction(formData: FormData) {
 
     console.log("[AUTH] 4. CAPTCHA verification successful. Proceeding with credential validation...");
 
-    const username = formData.get('username') as string;
-    const password = formData.get('password') as string;
-
-    if (!username || !password) {
-      return { error: "Username and password are required." };
+    // Reserve one server-only attempt so parallel guesses cannot race past a lock.
+    const usernameLimit = await beginLoginAttempt(supabaseAdmin, cleanUsername);
+    if (!usernameLimit.allowed) {
+      return { error: usernameLimit.error, retryAfterSeconds: usernameLimit.retryAfterSeconds };
     }
-
-    const cleanUsername = username.trim().toLowerCase();
-    console.log(`[AUTH] 5. Searching DB for username: ${cleanUsername}`);
+    console.log('[AUTH] 5. Searching DB for admin account');
 
     // 1. DATABASE CHECK
     const { data: user, error } = await supabaseAdmin
       .from('admin_users')
       .select('*')
       .eq('username', cleanUsername)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.log("[AUTH] ERROR: DB Search Failed:", error.message);
+      // Infrastructure errors are not failed credentials. The short attempt
+      // lease expires automatically; no session is issued or failure counted.
+      return { error: 'Sign-in is temporarily unavailable. Please try again later.' };
     }
 
     // 2. TIMING-SAFE PASSWORD MATCH
@@ -200,6 +223,13 @@ export async function loginAction(formData: FormData) {
     // that could reveal whether a username exists
     const hashToCheck = user?.password_hash || DUMMY_HASH_FOR_TIMING_SAFETY;
     const isMatch = await bcrypt.compare(password, hashToCheck);
+    const credentialsValid = Boolean(user && user.is_active !== false && isMatch);
+    const completedAttempt = await completeLoginAttempt(
+      supabaseAdmin, cleanUsername, usernameLimit.attemptToken, credentialsValid,
+    );
+    if (!completedAttempt.allowed) {
+      return { error: completedAttempt.error, retryAfterSeconds: completedAttempt.retryAfterSeconds };
+    }
 
     // 3. UNIFIED AUTHENTICATION ERROR
     // Return same generic message for all credential failures:
@@ -207,7 +237,7 @@ export async function loginAction(formData: FormData) {
     // - User exists but password wrong
     // - User exists but account disabled
     // This prevents username enumeration and account-status disclosure
-    if (!user || user.is_active === false || !isMatch) {
+    if (!user || !credentialsValid) {
       console.log("[AUTH] ERROR: Authentication failed (credential mismatch or inactive account)");
       return { error: "Unable to sign in. Check your username and password, then try again." };
     }

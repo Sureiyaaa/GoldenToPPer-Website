@@ -19,6 +19,7 @@ import { motion } from 'framer-motion';
 import PageTransition from '../components/page-transitions';
 import { submitInquiryAction } from '@/app/actions/admin_fetchers';
 import { FormPrivacyNotice, useCookieConsent } from '@/app/components/cookie-consent';
+import { FormTurnstile, useFormTurnstile } from '@/app/components/form-turnstile';
 
 // ============================================================
 // FORM VALIDATION
@@ -76,6 +77,7 @@ export default function InquireClient({
 }) {
   const router = useRouter();
   const { requestFormConsent } = useCookieConsent();
+  const verification = useFormTurnstile('inquiry');
   const searchParams = useSearchParams();
 
   // ============================================================
@@ -200,14 +202,17 @@ export default function InquireClient({
   const onSubmit = async (
     data: InquiryFormData
   ) => {
+    if (!verification.getToken()) return;
     const projectTitle = projects.find(project => String(project.id) === data.project)?.title || 'your selected project';
     if (!await requestFormConsent({
       purpose: 'Project inquiry',
       description: `Your name, email address, phone number, and selected project will be used by the team responsible for ${projectTitle} to respond to your inquiry and arrange any assistance you request.`,
     })) return;
+    const captchaToken = verification.getToken();
+    if (!captchaToken) return;
     try {
       const result =
-        await submitInquiryAction(data);
+        await submitInquiryAction(data, captchaToken);
 
       if (!result.success) {
         throw new Error(result.error);
@@ -249,6 +254,8 @@ export default function InquireClient({
         type: 'error',
         message,
       });
+    } finally {
+      verification.reset();
     }
   };
 
@@ -636,11 +643,11 @@ export default function InquireClient({
               ================================================== */}
 
               <div className="pt-4">
-
+                <FormTurnstile verification={verification} />
                 <button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="group relative flex items-center justify-center gap-2 w-full bg-brand-blue rounded-md py-3.5 overflow-hidden shadow-lg shadow-brand-blue/20 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed outline-none"
+                  disabled={isSubmitting || !verification.token}
+                  className="group relative mt-4 flex items-center justify-center gap-2 w-full bg-brand-blue rounded-md py-3.5 overflow-hidden shadow-lg shadow-brand-blue/20 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed outline-none"
                 >
                   <span className="absolute inset-0 w-full h-full bg-brand-gold transform -translate-x-full transition-transform duration-[0.6s] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-0" />
 

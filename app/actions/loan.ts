@@ -2,11 +2,13 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { loanSchema, type LoanFormData } from '@/lib/validations/loan';
+import { verifyFormTurnstile } from '@/lib/security/form-turnstile';
 
 type LoanSubmissionResult = { success: true } | { success: false; error: string };
 
 export async function submitLoanPreApplicationAction(
   input: LoanFormData,
+  captchaToken: unknown,
 ): Promise<LoanSubmissionResult> {
   const parsed = loanSchema.safeParse(input);
   if (!parsed.success) {
@@ -14,6 +16,8 @@ export async function submitLoanPreApplicationAction(
   }
 
   try {
+    const verification = await verifyFormTurnstile(captchaToken, 'loan_application');
+    if (!verification.valid) return { success: false, error: verification.error };
     const data = parsed.data;
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

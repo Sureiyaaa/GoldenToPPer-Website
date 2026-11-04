@@ -16,6 +16,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { submitLoanPreApplicationAction } from '@/app/actions/loan';
 import { loanSchema, type LoanFormData } from '@/lib/validations/loan';
 import { FormPrivacyNotice, useCookieConsent } from '@/app/components/cookie-consent';
+import { FormTurnstile, useFormTurnstile } from '@/app/components/form-turnstile';
 
 // --- REGISTER GSAP ---
 if (typeof window !== 'undefined') {
@@ -38,6 +39,7 @@ interface PartnerBanksClientProps {
 // ==========================================
 function PartnerBanksContent({ initialProjects, initialBanks, initialMappings }: PartnerBanksClientProps) {
   const { requestFormConsent } = useCookieConsent();
+  const verification = useFormTurnstile('loan_application');
   const searchParams = useSearchParams();
   const lenisRef = useRef<any>(null); 
   
@@ -107,14 +109,17 @@ function PartnerBanksContent({ initialProjects, initialBanks, initialMappings }:
   const onSubmit = async (data: LoanFormData) => {
     const bankName = initialBanks.find(bank => String(bank.id) === data.bank)?.bank_name;
     if (!bankName) return;
+    if (!verification.getToken()) return;
     if (!await requestFormConsent({
       purpose: `Bank referral to ${bankName}`,
       description: `Your buyer and co-buyer names, contact details, selected project, tower, floor, and unit details will be recorded by Golden Topper to coordinate your requested referral to ${bankName}. Your referral authorization covers disclosure of these details to this selected bank for its loan assessment under its own privacy notice. Referral does not guarantee approval. Only provide a co-buyer's details if you are authorized to do so and have directed them to the Privacy Policy.`,
     })) return;
+    const captchaToken = verification.getToken();
+    if (!captchaToken) return;
     setErrorMessage('');
     setSuccessMessage('');
     try {
-      const result = await submitLoanPreApplicationAction(data);
+      const result = await submitLoanPreApplicationAction(data, captchaToken);
       if (!result.success) {
         setErrorMessage(result.error);
         return;
@@ -126,6 +131,8 @@ function PartnerBanksContent({ initialProjects, initialBanks, initialMappings }:
     } catch (error: unknown) {
       if (process.env.NODE_ENV === 'development') console.error("Submission Error:", error);
       setErrorMessage("We couldn't submit your application. Please try again.");
+    } finally {
+      verification.reset();
     }
   };
 
@@ -444,13 +451,16 @@ function PartnerBanksContent({ initialProjects, initialBanks, initialMappings }:
                   )}
                 </div>
 
-               <div className="border-t border-slate-100 p-6 bg-white flex justify-end gap-4 rounded-b-sm shrink-0">
+               <div className="border-t border-slate-100 p-6 bg-white rounded-b-sm shrink-0 space-y-4">
+                 <FormTurnstile verification={verification} />
+                 <div className="flex flex-wrap justify-end gap-4">
                   <button onClick={() => setIsModalOpen(false)} className="px-8 py-4 text-[11px] tracking-[0.25em] font-bold text-slate-500 uppercase hover:bg-slate-100 transition-colors">Cancel</button>
-                  <button onClick={handleFormSubmit} disabled={isSubmitting} className="group relative flex items-center justify-center gap-6 bg-brand-blue px-8 py-4 overflow-hidden rounded-sm shadow-md">
+                  <button onClick={handleFormSubmit} disabled={isSubmitting || !verification.token} className="group relative flex items-center justify-center gap-6 bg-brand-blue px-8 py-4 overflow-hidden rounded-sm shadow-md disabled:opacity-70 disabled:cursor-not-allowed">
                     <span className="absolute inset-0 bg-[#C5A071] transform -translate-x-full transition-transform group-hover:translate-x-0"></span>
                     <span className="relative z-10 text-[11px] tracking-[0.25em] font-bold text-white uppercase">{isSubmitting ? 'Sending...' : 'Submit Application'}</span>
                     <ArrowRight size={16} className="relative z-10 text-white" />
                   </button>
+                 </div>
                 </div>
 
               </motion.div>

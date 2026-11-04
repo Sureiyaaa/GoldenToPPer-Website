@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import PageTransition from '@/app/components/page-transitions';
 import { loginAction } from '@/app/actions/auth';
+import { useLoginCooldown } from './useLoginCooldown';
 
 declare global {
   interface Window {
@@ -22,6 +23,7 @@ declare global {
 
 export default function AdminLogin() {
   const router = useRouter();
+  const { remainingSeconds, countdown, startCooldown } = useLoginCooldown();
   const turnstileWidgetIdRef = useRef<string | undefined>(undefined);
   const scriptLoadedRef = useRef(false);
 
@@ -36,7 +38,7 @@ export default function AdminLogin() {
 
   // Error and CAPTCHA state
   const [errorMsg, setErrorMsg] = useState('');
-  const [errorType, setErrorType] = useState<'session-expired' | 'auth' | 'captcha' | null>(null);
+  const [errorType, setErrorType] = useState<'session-expired' | 'auth' | 'captcha' | 'rate-limit' | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaError, setCaptchaError] = useState('');
 
@@ -164,6 +166,7 @@ export default function AdminLogin() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading || remainingSeconds > 0) return;
 
     // Validate all fields
     const usernameError = validateField('username', formData.username);
@@ -197,7 +200,12 @@ export default function AdminLogin() {
       if (result?.error) {
         // Server-side error (could be CAPTCHA or credentials)
         setErrorMsg(result.error);
-        setErrorType('auth');
+        if (result.retryAfterSeconds) {
+          startCooldown(result.retryAfterSeconds);
+          setErrorType('rate-limit');
+        } else {
+          setErrorType('auth');
+        }
         setIsLoading(false);
 
         // Reset CAPTCHA widget for retry
@@ -235,6 +243,7 @@ export default function AdminLogin() {
     formData.password.trim().length > 0 &&
     Boolean(captchaToken) &&
     hasConfiguredTurnstile &&
+    remainingSeconds === 0 &&
     !isLoading;
 
   return (
@@ -288,12 +297,13 @@ export default function AdminLogin() {
                   type="text"
                   name="username"
                   id="username"
+                  disabled={remainingSeconds > 0}
                   value={formData.username}
                   onChange={handleInputChange}
                   onBlur={handleFieldBlur}
                   aria-invalid={!!fieldErrors.username}
                   aria-describedby={fieldErrors.username ? 'username-error' : undefined}
-                  className={`appearance-none bg-white block w-full px-4 py-3 rounded-lg shadow-sm placeholder-gray-400 text-gray-900 focus:outline-none focus:ring-2 focus:border-brand-blue sm:text-sm transition-colors ${
+                  className={`appearance-none bg-white block w-full px-4 py-3 rounded-lg shadow-sm placeholder-gray-400 text-gray-900 focus:outline-none focus:ring-2 focus:border-brand-blue sm:text-sm transition-colors disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500 ${
                     fieldErrors.username
                       ? 'border-2 border-red-500 focus:ring-red-500'
                       : 'border border-gray-300 focus:ring-brand-blue'
@@ -316,12 +326,13 @@ export default function AdminLogin() {
                     type={showPassword ? "text" : "password"}
                     name="password"
                     id="password"
+                    disabled={remainingSeconds > 0}
                     value={formData.password}
                     onChange={handleInputChange}
                     onBlur={handleFieldBlur}
                     aria-invalid={!!fieldErrors.password}
                     aria-describedby={fieldErrors.password ? 'password-error' : undefined}
-                    className={`appearance-none bg-white block w-full px-4 py-3 rounded-lg shadow-sm placeholder-gray-400 text-gray-900 focus:outline-none focus:ring-2 focus:border-brand-blue sm:text-sm transition-colors pr-12 ${
+                    className={`appearance-none bg-white block w-full px-4 py-3 rounded-lg shadow-sm placeholder-gray-400 text-gray-900 focus:outline-none focus:ring-2 focus:border-brand-blue sm:text-sm transition-colors pr-12 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500 ${
                       fieldErrors.password
                         ? 'border-2 border-red-500 focus:ring-red-500'
                         : 'border border-gray-300 focus:ring-brand-blue'
@@ -330,8 +341,9 @@ export default function AdminLogin() {
                   />
                   <button
                     type="button"
+                    disabled={remainingSeconds > 0}
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-brand-blue transition-colors outline-none"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-brand-blue transition-colors outline-none disabled:cursor-not-allowed disabled:hover:text-gray-400"
                   >
                     {showPassword ? <Eye size={18} /> : <EyeOff size={18} />}
                   </button>
@@ -376,7 +388,7 @@ export default function AdminLogin() {
                       : 'bg-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  {isLoading ? 'Authenticating...' : 'Sign In'}
+                  {remainingSeconds > 0 ? `Try again in ${countdown}` : isLoading ? 'Authenticating...' : 'Sign In'}
                 </button>
               </div>
 

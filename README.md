@@ -37,6 +37,11 @@ npm install bcryptjs
 **Username:** admin\
 **Password:** GoldenTopper2026!
 
+Admin login rate limits require database migrations before deploying the app.
+See [setup, limits, and deployment order](docs/admin-login-rate-limiting.md).
+Run `npm run test:auth` to verify the server flow and SQL in an isolated local
+Postgres test engine.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

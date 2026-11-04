@@ -6,6 +6,10 @@
     "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
+    "test:auth": "node --test tests/admin-login-rate-limit.test.cjs",
+    "test:auth-ui": "node --test tests/admin-login-countdown.test.cjs",
+    "test:forms": "node --test tests/form-turnstile.test.cjs tests/loan-preapplication.test.cjs tests/customer-inbox.test.cjs tests/cookie-preferences.test.cjs",
+    "test:forms-ui": "node --test tests/form-turnstile-ui.test.cjs",
     "lint": "eslint"
   },
   "dependencies": {
@@ -39,6 +43,7 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.15",
     "@tailwindcss/postcss": "^4",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^20",
