@@ -64,7 +64,6 @@ export default async function ProjectsPage() {
       city,
       slug,
       image,
-      proximity,
       status,
       virtual_tour_url,
       unit_layout (
@@ -131,7 +130,6 @@ export default async function ProjectsPage() {
     city: item.city,
     slug: item.slug,
     image: item.image || '/images/placeholder.webp',
-    proximity: item.proximity,
     statusText: item.status || 'Pre-Selling',
     tags:
       item.project_tag

@@ -147,7 +147,6 @@ grant select (
   image,
   img_awards,
   map_icon,
-  proximity,
   virtual_tour_url,
   is_active,
   deleted_at
