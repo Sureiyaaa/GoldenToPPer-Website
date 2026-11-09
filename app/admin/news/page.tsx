@@ -38,7 +38,8 @@ import { SectionEditor } from './SectionEditor';
 import { SectionInspector } from './SectionInspector';
 import { useSectionImageUploads, type SectionImageDraft } from './useSectionImageUploads';
 import { validateNewsImageFile } from '@/lib/validations/news-image-upload';
-import { adaptLegacyArticleToSections, isValidSectionsDocument, type ArticleSection, type ArticleSectionsDocument } from '@/app/types/article-sections';
+import { adaptLegacyArticleToSections, deriveExcerptFromSections, isValidSectionsDocument, type ArticleSection, type ArticleSectionsDocument } from '@/app/types/article-sections';
+import { extractPlainTextFromContent } from '@/lib/validations/article-validation';
 import { parseArticleContent } from '@/lib/rendering/article-content';
 import { Plus } from 'lucide-react';
 
@@ -47,12 +48,24 @@ const NewsFormSchema = z.object({
   category: z.string().min(1, 'Category is required'),
   date: z.string().min(1, 'Date is required'),
   slug: z.string().min(1, 'Slug is required'),
-  excerpt: z.string().min(1, 'Article content is required'),
+  excerpt: z.string(),
   image: z.string().optional(),
   show_cover_on_article: z.boolean(),
   article_content: z.string().nullable().optional(),
-  article_layout: z.enum(['image-above', 'title-above', 'image-contained', 'sidebar-image-right', 'sidebar-image-left']).default('image-above'),
+  article_layout: z.enum(['image-above', 'title-above', 'image-contained', 'sidebar-image-right', 'sidebar-image-left']),
   article_sections: z.any().nullable().optional(), // JSONB, validated server-side
+}).superRefine((values, context) => {
+  // Sections are the source of truth when using the section editor.
+  const text = values.article_sections != null
+    ? isValidSectionsDocument(values.article_sections)
+      ? deriveExcerptFromSections(values.article_sections).trim()
+      : ''
+    : values.article_content
+      ? extractPlainTextFromContent(values.article_content)
+      : values.excerpt.trim();
+  if (!text) {
+    context.addIssue({ code: 'custom', path: ['excerpt'], message: 'Article content is required' });
+  }
 });
 
 type NewsFormValues = z.infer<typeof NewsFormSchema>;
@@ -186,7 +199,7 @@ function NewsManager() {
 
   const updateSections = (updated: ArticleSectionsDocument) => {
     setSections(updated);
-    setValue('article_sections', updated, { shouldDirty: true });
+    setValue('article_sections', updated, { shouldDirty: true, shouldValidate: true });
   };
 
   const stageSectionImage = (id: string, file: File | null) => {
@@ -261,6 +274,7 @@ function NewsManager() {
         setSections(updatedSections);
         setValue('article_sections', updatedSections, {
           shouldDirty: true,
+          shouldValidate: true,
         });
       }
     },

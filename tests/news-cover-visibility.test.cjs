@@ -55,6 +55,48 @@ const sectionDocument = sections => ({ version: 1, sections, createdAt: '2026-10
 const historicalLayouts = ['image-above', 'title-above', 'image-contained', 'sidebar-image-right', 'sidebar-image-left'];
 const articleContent = { title: 'Existing article', excerpt: 'Article content remains available.' };
 
+test('section articles save without a legacy excerpt and keep the section excerpt on create and edit', async () => {
+  for (const editId of [null, 'article']) {
+    for (const article_content of [null, JSON.stringify(richBody('')), JSON.stringify(richBody('Old article content'))]) {
+      const { action, state } = fixture();
+      const article_sections = sectionDocument([{ ...section(), body: richBody('test') }]);
+      await action.saveArticleToDB({ title: 'New article', excerpt: '', article_content, article_sections }, editId);
+      assert.equal(state.writes.at(-1).excerpt, 'test');
+      assert.deepEqual(state.writes.at(-1).article_sections, article_sections);
+    }
+  }
+});
+
+test('empty sections cannot save using stale legacy content', async () => {
+  const { action, state } = fixture();
+  for (const sections of [[], [{ ...section(), body: richBody('   ') }]]) {
+    await assert.rejects(action.saveArticleToDB({ ...articleContent, article_sections: sectionDocument(sections) }, null), /Article content is required/);
+  }
+  assert.equal(state.writes.length, 0);
+});
+
+test('editor form validates actual section text instead of the unused excerpt field', () => {
+  const { sections } = fixture();
+  const page = fs.readFileSync(path.join(root, 'app/admin/news/page.tsx'), 'utf8');
+  const declaration = page.slice(page.indexOf('const NewsFormSchema ='), page.indexOf('type NewsFormValues ='));
+  const source = ts.transpileModule(declaration + '\nmodule.exports = NewsFormSchema;', {
+    compilerOptions: { module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  const module = { exports: {} };
+  vm.runInNewContext(source, { module, z: require('zod').z, ...sections,
+    extractPlainTextFromContent: value => JSON.parse(value).content.map(p => p.content?.map(t => t.text || '').join('') || '').join('\n').trim(),
+  });
+  const schema = module.exports;
+  const values = { title: 'test', category: 'News', date: '2026-11-09', slug: 'test', excerpt: '', show_cover_on_article: true };
+  assert.equal(schema.safeParse({ ...values, article_sections: sectionDocument([{ ...section(), body: richBody('test') }]) }).success, true);
+  assert.equal(schema.safeParse({ ...values, article_content: JSON.stringify(richBody('Legacy article content')) }).success, true);
+  for (const article_sections of [null, sectionDocument([]), sectionDocument([{ ...section(), body: richBody('   ') }])]) {
+    const result = schema.safeParse({ ...values, article_sections });
+    assert.equal(result.success, false);
+    assert.equal(result.error.issues[0].message, 'Article content is required');
+  }
+});
+
 test('production section validators accept optional heading/image fields, empty documents and stored section placements', () => {
   const { sections } = fixture();
   const layouts = ['image-above', 'image-below', 'image-left', 'image-right', 'image-contained', 'text-only'];
@@ -148,12 +190,11 @@ test('real save action normalizes section JSON and preserves stable IDs, order, 
     const legacyContent = richBody('Explicit legacy content supplies the final excerpt.');
     await action.saveArticleToDB({ article_sections: reordered, article_content: JSON.stringify(legacyContent) }, 'article');
     assert.deepEqual(state.row.article_content, legacyContent);
-    assert.equal(state.row.excerpt, 'Explicit legacy content supplies the final excerpt.', 'supplied article_content retains its existing excerpt precedence');
+    assert.equal(state.row.excerpt, 'Section content', 'section content takes precedence over stale legacy content');
     assert.deepEqual(state.row.article_sections, reordered);
     const blank = sectionDocument([]);
-    await action.saveArticleToDB({ ...articleContent, article_sections: blank }, 'article');
-    assert.deepEqual(state.row.article_sections, blank);
-    assert.equal(state.row.excerpt, articleContent.excerpt, 'empty sections do not invent an excerpt');
+    await assert.rejects(action.saveArticleToDB({ ...articleContent, article_sections: blank }, 'article'), /Article content is required/);
+    assert.deepEqual(state.row.article_sections, reordered);
   }
 });
 
@@ -166,7 +207,7 @@ test('real save action rejects malformed section submissions before any database
     assert.equal(state.writes.length, 0);
     assert.deepEqual(state.row, before);
   }
-  await assert.rejects(action.saveArticleToDB({ article_sections: sectionDocument([]) }, null), /Article must have content/);
+  await assert.rejects(action.saveArticleToDB({ article_sections: sectionDocument([]) }, null), /Article content is required/);
   assert.equal(state.writes.length, 0);
 });
 

@@ -157,16 +157,25 @@ export async function saveArticleToDB(payload: any, editId: string | null) {
 
         // Derive excerpt from sections for backward compatibility and search
         const derivedExcerpt = deriveExcerptFromSections(sections as ArticleSectionsDocument);
-        if (derivedExcerpt) {
-          filteredPayload.excerpt = derivedExcerpt;
-        }
+        if (!derivedExcerpt.trim()) throw new Error('Article content is required');
+        filteredPayload.excerpt = derivedExcerpt;
       } catch (e: any) {
         throw new Error(`Invalid article sections: ${e.message}`);
       }
     }
 
     // If article_content is provided, parse JSON string and validate
-    if (filteredPayload.article_content) {
+    if (filteredPayload.article_sections != null) {
+      // Section content has already been validated and its excerpt derived above.
+      // Legacy rich content may be stale or empty after editing sections.
+      if (typeof filteredPayload.article_content === 'string') {
+        try {
+          filteredPayload.article_content = JSON.parse(filteredPayload.article_content);
+        } catch {
+          filteredPayload.article_content = null;
+        }
+      }
+    } else if (filteredPayload.article_content) {
       // Parse JSON string from editor (avoid double-encoding in JSONB)
       if (typeof filteredPayload.article_content === 'string') {
         try {
