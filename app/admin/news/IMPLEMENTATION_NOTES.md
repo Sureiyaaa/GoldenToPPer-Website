@@ -101,7 +101,7 @@ Moved the article body editing interface from the inspector panel into the live 
 - **Markdown preview:** Not implemented (rich content is source of truth)
 - **Text alignment:** Not supported by schema (paragraphs only)
 - **Headings/lists:** Disabled in Tiptap configuration
-- **Copy-paste HTML:** Converted to plain text (configured in clipboardParser)
+- **Copy-paste HTML:** Uses the schema clipboard parser to retain paragraphs, line breaks, bold and italic while discarding unsupported document styling.
 - **Mobile editing:** Touch support works but selection UI may differ from desktop
 - **Collaborative editing:** Not implemented (single-user admin)
 - **Image/video embeds:** Not supported (text-only content)

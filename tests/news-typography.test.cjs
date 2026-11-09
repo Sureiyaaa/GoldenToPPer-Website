@@ -258,6 +258,55 @@ async function main(t) {
                 await evaluate('window.newsBody=' + JSON.stringify(body));
             }
         });
+        await t.test('Word-style HTML paste preserves supported formatting without document fonts, margins or indentation whitespace', async () => {
+            await evaluate("window.newsBody={type:'doc',content:[{type:'paragraph'}]}");
+            await render('editable');
+            await evaluate('window.newsBody=' + JSON.stringify(body));
+            const html = `<html><body><!--StartFragment--><p class="MsoNormal" style="margin:0 0 48pt;text-indent:36pt;font-family:Calibri;font-size:24pt">
+              Hello <span style="font-weight:700">bold</span> and <span style="font-style:italic">italic</span>.
+            </p><p style="margin-top:48pt">Next paragraph<br>Soft break</p><!--EndFragment--></body></html>`;
+            const result = await evaluate(`(() => {
+                const editor=window.fixtureEditor;
+                editor.commands.focus('start');
+                const clipboardData=new DataTransfer();
+                clipboardData.setData('text/html',${JSON.stringify(html)});
+                clipboardData.setData('text/plain','Hello bold and italic.\\nNext paragraph\\nSoft break');
+                const event=new ClipboardEvent('paste',{clipboardData,bubbles:true,cancelable:true});
+                editor.view.dom.dispatchEvent(event);
+                const doc=editor.getJSON();const markup=editor.getHTML();
+                editor.commands.undo();
+                return {doc,markup,undone:editor.isEmpty,handled:event.defaultPrevented};
+            })()`);
+            assert.equal(result.handled,true);
+            assert.equal(result.doc.content.length,2);
+            assert.deepEqual(result.doc.content[0].content,[
+                {type:'text',text:'Hello '},
+                {type:'text',marks:[{type:'bold'}],text:'bold'},
+                {type:'text',text:' and '},
+                {type:'text',marks:[{type:'italic'}],text:'italic'},
+                {type:'text',text:'.'},
+            ]);
+            assert.deepEqual(result.doc.content[1].content,[{type:'text',text:'Next paragraph'},{type:'hardBreak'},{type:'text',text:'Soft break'}]);
+            assert.doesNotMatch(result.markup,/Calibri|MsoNormal|margin|text-indent|font-size/);
+            assert.equal(result.undone,true,'a paste is one undoable edit');
+        });
+        await t.test('plain-text paste retains paragraphs and literal angle brackets without interpreting HTML', async () => {
+            await evaluate("window.newsBody={type:'doc',content:[{type:'paragraph'}]}");
+            await render('editable');
+            await evaluate('window.newsBody=' + JSON.stringify(body));
+            const result=await evaluate(`(() => {
+                const editor=window.fixtureEditor;
+                editor.commands.focus('start');
+                const clipboardData=new DataTransfer();
+                clipboardData.setData('text/plain','First  line\\r\\nSecond <b>literal</b> & text');
+                editor.view.dom.dispatchEvent(new ClipboardEvent('paste',{clipboardData,bubbles:true,cancelable:true}));
+                return editor.getJSON();
+            })()`);
+            assert.deepEqual(result.content,[
+                {type:'paragraph',content:[{type:'text',text:'First  line'}]},
+                {type:'paragraph',content:[{type:'text',text:'Second <b>literal</b> & text'}]},
+            ]);
+        });
         const originalBase = await evaluate('window.newsBase');
         for (const width of [1440, 375]) {
             await size(width, 900);

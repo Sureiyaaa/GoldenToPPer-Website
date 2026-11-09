@@ -63,16 +63,6 @@ export function useSectionEditor({
           attributes: {
             class: 'prose prose-sm max-w-none text-base md:text-[17px] text-gray-700 leading-[1.85] focus:outline-none w-full',
           },
-          clipboardParser: (sliced: any, _event: any) => {
-            const text = sliced?.textContent || '';
-            if (!text.trim()) return null;
-            const parser = DOMParser.prototype.parseFromString.call(
-              new DOMParser(),
-              `<p>${text.replace(/\n/g, '</p><p>')}</p>`,
-              'text/html'
-            );
-            return parser.querySelector('body') || sliced;
-          },
         },
       });
       editorsMap.set(sectionId, editor);
@@ -159,16 +149,6 @@ export function resetAllSectionEditors(
       editorProps: {
         attributes: {
           class: 'prose prose-sm max-w-none text-base md:text-[17px] text-gray-700 leading-[1.85] focus:outline-none w-full',
-        },
-        clipboardParser: (sliced: any, _event: any) => {
-          const text = sliced?.textContent || '';
-          if (!text.trim()) return null;
-          const parser = DOMParser.prototype.parseFromString.call(
-            new DOMParser(),
-            `<p>${text.replace(/\n/g, '</p><p>')}</p>`,
-            'text/html'
-          );
-          return parser.querySelector('body') || sliced;
         },
       },
     });

@@ -42,16 +42,6 @@ export function useArticleEditor({
       attributes: {
         class: 'focus:outline-none w-full',
       },
-      clipboardParser: (sliced: any, _event: any) => {
-        const text = sliced?.textContent || '';
-        if (!text.trim()) return null;
-        const parser = DOMParser.prototype.parseFromString.call(
-          new DOMParser(),
-          `<p>${text.replace(/\n/g, '</p><p>')}</p>`,
-          'text/html'
-        );
-        return parser.querySelector('body') || sliced;
-      },
     },
   } as any);
 
