@@ -18,6 +18,7 @@ import {
   Bell, CheckCircle2, X, Menu, UserCircle2, Megaphone, Settings, ShieldAlert, AlertCircle, BookOpen, Upload, ChevronDown, GripVertical, ArrowUpRight, CreditCard
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
+import { fetchAdminNavigationAction, saveNavigationAction, saveNavigationOrderAction, fetchModulesManagementAction, setModuleVisibilityAction, fetchAdminNewsAction } from '@/app/actions/admin-access';
 import { CustomerInboxProvider, CustomerInboxManager, NotificationCenter } from '@/app/admin/components/customer-inbox';
 import { toggleActiveStatus, archiveRecord } from '@/app/actions/updates';
 import {
@@ -2408,31 +2409,21 @@ function AuditLogsManager({ checkPerm, canDelete }: ManagerProps & { canDelete: 
 }
 
 function SystemModulesManager() {
-  const supabase = createClient();
   const [modules, setModules] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchModules = async () => {
-      const { data, error } = await supabase
-        .from('modules')
-        .select('*')
-        .neq('module_code', 'audit_log')
-        .neq('module_code', 'admin_manage')
-        .neq('module_code', 'notifications_code')
-        .neq('module_code', 'navbar_setup')
-        .order('id');
-
-      if (data) setModules(data);
-      setIsLoading(false);
+      try { setModules(await fetchModulesManagementAction()); }
+      catch (error) { console.error('Module management unavailable:', error); }
+      finally { setIsLoading(false); }
     };
     fetchModules();
-  }, [supabase]);
+  }, []);
 
   const handleToggle = async (id: number, currentStatus: boolean, moduleName: string) => {
     try {
-      const { error } = await supabase.from('modules').update({ is_active: !currentStatus }).eq('id', id);
-      if (error) throw error;
+      await setModuleVisibilityAction(id, !currentStatus);
       setModules(prev => prev.map(m => m.id === id ? { ...m, is_active: !currentStatus } : m));
 
       // ✅ SERVER-SIDE AUDIT LOG
@@ -2476,7 +2467,7 @@ function SystemModulesManager() {
 }
 function NavbarProjectsManager({ checkPerm }: ManagerProps) {
   const router = useRouter();
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
   const [navProjects, setNavProjects] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -2583,26 +2574,13 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
         );
       }
 
-      const { data, error } = await supabase
-        .from('navbar_projects')
-        .select('*, project_table(title, is_active, deleted_at)')
-        .order('display_order', { ascending: true });
-
-      if (error) {
+      try {
+        setNavProjects(await fetchAdminNavigationAction());
+      } catch (error: any) {
         showError(`Unable to load navigation items: ${error.message}`);
-      } else if (data) {
-        const activeProjectNavigationItems = data.filter((item: any) => {
-          const linkedProject = Array.isArray(item.project_table)
-            ? item.project_table[0]
-            : item.project_table;
-
-          return Boolean(linkedProject && !linkedProject.deleted_at);
-        });
-
-        setNavProjects(activeProjectNavigationItems);
+      } finally {
+        setIsLoading(false);
       }
-
-      setIsLoading(false);
     };
 
     fetchNavProjects();
@@ -2624,17 +2602,12 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
 
     setIsSaving(true);
     try {
-      const { error } = await supabase
-        .from('navbar_projects')
-        .update({
+      await saveNavigationAction(editingData.id, {
           nav_title: trimmedTitle,
           tagline: String(editingData.tagline || '').trim(),
           nav_image_url: editingData.nav_image_url || null,
           is_active: Boolean(editingData.is_active),
-        })
-        .eq('id', editingData.id);
-
-      if (error) throw error;
+        });
 
       await createAuditLogAction(
         'EDIT',
@@ -2694,17 +2667,7 @@ function NavbarProjectsManager({ checkPerm }: ManagerProps) {
   };
 
   const persistNavigationOrder = async (items: any[]) => {
-    for (let index = 0; index < items.length; index += 1) {
-      const item = items[index];
-      const nextOrder = index + 1;
-
-      const { error } = await supabase
-        .from('navbar_projects')
-        .update({ display_order: nextOrder })
-        .eq('id', item.id);
-
-      if (error) throw error;
-    }
+    await saveNavigationOrderAction(items.map(item => item.id));
   };
 
   const handleDropOnItem = async (targetId: number) => {
@@ -4207,12 +4170,11 @@ function AdminMainDashboardContent() {
           }
         }
         try {
-          const { data, error: newsLoadError } = await withTimeout(
-            supabase.from('news_updates').select('*').is('is_archived', null).order('date', { ascending: false }),
+          const data = await withTimeout(
+            fetchAdminNewsAction(),
             'Loading News & Updates'
           );
           if (cancelled) return;
-          if (newsLoadError) throw newsLoadError;
           if (data) {
             setNewsList(z.array(NewsArticleSchema).parse(data));
           }
