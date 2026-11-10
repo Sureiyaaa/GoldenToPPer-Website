@@ -199,7 +199,7 @@ function DynamicProjectContent({
             (b.sort_order ?? Number.MAX_SAFE_INTEGER) ||
           a.id - b.id
       )
-      .map((tower) => tower.name.trim())
+      .map((tower) => tower.name?.trim() ?? '')
       .filter(
         (tower) => tower && amenityTowerKeys.has(tower.toLowerCase())
       );

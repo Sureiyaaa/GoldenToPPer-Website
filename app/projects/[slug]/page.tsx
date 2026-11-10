@@ -113,10 +113,10 @@ export default async function DynamicProjectPage({ params }: Props) {
       .eq('project_id', project.id),
 
     towerSupabase
-      .from('project_table')
-      .select('id, title, slug, virtual_tour_url, virtual_tours (*)')
-      .eq('is_active', true)
-      .is('deleted_at', null)
+      .from('project_towers')
+      .select('id, project_id, name, sort_order')
+      .eq('project_id', project.id)
+      .order('sort_order', { ascending: true })
       .order('id', { ascending: true }),
 
     towerSupabase
@@ -126,7 +126,7 @@ export default async function DynamicProjectPage({ params }: Props) {
 
     supabase
       .from('project_table')
-      .select('id, title, slug')
+      .select('id, title, slug, virtual_tours (*)')
       .eq('is_active', true)
       .is('deleted_at', null)
       .order('id', { ascending: true })
