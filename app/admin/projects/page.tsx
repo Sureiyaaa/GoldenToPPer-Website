@@ -96,6 +96,8 @@ const projectSchema = z.object({
     title: z.string().min(1, "Title required"),
     description: z.string(),
     thumbnail: z.string(),
+    disclaimer_enabled: z.boolean().optional(),
+    disclaimer_text: z.string().max(200, 'Use 200 characters or fewer').optional(),
     tower: z.string().nullable().optional()
   })),
   map_latitude: z.string(),
@@ -613,6 +615,8 @@ function ProjectManager() {
 
           amenities: data.amenityData.map((a: any) => ({
             ...a,
+            disclaimer_enabled: a.disclaimer_enabled ?? false,
+            disclaimer_text: a.disclaimer_text ?? "Architect's vision only.",
             tower:
               a.tower
                 ? formatTowerToLetter(
@@ -1138,6 +1142,8 @@ function ProjectManager() {
                 amenity.description || '',
               thumbnail:
                 amenity.thumbnail || '',
+              disclaimer_enabled: amenity.disclaimer_enabled ?? false,
+              disclaimer_text: amenity.disclaimer_text ?? "Architect's vision only.",
               tower:
                 amenity.tower || null,
             })
@@ -1360,6 +1366,8 @@ function ProjectManager() {
       id: a.id ?? i + 1,
       editorIndex: i,
       title: a.title || `Amenity ${i + 1}`,
+      disclaimer_enabled: a.disclaimer_enabled ?? false,
+      disclaimer_text: a.disclaimer_text,
       description: a.description || 'Description...',
       tower: a.tower || null,
       thumbnail: previews[`amenities.${i}.thumbnail`] || a.thumbnail || BLANK_IMAGE
@@ -2005,6 +2013,8 @@ function ProjectManager() {
       title: '',
       description: '',
       thumbnail: '',
+      disclaimer_enabled: false,
+      disclaimer_text: "Architect's vision only.",
       tower: null,
     });
 
@@ -5437,9 +5447,37 @@ function ProjectManager() {
                     />
 
                     <p className="-mt-3 text-[10px] leading-relaxed text-gray-400">
-                      This image appears in the amenities carousel. A landscape
-                      image with the subject near the center works best.
+                      Recommended size: 1080 × 720 px (landscape). This image
+                      appears in the amenities carousel and may be cropped to
+                      fit. Keep the subject near the center.
                     </p>
+
+                    <div className="space-y-3">
+                      <label className="flex items-center justify-between gap-3 text-sm text-brand-blue">
+                        Show image disclaimer
+                        <input
+                          type="checkbox"
+                          role="switch"
+                          {...register(`amenities.${selectedAmenityIndex}.disclaimer_enabled`)}
+                          className="h-4 w-4 accent-[#132243]"
+                        />
+                      </label>
+                      {formData.amenities?.[selectedAmenityIndex]?.disclaimer_enabled && (
+                        <label className="block text-xs text-gray-500">
+                          Disclaimer text
+                          <textarea
+                            {...register(`amenities.${selectedAmenityIndex}.disclaimer_text`)}
+                            maxLength={200}
+                            rows={3}
+                            placeholder="Architect's vision only."
+                            className="mt-2 w-full rounded-xl border border-gray-200 p-3 text-sm text-brand-blue"
+                          />
+                          <span className="mt-1 block text-[10px] leading-relaxed text-gray-400">
+                            Appears at the bottom right of this image. Leave blank to use “Architect’s vision only.”
+                          </span>
+                        </label>
+                      )}
+                    </div>
 
 
                     {/* DELETE */}
