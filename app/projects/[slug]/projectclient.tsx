@@ -2,6 +2,7 @@
 
 import Navbar from "@/app/components/navbar";
 import Image from "next/image";
+import ImageDisclaimer from '@/app/components/ImageDisclaimer';
 import { Layers, Target, Key, MapPin, ArrowRight, ChevronLeft, ChevronRight, Move3d, X, ChevronDown } from 'lucide-react';
 import Footer from '@/app/components/footer';
 import { useEffect, useRef, useState, useMemo, Suspense } from 'react';
@@ -23,6 +24,8 @@ interface Amenity {
   description: string;
   thumbnail: string;
   tower?: string | null;
+  disclaimer_enabled?: boolean;
+  disclaimer_text?: string | null;
 }
 
 interface UnitLayout {
@@ -919,6 +922,7 @@ function DynamicProjectContent({
               />
 
               <div className="absolute inset-0 bg-black/15 group-hover:bg-transparent transition-colors duration-500 pointer-events-none" />
+              <ImageDisclaimer enabled={item.disclaimer_enabled} text={item.disclaimer_text} />
 
             </div>
 

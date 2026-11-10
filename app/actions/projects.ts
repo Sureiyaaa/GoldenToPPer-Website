@@ -13,7 +13,7 @@ const supabaseAdmin = createClient(
 const PROJECT_TABLE_FIELDS = new Set(['title', 'slug', 'status', 'address', 'city', 'country', 'sqm', 'unit_total', 'merchant_id', 'image', 'img_awards', 'map_icon']);
 const EXTENDED_DESCRIPTION_FIELDS = new Set(['editorial_title', 'editorial_long', 'editorial_img', 'editorial_title_color', 'editorial_desc_color', 'editorial_bg_color', 'amenities_title', 'amenities_title_gold', 'map_subtitle']);
 const UNIT_LAYOUT_FIELDS = new Set(['title', 'tower_name', 'description', 'thumbnail', 'min_sqm', 'max_sqm', 'bg_color', 'sort_order', 'show_on_map_card', 'map_card_order', 'show_on_project_page', 'project_page_order']);
-const AMENITY_FIELDS = new Set(['title', 'description', 'thumbnail', 'tower']);
+const AMENITY_FIELDS = new Set(['title', 'description', 'thumbnail', 'tower', 'disclaimer_enabled', 'disclaimer_text']);
 const TOWER_FIELDS = new Set(['name', 'sort_order']);
 const MARKER_FIELDS = new Set(['interest_name', 'address', 'phrase', 'distance_km', 'distance_drive', 'distance_walk', 'latitude', 'longitude', 'thumbnail']);
 const MARKER_TYPE_FIELDS = new Set(['icon', 'name']);
@@ -909,7 +909,7 @@ function buildProjectAuditRows(before: ProjectSnapshot, after: ProjectSnapshot, 
     record('REORDERED', 'tower-order', 'Tower order rearranged', oldTowers.map(t => t.name), newTowers.map(t => t.name));
   }
   compareItems('Amenity', 'amenity', before.amenityData || [], after.amenityData || [],
-    { title: 'Name', description: 'Description', thumbnail: 'Image', tower: 'Tower' });
+    { title: 'Name', description: 'Description', thumbnail: 'Image', tower: 'Tower', disclaimer_enabled: 'Show image disclaimer', disclaimer_text: 'Disclaimer text' });
   compareItems('Unit layout', 'unit-layout', before.layoutData || [], after.layoutData || [],
     { title: 'Name', tower_name: 'Tower', description: 'Description', thumbnail: 'Image', min_sqm: 'Minimum area', max_sqm: 'Maximum area',
       bg_color: 'Background color', sort_order: 'Order', map_card_order: 'Map card order', project_page_order: 'Project page order',
@@ -1301,6 +1301,10 @@ const buildAmenityValues = (
   item: any
 ) => {
   const values = {
+    disclaimer_enabled: item.disclaimer_enabled === true,
+    disclaimer_text: typeof item.disclaimer_text === 'string' && item.disclaimer_text.trim()
+      ? item.disclaimer_text.trim().slice(0, 200)
+      : "Architect's vision only.",
     title:
       typeof item.title === 'string'
         ? item.title.trim()
@@ -1362,7 +1366,7 @@ for (const item of amenities) {
         parsedId
       )
       .select(
-        'id, project_id, title, description, thumbnail, tower'
+        'id, project_id, title, description, thumbnail, tower, disclaimer_enabled, disclaimer_text'
       )
       .single();
 
@@ -1397,7 +1401,7 @@ for (const item of amenities) {
         ...amenityValues,
       })
       .select(
-        'id, project_id, title, description, thumbnail, tower'
+        'id, project_id, title, description, thumbnail, tower, disclaimer_enabled, disclaimer_text'
       )
       .single();
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo } from 'react';
 import Image from "next/image";
+import ImageDisclaimer from '@/app/components/ImageDisclaimer';
 import { Layers, Target, Key, MapPin, ArrowRight, ChevronLeft, ChevronRight, PlusCircle, Move3d } from 'lucide-react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -19,6 +20,8 @@ interface Amenity {
   description: string;
   thumbnail: string;
   tower?: string | null;
+  disclaimer_enabled?: boolean;
+  disclaimer_text?: string | null;
 }
 
 export type ProjectEditorRegion =
@@ -2144,6 +2147,7 @@ export default function PreviewSkeleton({
                       <div className="relative h-[38vh] min-h-[240px] max-h-[380px] w-full overflow-hidden rounded-xl bg-gray-800 shadow-2xl pointer-events-auto">
                         <Image src={item.thumbnail || BLANK_IMAGE} alt={item.title || 'Amenity'} fill draggable="false" sizes="(max-width: 768px) 82vw, (max-width: 1024px) 40vw, 30vw" className="object-cover group-hover:scale-105 transition-transform duration-[1.5s] ease-out pointer-events-none select-none" />
                         <div className="absolute inset-0 bg-black/15 group-hover:bg-transparent transition-colors duration-500 pointer-events-none" />
+                        <ImageDisclaimer enabled={item.disclaimer_enabled} text={item.disclaimer_text} />
 
                         {editorMode && !item.thumbnail && (
                           <div className="absolute inset-0 flex items-center justify-center bg-[#0d1b3e] text-white/60 pointer-events-none">
