@@ -65,7 +65,6 @@ export default async function ProjectsPage() {
       slug,
       image,
       status,
-      virtual_tour_url,
       unit_layout (
         id,
         title,
