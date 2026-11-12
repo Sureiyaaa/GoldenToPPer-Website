@@ -1,4 +1,5 @@
 'use client';
+import { fetchAdminNewsAction } from '@/app/actions/admin-access';
 
 import {
   Suspense,
@@ -305,13 +306,7 @@ function NewsManager() {
     isDirty || hasPendingFiles;
 
   const loadArticleNavigation = async () => {
-    const { data, error } = await supabase
-      .from('news_updates')
-      .select('id, title')
-      .is('is_archived', null)
-      .order('date', { ascending: false });
-
-    if (error) throw error;
+    const data = await fetchAdminNewsAction();
 
     setEditorArticles(
       (data || []).map((article: any) => ({
@@ -368,13 +363,7 @@ function NewsManager() {
           return;
         }
 
-        const { data, error } = await supabase
-          .from('news_updates')
-          .select('*')
-          .eq('id', editId)
-          .single();
-
-        if (error) throw error;
+        const data = (await fetchAdminNewsAction(editId))[0];
         if (!data) throw new Error('Article not found');
 
         if (
@@ -667,22 +656,7 @@ function NewsManager() {
             : '';
 
         if (!createdId) {
-          const {
-            data: createdRows,
-            error: lookupError,
-          } = await supabase
-            .from('news_updates')
-            .select('id')
-            .eq('slug', payloadToSave.slug)
-            .is('is_archived', null)
-            .limit(1);
-
-          if (lookupError) {
-            console.error(
-              'Could not resolve created article ID:',
-              lookupError
-            );
-          }
+          const createdRows = (await fetchAdminNewsAction()).filter(article => article.slug === payloadToSave.slug);
 
           if (createdRows?.[0]?.id != null) {
             createdId = String(

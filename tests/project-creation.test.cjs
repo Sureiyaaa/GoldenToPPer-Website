@@ -109,7 +109,10 @@ function harness(options = {}) {
   new Function('require', 'module', 'exports', 'console', code)(
     name => {
       if (name === '@supabase/supabase-js') return { createClient: () => ({ from: table => new Query(table) }) };
-      if (name === './auth') return { getCustomSession: async () => options.session === false ? null : 'test-admin' };
+      if (name === './auth') return {
+        getCustomSession: async () => options.session === false ? null : 'test-admin',
+        getRBACProfile: async () => options.session === false ? null : (options.profile ?? { permissions: 'SUPER_ADMIN' }),
+      };
       throw new Error(`Unexpected import: ${name}`);
     }, module, module.exports, { error: (...args) => logs.push(args) },
   );
@@ -149,6 +152,15 @@ test('E: duplicate active slug returns the existing friendly error without write
   assert.equal(h.projects.length, 1);
   assert.equal(h.navigation.length, 0);
   assert.ok(h.calls.every(call => call.op === 'select'));
+});
+
+test('project create, archive, restore and navigation repair reject an unrelated CMS role before database access', async () => {
+  const h = harness({ profile: { permissions: { edit_project: { can_view: true } } } });
+  assert.equal((await h.actions.createBasicProjectAction(valid)).success, false);
+  await assert.rejects(h.actions.archiveProjectAction(1), /permission/);
+  await assert.rejects(h.actions.restoreArchivedProjectAction(1), /permission/);
+  await assert.rejects(h.actions.ensureProjectNavigationEntriesAction(), /permission/);
+  assert.equal(h.calls.length, 0);
 });
 
 test('F/G/H: archive, restore, and ensure reuse the original navigation row and preserve Hidden visibility', async () => {

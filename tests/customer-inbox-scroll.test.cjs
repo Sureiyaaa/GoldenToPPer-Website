@@ -12,13 +12,14 @@ const tailwind = require('@tailwindcss/postcss');
 const { webpack } = require('next/dist/compiled/webpack/webpack');
 
 const root = path.resolve(__dirname, '..');
-const work = path.join(root, '.cache/inbox-scroll');
+// Isolate generated files from the pre-existing, unwritable workspace cache.
+const work = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'gt-inbox-scroll-'));
 const baseline = process.argv.includes('--baseline');
 const chrome = [process.env.CHROME_PATH, 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'].find(candidate => candidate && fs.existsSync(candidate));
 
 async function prepare() {
   fs.mkdirSync(work, { recursive: true });
-  fs.writeFileSync(path.join(work, 'ts-loader.cjs'), `const ts = require('typescript'); module.exports = function(source) { return ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText; };`);
+  fs.writeFileSync(path.join(work, 'ts-loader.cjs'), `const ts = require(${JSON.stringify(require.resolve('typescript'))}); module.exports = function(source) { return ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText; };`);
   fs.writeFileSync(path.join(work, 'navigation.js'), `export const useRouter = () => ({push() {}});`);
   fs.writeFileSync(path.join(work, 'supabase.js'), `export const createClient = () => ({ channel: () => ({ on() { return this; }, subscribe(callback) { window.inboxLiveStatus = callback; return this; } }), removeChannel() {} });`);
   fs.writeFileSync(path.join(work, 'actions.js'), `export async function fetchNotificationsAction() { if (window.inboxFetchError) throw new Error('Fixture fetch failure'); return window.inboxItems; } export async function toggleNotificationReadAction() {}`);
@@ -27,7 +28,7 @@ async function prepare() {
   fs.writeFileSync(path.join(work, 'entry.jsx'), `
     import React from 'react';
     import { createRoot } from 'react-dom/client';
-    import { CustomerInboxProvider, CustomerInboxManager } from '../../app/admin/components/customer-inbox';
+    import { CustomerInboxProvider, CustomerInboxManager } from '@/app/admin/components/customer-inbox';
     window.inboxItems = [];
     window.setInboxItems = async (items) => {
       window.inboxItems = items;
@@ -50,7 +51,7 @@ async function prepare() {
   await new Promise((resolve, reject) => webpack({
     mode: 'development', context: root, entry: path.join(work, 'entry.jsx'),
     devtool: false, output: { path: work, filename: 'bundle.js' },
-    resolve: { extensions: ['.tsx', '.ts', '.jsx', '.js'], alias: {
+    resolve: { modules: [path.join(root, 'node_modules'), 'node_modules'], extensions: ['.tsx', '.ts', '.jsx', '.js'], alias: {
       '@/utils/supabase/client': path.join(work, 'supabase.js'),
       '@/app/actions/admin_fetchers': path.join(work, 'actions.js'),
       'next/navigation': path.join(work, 'navigation.js'), '@': root,
@@ -80,9 +81,10 @@ async function main() {
   await prepare();
   console.log('Compiled the real inbox component and Tailwind CSS.');
   const server = http.createServer((req, res) => {
-    const relative = req.url.startsWith('/_next/') ? req.url.replace('/_next/', '.next/') : `.cache/inbox-scroll/${req.url === '/' ? 'index.html' : req.url.slice(1)}`;
-    const file = path.resolve(root, relative);
-    if (!file.startsWith(root + path.sep) || !fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
+    const assetRoot = req.url.startsWith('/_next/') ? path.join(root, '.next') : work;
+    const relative = req.url.startsWith('/_next/') ? req.url.slice('/_next/'.length) : req.url === '/' ? 'index.html' : req.url.slice(1);
+    const file = path.resolve(assetRoot, relative);
+    if (!file.startsWith(assetRoot + path.sep) || !fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
     res.setHeader('Content-Type', file.endsWith('.css') ? 'text/css' : file.endsWith('.js') ? 'text/javascript' : file.endsWith('.woff2') ? 'font/woff2' : 'text/html');
     fs.createReadStream(file).pipe(res);
   });

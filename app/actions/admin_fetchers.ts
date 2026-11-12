@@ -2,6 +2,7 @@
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
+import { z } from 'zod';
 import { getCustomSession, getCurrentUser, getRBACProfile } from './auth';
 import {
   normalizeCustomerInbox,
@@ -16,6 +17,32 @@ const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+async function authorizeCmsOperation(moduleCode: string, permission: 'can_view' | 'can_create' | 'can_edit' | 'can_delete') {
+  const profile = await getRBACProfile();
+  if (!profile) throw new Error('Unauthorized: Session expired.');
+  if (profile.permissions === 'SUPER_ADMIN') return;
+  if (typeof profile.permissions !== 'object' || profile.permissions?.[moduleCode]?.[permission] !== true) {
+    throw new Error('You do not have permission to perform this CMS operation.');
+  }
+}
+
+const cmsId = z.union([z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  z.string().regex(/^[1-9]\d*$/).transform(Number)]).refine(Number.isSafeInteger);
+const cmsImage = z.string().trim().min(1).max(2048).refine(value => {
+  if (value.startsWith('/') && !value.startsWith('//') && !/[\\\s]/.test(value)) return true;
+  try { return new URL(value).protocol === 'https:'; } catch { return false; }
+});
+const tourValues = z.object({
+  title: z.string().trim().min(1).max(300), unit_name: z.string().trim().min(1).max(300),
+  tower_name: z.string().trim().min(1).max(200), status: z.enum(['Active', 'Hidden', 'Inactive', 'Archived']),
+  view_areas: z.array(z.object({ title: z.string().trim().min(1).max(300), image: cmsImage }).strict()).max(100),
+}).strict();
+const publicContactValues = z.object({
+  firstName: z.string().trim().min(1).max(100), lastName: z.string().trim().min(1).max(100),
+  email: z.string().trim().toLowerCase().email().max(254),
+  phone: z.string().regex(/^\d{11}$/),
+});
 
 // Phase 2.4A: Bank field allowlist
 const BANK_FIELDS = new Set(['bank_name', 'max_loan', 'terms', 'short_description', 'image']);
@@ -51,8 +78,7 @@ async function authorizeBankOperation(operation: 'create' | 'edit') {
 }
 
 export async function fetchAdminVirtualToursList() {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
+  await authorizeCmsOperation('virtual_tours', 'can_view');
 
   // The dashboard represents Virtual Tours at the PROJECT level.
   // Individual virtual_tours rows are units/models that belong to that project.
@@ -181,8 +207,8 @@ export async function fetchProjectsForDropdown() {
 }
 
 export async function fetchVirtualTourForEdit(editId: string | number) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
+  await authorizeCmsOperation('virtual_tours', 'can_view');
+  editId = cmsId.parse(editId);
   const { data, error } = await supabaseAdmin
     .from('virtual_tours')
     .select('*')
@@ -194,23 +220,22 @@ export async function fetchVirtualTourForEdit(editId: string | number) {
 }
 
 export async function saveVirtualTourAction(payload: any, editId: number | null) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
+  await authorizeCmsOperation('virtual_tours', editId === null ? 'can_create' : 'can_edit');
+  if (editId !== null) editId = cmsId.parse(editId);
 
-  const cleanData: Record<string, any> = {
+  const cleanData = { ...tourValues.parse({
     title: payload.title || payload.unit_name || '',
     unit_name: payload.unit_name || payload.title || '',
     tower_name: payload.tower_name || 'Tower A',
-    project_id: Number(payload.project_id),
     status: payload.status || 'Active',
     view_areas: payload.view_areas || payload.rooms || [],
-  };
+  }), project_id: cmsId.parse(payload.project_id) };
 
   if (editId) {
     const { error } = await supabaseAdmin
       .from('virtual_tours')
       .update(cleanData)
-      .eq('id', editId);
+      .eq('id', editId).select('id').single();
     if (error) throw new Error(error.message);
   } else {
     const { error } = await supabaseAdmin
@@ -222,8 +247,8 @@ export async function saveVirtualTourAction(payload: any, editId: number | null)
 }
 
 export async function fetchProjectVirtualTours(projectId: number | string) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
+  await authorizeCmsOperation('virtual_tours', 'can_view');
+  projectId = cmsId.parse(projectId);
 
   const { data, error } = await supabaseAdmin
     .from('virtual_tours')
@@ -240,20 +265,19 @@ export async function saveProjectVirtualToursAction(
   tours: any[],
   deletedTourIds: number[]
 ) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
-
-  // 1. Delete removed records
-  if (deletedTourIds.length > 0) {
-    const { error: delError } = await supabaseAdmin
-      .from('virtual_tours')
-      .delete()
-      .in('id', deletedTourIds);
-    if (delError) throw new Error(delError.message);
-  }
+  await authorizeCmsOperation('virtual_tours', 'can_view');
+  projectId = cmsId.parse(projectId);
+  if (!Array.isArray(deletedTourIds) || deletedTourIds.length > 0) throw new Error('Archive tours instead of deleting them.');
+  const parsedTours = z.array(tourValues.extend({
+    id: z.union([z.number().int().positive().max(Number.MAX_SAFE_INTEGER), z.string().regex(/^temp-\d+$/)]),
+  })).max(200).parse(tours);
+  const existingIds = parsedTours.filter(t => typeof t.id === 'number').map(t => t.id);
+  if (new Set(existingIds).size !== existingIds.length) throw new Error('Duplicate tour IDs.');
+  if (existingIds.length) await authorizeCmsOperation('virtual_tours', 'can_edit');
+  if (parsedTours.some(t => typeof t.id !== 'number')) await authorizeCmsOperation('virtual_tours', 'can_create');
 
   // 2. Insert or update units
-  for (const tour of tours) {
+  for (const tour of parsedTours) {
     const cleanData = {
       project_id: projectId,
       tower_name: tour.tower_name?.trim() || 'Tower A',
@@ -267,7 +291,7 @@ export async function saveProjectVirtualToursAction(
       const { error: updError } = await supabaseAdmin
         .from('virtual_tours')
         .update(cleanData)
-        .eq('id', tour.id);
+        .eq('id', tour.id).eq('project_id', projectId).select('id').single();
       if (updError) throw new Error(updError.message);
     } else {
       const { error: insError } = await supabaseAdmin
@@ -298,23 +322,20 @@ export async function deleteRecordAction(_table: string, _id: number | string) {
 // DASHBOARD BYPASS FETCHERS
 // ==========================================
 export async function fetchAdminPromotionsList() {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
+  await authorizeCmsOperation('promotion_code', 'can_view');
   const { data, error } = await supabaseAdmin.from('promotions').select('*').is('is_archived', null).order('id', { ascending: false });
   if (error) throw error; return data;
 }
 
 export async function fetchAdminBanksList() {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
+  await authorizeCmsOperation('edit_banks', 'can_view');
   const { data, error } = await supabaseAdmin.from('banks').select('*').is('is_archived', null).order('id', { ascending: true });
   if (error) throw error; return data;
 }
 
 export async function fetchAdminStoryList() {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
-  const { data, error } = await supabaseAdmin.from('our story').select('*').is('is_archived', null).order('year', { ascending: true });
+  await authorizeStoryOperation('can_view');
+  const { data, error } = await supabaseAdmin.from('our story').select('id, year, title, description, image, is_active, is_archived').is('is_archived', null).order('year', { ascending: true });
   if (error) throw error; return data;
 }
 
@@ -377,18 +398,19 @@ export async function restoreArchivedCmsRecordAction(table: ArchivedCmsTable, id
 }
 
 export async function toggleVirtualTourStatus(id: number | string, newStatus: string) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
+  await authorizeCmsOperation('virtual_tours', 'can_edit');
+  id = cmsId.parse(id);
+  newStatus = z.enum(['Active', 'Hidden', 'Inactive', 'Archived']).parse(newStatus);
   
-  const { error } = await supabaseAdmin.from('virtual_tours').update({ status: newStatus }).eq('id', id);
+  const { error } = await supabaseAdmin.from('virtual_tours').update({ status: newStatus }).eq('id', id).select('id').single();
   if (error) throw error;
   
   return { success: true };
 }
 
 export async function fetchPromotionForEdit(editId: string | number) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
+  await authorizeCmsOperation('promotion_code', 'can_view');
+  editId = cmsId.parse(editId);
   
   const { data, error } = await supabaseAdmin.from('promotions').select('*').eq('id', editId).limit(1).single();
   if (error) throw error; 
@@ -396,14 +418,18 @@ export async function fetchPromotionForEdit(editId: string | number) {
 }
 
 export async function savePromotionAction(payload: any, editId: string | null) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
+  await authorizeCmsOperation('promotion_code', editId === null ? 'can_create' : 'can_edit');
+  if (editId !== null) cmsId.parse(editId);
+  payload = z.object({ title: z.string().trim().min(1).max(300),
+    status: z.string().trim().min(1).max(100), validity_date: z.string().trim().min(1).max(200),
+    description: z.string().trim().min(1).max(20000),
+  }).strict().parse(payload);
 
   if (editId) {
     const { error } = await supabaseAdmin
       .from('promotions')
       .update(payload)
-      .eq('id', editId);
+      .eq('id', editId).select('id').single();
 
     if (error) throw error;
 
@@ -428,8 +454,8 @@ export async function savePromotionAction(payload: any, editId: string | null) {
 }
 
 export async function fetchBankForEdit(editId: string | number) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
+  await authorizeCmsOperation('edit_banks', 'can_view');
+  editId = cmsId.parse(editId);
   
   const { data, error } = await supabaseAdmin.from('banks').select('*').eq('id', editId).limit(1);
   if (error) throw error; 
@@ -437,8 +463,7 @@ export async function fetchBankForEdit(editId: string | number) {
 }
 
 export async function fetchBankProjectLinksAction(bankId: string | number) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
+  await authorizeCmsOperation('edit_banks', 'can_view');
 
   const normalizedBankId = Number(bankId);
   if (!Number.isFinite(normalizedBankId)) {
@@ -521,28 +546,52 @@ export async function saveBankAction(payload: any, editId: string | null) {
   }
 }
 
+async function authorizeStoryOperation(permission: 'can_view' | 'can_create' | 'can_edit') {
+  const profile = await getRBACProfile();
+  if (!profile) throw new Error('Unauthorized: Session expired.');
+  if (profile.permissions === 'SUPER_ADMIN') return;
+  if (typeof profile.permissions !== 'object' || profile.permissions?.our_story?.[permission] !== true) {
+    throw new Error('You do not have permission to manage Our Story.');
+  }
+}
+
+function validateStoryId(value: string | number) {
+  if ((typeof value !== 'string' && typeof value !== 'number') ||
+      !/^[1-9]\d*$/.test(String(value)) || !Number.isSafeInteger(Number(value))) {
+    throw new Error('Invalid milestone ID.');
+  }
+  return value;
+}
+
+const storyPayloadSchema = z.object({
+  year: z.string().trim().regex(/^\d{4}$/, 'Enter a four-digit year'),
+  title: z.string().trim().min(1).max(300),
+  description: z.string().trim().min(1).max(20000),
+  image: z.string().trim().min(1).max(2048).refine(value => {
+    if (value.startsWith('/') && !value.startsWith('//') && !/[\\\s]/.test(value)) return true;
+    try { return new URL(value).protocol === 'https:'; } catch { return false; }
+  }, 'Use an HTTPS image URL or a local image path'),
+}).strict();
+
 export async function fetchStoryForEdit(editId: string | number) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
-  
-  const { data, error } = await supabaseAdmin.from('our story').select('*').eq('id', editId).limit(1);
+  await authorizeStoryOperation('can_view');
+  const id = validateStoryId(editId);
+  const { data, error } = await supabaseAdmin.from('our story').select('id, year, title, description, image, is_active, is_archived').eq('id', id).limit(1);
   if (error) throw error; 
   return data?.[0] || null;
 }
 
-export async function saveStoryAction(payload: any, editId: string | null) {
-  const session = await getCustomSession();
-  if (!session) throw new Error("Unauthorized");
-
-  if (editId) {
-    const { error } = await supabaseAdmin.from('our story').update(payload).eq('id', editId);
-    if (error) throw error;
-  } else {
-    // Force is_active to true on creation
-    const { error } = await supabaseAdmin.from('our story').insert([{ ...payload, is_active: true }]);
-    if (error) throw error;
-  }
-  return { success: true };
+export async function saveStoryAction(payload: unknown, editId: string | null) {
+  const isCreate = editId === null;
+  await authorizeStoryOperation(isCreate ? 'can_create' : 'can_edit');
+  const id = isCreate ? null : validateStoryId(editId);
+  const values = storyPayloadSchema.parse(payload);
+  const query = isCreate
+    ? supabaseAdmin.from('our story').insert([{ ...values, is_active: true }])
+    : supabaseAdmin.from('our story').update(values).eq('id', id!);
+  const { data, error } = await query.select('id').single();
+  if (error || !data) throw new Error('Could not save milestone. Reload and try again.');
+  return { success: true, id: data.id };
 }
 
 type AuditContext = {
@@ -693,17 +742,25 @@ export async function saveWebsiteSectionStatesAction(
     display_name: string;
   }>
 ) {
-  const session = await getCustomSession();
-
-  if (!session) {
-    throw new Error('Unauthorized');
+  const profile = await getRBACProfile();
+  if (!profile) throw new Error('Unauthorized');
+  const allowedCodes = ['homepage_manage', 'our_story', 'edit_project', 'virtual_tours', 'edit_banks', 'edit_news', 'promotion_code', 'payment_carousel'];
+  if (profile.permissions !== 'SUPER_ADMIN' && !allowedCodes.some(code =>
+    typeof profile.permissions === 'object' && profile.permissions?.[code]?.can_edit === true)) {
+    throw new Error('You do not have permission to change website sections.');
   }
-
-  if (!Array.isArray(changes) || changes.length === 0) {
-    return { success: true };
+  const parsed = z.array(z.object({ id: cmsId, is_active: z.boolean(),
+    module_name: z.string().max(200), display_name: z.string().max(200),
+  }).strict()).max(100).refine(values => new Set(values.map(v => v.id)).size === values.length).parse(changes);
+  if (!parsed.length) return { success: true };
+  const { data: modules, error: lookupError } = await supabaseAdmin.from('modules')
+    .select('id, module_code, module_name').in('id', parsed.map(change => change.id));
+  if (lookupError || !modules || modules.length !== parsed.length) throw new Error('Could not verify website sections.');
+  for (const row of modules) {
+    if (!allowedCodes.includes(row.module_code)) throw new Error('This module cannot be changed here.');
+    await authorizeCmsOperation(row.module_code, 'can_edit');
   }
-
-  for (const change of changes) {
+  for (const change of parsed) {
     const { error } = await supabaseAdmin
       .from('modules')
       .update({
@@ -717,7 +774,7 @@ export async function saveWebsiteSectionStatesAction(
 
     await createAuditLogAction(
       'EDIT',
-      change.display_name,
+      modules.find(row => row.id === change.id)!.module_name,
       'Website visibility',
       change.is_active
         ? 'Shown on website.'
@@ -730,6 +787,12 @@ export async function saveWebsiteSectionStatesAction(
 
 export async function submitInquiryAction(data: any) {
   try {
+    const parsed = publicContactValues.extend({ project: cmsId }).strict().safeParse(data);
+    if (!parsed.success) return { success: false, error: 'Please check your inquiry details.' };
+    data = parsed.data;
+    const { data: project, error: projectError } = await supabaseAdmin.from('project_table')
+      .select('id').eq('id', data.project).eq('is_active', true).is('deleted_at', null).maybeSingle();
+    if (projectError || !project) return { success: false, error: 'Please select an available project.' };
     let currentClientId = null;
 
     // 1. Check if the client already exists by email
@@ -744,7 +807,8 @@ export async function submitInquiryAction(data: any) {
     if (existingClient) {
       currentClientId = existingClient.id;
       // Update phone number
-      await supabaseAdmin.from('client').update({ phone_number: data.phone }).eq('id', currentClientId);
+      const { error: updateError } = await supabaseAdmin.from('client').update({ phone_number: data.phone }).eq('id', currentClientId);
+      if (updateError) throw updateError;
     } else {
       // Insert new client
       const { data: newClient, error: insertErr } = await supabaseAdmin
@@ -774,8 +838,8 @@ export async function submitInquiryAction(data: any) {
 
     return { success: true };
   } catch (error: any) {
-    console.error("Submission error:", error);
-    return { success: false, error: error.message };
+    console.error('Inquiry submission failed:', error?.code ?? 'unknown');
+    return { success: false, error: 'We could not submit your inquiry. Please try again.' };
   }
 }
 
@@ -923,6 +987,13 @@ export async function toggleNotificationReadAction(
 // ==========================================
 export async function submitContactAction(data: any) {
   try {
+    const parsed = publicContactValues.extend({
+      firstName: z.string().trim().min(2).max(100), lastName: z.string().trim().min(2).max(100),
+      typeOfInquiry: z.enum(['General Inquiry', 'Booking Inquiry', 'Property Sales', 'Partnerships', 'Customer Support']),
+      message: z.string().trim().max(20000).optional(),
+    }).strict().safeParse(data);
+    if (!parsed.success) return { success: false, error: 'Please check your contact details.' };
+    data = parsed.data;
     let currentClientId = null;
 
     // 1. Check if the client already exists by email
@@ -938,7 +1009,8 @@ export async function submitContactAction(data: any) {
       currentClientId = existingClient.id;
       // Update phone number if provided
       if (data.phone) {
-        await supabaseAdmin.from('client').update({ phone_number: data.phone }).eq('id', currentClientId);
+        const { error: updateError } = await supabaseAdmin.from('client').update({ phone_number: data.phone }).eq('id', currentClientId);
+        if (updateError) throw updateError;
       }
     } else {
       // Insert new client
@@ -970,7 +1042,7 @@ export async function submitContactAction(data: any) {
 
     return { success: true };
   } catch (error: any) {
-    console.error("Contact submission error:", error);
-    return { success: false, error: error.message };
+    console.error('Contact submission failed:', error?.code ?? 'unknown');
+    return { success: false, error: 'We could not submit your contact request. Please try again.' };
   }
 }

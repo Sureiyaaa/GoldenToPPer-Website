@@ -87,9 +87,10 @@ test('editor form validates actual section text instead of the unused excerpt fi
     extractPlainTextFromContent: value => JSON.parse(value).content.map(p => p.content?.map(t => t.text || '').join('') || '').join('\n').trim(),
   });
   const schema = module.exports;
-  const values = { title: 'test', category: 'News', date: '2026-11-09', slug: 'test', excerpt: '', show_cover_on_article: true };
+  const values = { title: 'test', category: 'News', date: '2026-11-09', slug: 'test', excerpt: '', show_cover_on_article: true, article_layout: 'image-above' };
   assert.equal(schema.safeParse({ ...values, article_sections: sectionDocument([{ ...section(), body: richBody('test') }]) }).success, true);
   assert.equal(schema.safeParse({ ...values, article_content: JSON.stringify(richBody('Legacy article content')) }).success, true);
+  assert.equal(schema.safeParse({ ...values, article_layout: 'invalid-layout', article_content: JSON.stringify(richBody('Legacy article content')) }).success, false);
   for (const article_sections of [null, sectionDocument([]), sectionDocument([{ ...section(), body: richBody('   ') }])]) {
     const result = schema.safeParse({ ...values, article_sections });
     assert.equal(result.success, false);

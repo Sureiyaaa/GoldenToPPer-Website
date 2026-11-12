@@ -9,12 +9,11 @@ import {
   EyeOff,
 } from 'lucide-react';
 import PageTransition from '@/app/components/page-transitions';
-import { createClient } from '@/utils/supabase/client';
+import { fetchUsersAccessAction, fetchDepartmentPermissionsAction } from '@/app/actions/admin-access';
 import {
   createUserAction, updateUserAction, toggleUserStatusAction,
   toggleGroupStatusAction, createGroupAction,
 } from '@/app/actions/user';
-import { getCurrentUser } from '@/app/actions/auth';
 import { savePermissionsAction } from '@/app/actions/permissions';
 
 type PermissionKey = 'can_view' | 'can_create' | 'can_edit' | 'can_delete';
@@ -86,7 +85,6 @@ function PermissionMatrix({ modules, values, onChange, readOnly = false }: {
 
 function UsersManager() {
   const router = useRouter();
-  const [supabase] = useState(() => createClient());
   const [tab, setTab] = useState<'users' | 'departments'>('users');
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -114,24 +112,16 @@ function UsersManager() {
     setLoading(true);
     setLoadFailed(false);
     try {
-      const profile = await getCurrentUser();
-      if (!profile) { router.replace('/admin'); return; }
-      setCurrentUser(profile);
-      const [usersResult, departmentsResult, modulesResult] = await Promise.all([
-        supabase.from('admin_users').select('id, username, is_super_admin, group_id, is_active, last_login, groups ( group_name )'),
-        supabase.from('groups').select('*'),
-        supabase.from('modules').select('*'),
-      ]);
-      const error = usersResult.error || departmentsResult.error || modulesResult.error;
-      if (error) throw error;
-      setUsers((usersResult.data || []) as AdminUser[]);
-      setDepartments((departmentsResult.data || []) as Department[]);
-      setModules(((modulesResult.data || []) as Module[]).filter((module) => module.module_name?.toLowerCase() !== 'payment'));
+      const result = await fetchUsersAccessAction();
+      setCurrentUser(result.currentUser);
+      setUsers(result.users as AdminUser[]);
+      setDepartments(result.departments as Department[]);
+      setModules((result.modules as Module[]).filter((module) => module.module_name?.toLowerCase() !== 'payment'));
     } catch (error) {
       setLoadFailed(true);
       setNotice({ type: 'error', message: error instanceof Error ? error.message : 'Unable to load user access. Try refreshing the page.' });
     } finally { setLoading(false); }
-  }, [router, supabase]);
+  }, []);
 
   useEffect(() => { void loadData(); }, [loadData]);
   useEffect(() => {
@@ -241,8 +231,7 @@ function UsersManager() {
   const openDepartment = async (department: Department) => {
     setSaving(true);
     try {
-      const { data, error } = await supabase.from('module_access').select('*').eq('group_id', department.id);
-      if (error) throw error;
+      const data = await fetchDepartmentPermissionsAction(department.id);
       const initial = blankPermissions();
       for (const row of data || []) initial[row.module_id] = {
         can_view: Boolean(row.can_view), can_create: Boolean(row.can_create),

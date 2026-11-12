@@ -1,0 +1,14 @@
+{
+  "admin_users": ["Admin Full Access", "Allow authenticated users to view admin_users", "Enable read access for all users"],
+  "groups": ["Allow updates for authenticated users", "Enable insert for authenticated users only", "Enable read access for all users"],
+  "module_access": ["Allow authenticated users to insert module_access", "Allow authenticated users to update module_access", "Allow authenticated users to view module_access", "Enable insert for authenticated users only", "Enable read access for all users"],
+  "admin_contact_reads": ["Admins can delete their own contact reads", "Admins can insert their own contact reads", "Admins can view their own contact reads", "Enable read access for all users"],
+  "admin_inquire_reads": ["Admins can delete their own inquire reads", "Admins can insert their own inquire reads", "Admins can view their own inquire reads", "Enable read access for all users"],
+  "audit_logs": ["Allow authenticated inserts on audit_logs", "Allow authenticated read on audit_logs", "Enable insert for authenticated users only", "Enable read access for all users"],
+  "client": ["Admin Full Access", "Public Insert"],
+  "contact": ["Admin Full Access", "Public Insert"],
+  "inquire": ["Admin Full Access", "Public Insert"],
+  "loan_preapp": ["Admin Full Access", "Public Insert"],
+  "navbar_projects": ["Allow public read access on navbar_projects", "Enable insert for authenticated users only", "Enable read access for all users", "update navbar projects"],
+  "our story": ["Enable insert for authenticated users only", "Enable read access for all users", "update"]
+}
