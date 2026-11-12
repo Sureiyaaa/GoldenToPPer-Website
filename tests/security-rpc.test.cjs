@@ -49,7 +49,7 @@ test('authorized server callers retain the three verified RPC entry points', asy
 });
 
 test('RPC containment targets exact verified overloads without redefining function bodies', () => {
-  const sql = fs.readFileSync(path.join(root, 'supabase/migrations/20261110005000_restrict_admin_rpc_execution.sql'), 'utf8');
+  const sql = fs.readFileSync(path.join(root, 'supabase/migrations/20261110005000_restrict_admin_rpc_execution.sql'), 'utf8').replace(/\r\n/g, '\n');
   for (const signature of [
     'public.create_admin_user(text, text, boolean, integer)',
     'public.update_admin_user(uuid, boolean, integer, text)',
