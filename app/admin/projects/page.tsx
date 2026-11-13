@@ -22,7 +22,7 @@ import PreviewSkeleton, {
   ProjectEditorRegion
 } from './PreviewSkeleton';
 import ImageDropzone from '@/app/components/imagedropzone';
-import { createClient } from '@/utils/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 
 const projectSchema = z.object({
   title: z.string().min(1, "Title is required"),

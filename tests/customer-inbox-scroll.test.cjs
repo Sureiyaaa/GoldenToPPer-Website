@@ -52,7 +52,7 @@ async function prepare() {
     mode: 'development', context: root, entry: path.join(work, 'entry.jsx'),
     devtool: false, output: { path: work, filename: 'bundle.js' },
     resolve: { modules: [path.join(root, 'node_modules'), 'node_modules'], extensions: ['.tsx', '.ts', '.jsx', '.js'], alias: {
-      '@/utils/supabase/client': path.join(work, 'supabase.js'),
+      '@/lib/supabase/client': path.join(work, 'supabase.js'),
       '@/app/actions/admin_fetchers': path.join(work, 'actions.js'),
       'next/navigation': path.join(work, 'navigation.js'), '@': root,
     } },

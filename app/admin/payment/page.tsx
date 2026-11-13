@@ -15,7 +15,7 @@ import {
   preparePaymentCarouselUploadAction,
   finalizePaymentCarouselUploadAction,
 } from '@/app/actions/payment-carousel';
-import { createClient } from '@/utils/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import PaymentCarouselPreview from './PaymentCarouselPreview';
 import FocalPointEditor from './FocalPointEditor';
 

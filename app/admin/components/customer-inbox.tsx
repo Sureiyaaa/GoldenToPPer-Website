@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bell, Building2, CheckCircle2, CornerUpLeft, Landmark, Loader2, Mail, MailOpen, RefreshCw, Search, X } from 'lucide-react';
-import { createClient } from '@/utils/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import { fetchNotificationsAction, toggleNotificationReadAction } from '@/app/actions/admin_fetchers';
 import {
   customerInboxContext, customerInboxKey, customerInboxReplyHref, customerInboxTypeLabels,

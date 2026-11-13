@@ -14,7 +14,7 @@ import {
 
 } from 'lucide-react';
 
-import { createClient } from '@/utils/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 
 import ImageDropzone from '@/app/components/imagedropzone';
 

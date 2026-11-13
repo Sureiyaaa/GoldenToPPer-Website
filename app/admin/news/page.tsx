@@ -24,7 +24,7 @@ import {
   Save,
 } from 'lucide-react';
 
-import { createClient } from '@/utils/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import { saveArticleToDB, uploadImage } from '@/app/actions/news';
 import { createAuditLogAction } from '@/app/actions/admin_fetchers';
 import ImageDropzone from '@/app/components/imagedropzone';

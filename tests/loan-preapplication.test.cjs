@@ -324,7 +324,7 @@ test('loan INSERT event refreshes the shared bell/inbox state through the existi
     react,
     'next/navigation': {},
     'lucide-react': {},
-    '@/utils/supabase/client': {
+    '@/lib/supabase/client': {
       createClient: () => ({
         channel: () => channel,
         removeChannel: async () => { removed = true; },

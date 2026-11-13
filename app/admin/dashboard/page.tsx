@@ -17,7 +17,7 @@ import {
   Edit2, Archive, Plus, Loader2, Eye, EyeOff, History, Move3d, Newspaper, House,
   Bell, CheckCircle2, X, Menu, UserCircle2, Megaphone, Settings, ShieldAlert, AlertCircle, BookOpen, Upload, ChevronDown, GripVertical, ArrowUpRight, CreditCard
 } from 'lucide-react';
-import { createClient } from '@/utils/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import { fetchAdminNavigationAction, saveNavigationAction, saveNavigationOrderAction, fetchModulesManagementAction, setModuleVisibilityAction, fetchAdminNewsAction } from '@/app/actions/admin-access';
 import { CustomerInboxProvider, CustomerInboxManager, NotificationCenter } from '@/app/admin/components/customer-inbox';
 import { toggleActiveStatus, archiveRecord } from '@/app/actions/updates';

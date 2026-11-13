@@ -9,7 +9,7 @@ import {
   AlertCircle, ArrowLeft, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight,
   FileText, Image as ImageIcon, Loader2, RotateCcw, Save, Type,
 } from 'lucide-react';
-import { createClient } from '@/utils/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import ImageDropzone from '@/app/components/imagedropzone';
 import {
   createAuditLogAction, fetchAdminStoryList, fetchStoryForEdit, saveStoryAction,

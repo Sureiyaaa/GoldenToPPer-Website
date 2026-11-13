@@ -8,7 +8,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 
 import { ArrowLeft, Save, PlusCircle, CheckCircle2, Loader2, Archive, RotateCcw, Image as ImageIcon, Layers, Home, ExternalLink, AlertTriangle, X } from 'lucide-react';
 
-import { createClient } from '@/utils/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 
 import PreviewSkeleton from './PreviewSkeleton';
 

@@ -21,7 +21,7 @@ import {
   Save,
 } from 'lucide-react';
 
-import { createClient } from '@/utils/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import ImageDropzone from '@/app/components/imagedropzone';
 import PreviewSkeleton from './PreviewSkeleton';
 import { processBankServerActions } from '@/app/actions/banks';
