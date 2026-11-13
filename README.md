@@ -1,49 +1,103 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Golden Topper Website
 
-## Getting Started
+Golden Topper's public website and custom Admin CMS, built with Next.js. The
+application presents property developments and company content, collects customer
+inquiries and loan referrals, and provides content management tools.
 
-First, run the development server:
+## Capabilities
 
-```bash
+- Public project pages with unit layouts, amenities, maps and panoramic tours.
+- Company story, news and updates, promotions, partner banks and a buyer's guide.
+- Contact, property inquiry and loan pre-application forms.
+- A payment information wizard and configurable property showcase. Payment
+  gateway processing is not yet configured.
+- Cookie preferences, optional-media controls and form notice dialogs. These
+  controls do not implement a privacy-management CMS or server-side consent ledger.
+- A custom CMS for website content, project navigation, users and permissions,
+  customer messages and activity history.
+
+## Technology
+
+- Next.js 16, React 19 and TypeScript.
+- Tailwind CSS 4 and Poppins through `next/font/google`.
+- Supabase database, Storage and Realtime integrations.
+- React Hook Form and Zod for form handling and validation.
+- Tiptap for rich-text editing.
+- Leaflet and React Photo Sphere Viewer for maps and panoramic tours.
+- GSAP, Lenis and Framer Motion for animation.
+- Cloudflare Turnstile for verification in selected workflows.
+
+Exact dependency versions are recorded in `package-lock.json`.
+
+## Repository structure
+
+```text
+app/        Public routes, CMS, Server Actions, components and local data
+lib/        Shared validation, rendering and application helpers
+utils/      Client utilities
+public/     Static images and media
+supabase/   Database migrations and supporting SQL
+tests/      Node regression tests and local browser fixtures
+scripts/    Diagnostic and verification utilities
+```
+
+## Local development
+
+Prerequisites:
+
+- Node.js and npm compatible with the locked dependencies. The local verification
+  environment used Node.js 24 and npm 11; runtime versions are not pinned here.
+- An appropriately configured development Supabase environment and its authorized
+  development credentials. The migrations are incremental changes, not a complete
+  database bootstrap.
+- Development Turnstile configuration for workflows that require verification.
+- Chrome, Chromium or Edge for browser fixtures. Set `CHROME_PATH` to the browser
+  executable if it is not detected automatically; those tests skip without one.
+
+Install dependencies from the committed lockfile:
+
+```sh
+npm ci
+```
+
+The existing `.npmrc` supplies the repository's `legacy-peer-deps` setting. Keep
+the lockfile and this setting together when reproducing the dependency install.
+
+Copy `.env.example` to `.env.local` and replace its placeholders with approved
+development values. Do not use production credentials for local development.
+The example contains configuration names and placeholders only; it is not a
+working service configuration.
+
+Variables prefixed with `NEXT_PUBLIC_` are browser-visible. Keep server-only keys
+server-side and never commit actual credentials or local environment files.
+
+Start the application:
+
+```sh
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [localhost:3000](http://localhost:3000). The development script uses Webpack.
+Database-backed features require the corresponding development schema and data.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Commands and checks
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Run these from the repository root after installation:
 
-## Installation
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the development server with Webpack |
+| `npm run build` | Create an optimized Next.js build |
+| `npm start` | Serve a previously successful build |
+| `npm run lint` | Run ESLint |
+| `node --test tests/*.test.cjs` | Run the regression suite, including available browser fixtures |
+| `node node_modules/typescript/bin/tsc --noEmit --incremental false` | Run TypeScript checking independently |
 
-Run these commands to install required dependencies:
+Tests use local fixtures and mocked services; passing them does not establish
+live database or deployment behavior. There are no npm `test` or `typecheck`
+scripts. Run lint and TypeScript checks separately from the build and review any
+reported failures. Font fetching during a build requires network access.
 
-```bash
-npm install --legacy-peer-deps
-npm install leaflet --legacy-peer-deps
-npm install @supabase/ssr @supabase/supabase-js react-hook-form @hookform/resolvers zod
-npm install react-photo-sphere-viewer
-npm install @photo-sphere-viewer/core
-npm install bcryptjs
-```
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Deployment requires separately configured hosting, environment variables and
+database prerequisites. This repository does not include a configured CI
+pipeline or a verified one-command production deployment workflow.
