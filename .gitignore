@@ -136,3 +136,14 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Private production recovery packages and local operator settings
+/docs/migration-10000-manual-recovery.md
+/docs/migration-30000-manual-recovery.md
+/supabase/inspection/migration-10000-recovery-baseline.json
+/supabase/inspection/migration-30000-recovery-baseline.json
+/supabase/rollback/20261110010000_repair_cms_browser_grants.sql
+/supabase/rollback/20261110030000_repair_remaining_cms_mutations.sql
+/tests/security-migration-10000-recovery.test.cjs
+/tests/security-migration-30000-recovery.test.cjs
+/.claude/settings.local.json

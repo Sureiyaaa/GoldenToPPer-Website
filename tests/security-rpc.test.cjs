@@ -62,10 +62,25 @@ test('RPC containment targets exact verified overloads without redefining functi
   assert.doesNotMatch(sql, /create\s+(or\s+replace\s+)?function/i);
 });
 
-test('default changes remain limited to the two verified creators and public schema', () => {
-  const sql = fs.readFileSync(path.join(root, 'supabase/migrations/20261110020000_scope_public_default_privileges.sql'), 'utf8');
+test('default changes restrict only postgres public-schema defaults and fail closed within that scope', () => {
+  const source = fs.readFileSync(path.join(root, 'supabase/migrations/20261110020000_scope_public_default_privileges.sql'), 'utf8');
+  const sql = source.replace(/--[^\n]*/g, '').trim();
   const statements = sql.match(/alter default privileges[\s\S]*?;/gi);
-  assert.equal(statements.length, 6);
-  for (const statement of statements) assert.match(statement, /^alter default privileges for role (postgres|supabase_admin) in schema public\s+revoke /i);
+  assert.deepEqual(statements.map(statement => statement.replace(/\s+/g, ' ')), [
+    'alter default privileges for role postgres in schema public revoke all on tables from public, anon, authenticated;',
+    'alter default privileges for role postgres in schema public revoke all on sequences from public, anon, authenticated;',
+    'alter default privileges for role postgres in schema public revoke execute on functions from public, anon, authenticated;',
+  ]);
+  assert.match(sql, /^begin;/);
+  assert.match(sql, /commit;$/);
+  assert.match(sql, /if exists \(/);
+  assert.match(sql, /n\.nspname = 'public'/);
+  assert.match(sql, /d\.defaclrole = 'postgres'::regrole/);
+  assert.match(sql, /d\.defaclobjtype in \('r', 'S', 'f'\)/);
+  assert.match(sql, /a\.grantee in \(0, 'anon'::regrole::oid, 'authenticated'::regrole::oid\)/);
+  assert.match(sql, /raise exception 'Residual postgres public-schema defaults/);
+  assert.doesNotMatch(sql, /supabase_admin|\bgrant\b|\balter\s+role\b/i);
   assert.doesNotMatch(sql, /grant\s+.*\s+to\s+(anon|authenticated)/i);
+  assert.match(source, /DEFERRED security work requiring an already-authorized operator/);
+  assert.match(source, /per-schema REVOKE cannot cancel global grants or the built-in\s+-- PUBLIC EXECUTE default/);
 });
