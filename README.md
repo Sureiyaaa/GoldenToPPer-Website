@@ -33,10 +33,6 @@ npm install @photo-sphere-viewer/core
 npm install bcryptjs
 ```
 
-## Admin Credentials
-**Username:** admin\
-**Password:** GoldenTopper2026!
-
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
