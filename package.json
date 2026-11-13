@@ -31,7 +31,6 @@
     "react-leaflet": "^5.0.0",
     "react-photo-sphere-viewer": "^6.2.3",
     "supabase": "^2.81.3",
-    "tailwindcss-font-inter": "^4.0.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {
