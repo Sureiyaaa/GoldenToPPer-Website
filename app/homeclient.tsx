@@ -905,13 +905,19 @@ export default function HomeClient({
                   className="lg:col-span-7 group cursor-pointer text-left outline-none flex flex-col"
                 >
                   <div className="w-full aspect-[16/10] overflow-hidden rounded-sm mb-6 lg:mb-8 relative bg-gray-100 shadow-md">
-                    <Image
-                      src={resolveImageUrl(initialNews[0].image)}
-                      alt={initialNews[0].title}
-                      fill
-                      sizes="(max-width: 1024px) 100vw, 60vw"
-                      className="object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
-                    />
+                    {initialNews[0].image?.trim() ? (
+                      <Image
+                        src={resolveImageUrl(initialNews[0].image)}
+                        alt={initialNews[0].title}
+                        fill
+                        sizes="(max-width: 1024px) 100vw, 60vw"
+                        className="object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-brand-blue to-[#0d1b3e] px-6 text-center font-serif text-3xl text-white/70">
+                        News &amp; Updates
+                      </div>
+                    )}
                     <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-md text-brand-blue px-4 py-2 text-[9px] md:text-[10px] font-bold uppercase tracking-[0.2em] rounded-sm shadow-sm">
                       {initialNews[0].category}
                     </div>
@@ -941,13 +947,19 @@ export default function HomeClient({
                       className={`group flex items-start gap-5 md:gap-6 py-6 cursor-pointer transition-colors duration-300 outline-none border-b border-gray-200 hover:border-brand-gold ${idx === 0 ? 'pt-0' : ''}`}
                     >
                       <div className="w-28 md:w-36 aspect-[4/3] rounded-sm overflow-hidden shrink-0 relative bg-gray-100 shadow-sm mt-1">
-                       <Image
-                        src={resolveImageUrl(news.image)}
-                        alt={news.title}
-                        fill
-                        sizes="(max-width: 768px) 30vw, 15vw"
-                        className="object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
-                      />
+                        {news.image?.trim() ? (
+                          <Image
+                            src={resolveImageUrl(news.image)}
+                            alt={news.title}
+                            fill
+                            sizes="(max-width: 768px) 30vw, 15vw"
+                            className="object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-brand-blue to-[#0d1b3e] px-3 text-center font-serif text-sm text-white/70">
+                            News &amp; Updates
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex flex-col flex-1">

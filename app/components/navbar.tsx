@@ -330,15 +330,16 @@ export default function Navbar() {
             </div>
           </div>
 
-          <Link 
-            href="/login" 
-            className={`hidden md:flex items-center justify-center text-brand-gold hover:text-white transition-all duration-[800ms] outline-none ${
+          <button
+            type="button"
+            disabled
+            className={`hidden md:flex items-center justify-center text-brand-gold cursor-not-allowed transition-all duration-[800ms] outline-none ${
               isScrolled ? 'w-0 opacity-0 overflow-hidden pointer-events-none scale-50' : 'w-auto opacity-100 scale-100'
             }`}
-            aria-label="Login"
+            aria-label="Login (unavailable)"
           >
             <User size={26} strokeWidth={2} className="shrink-0" />
-          </Link>
+          </button>
 
           <button 
             onClick={() => setIsMobileMenuOpen(true)} 
@@ -430,14 +431,14 @@ export default function Navbar() {
             ))}
             
             <div className="border-b border-white/10 py-5">
-              <Link 
-                href="/login" 
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="flex items-center gap-3 text-base font-bold tracking-widest uppercase text-brand-gold hover:text-white transition-colors"
+              <button
+                type="button"
+                disabled
+                className="flex items-center gap-3 text-base font-bold tracking-widest uppercase text-brand-gold cursor-not-allowed"
               >
                 <User size={20} strokeWidth={2} />
                 Login
-              </Link>
+              </button>
             </div>
             
           </div>
