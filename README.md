@@ -90,13 +90,13 @@ Run these from the repository root after installation:
 | `npm run build` | Create an optimized Next.js build |
 | `npm start` | Serve a previously successful build |
 | `npm run lint` | Run ESLint |
-| `node --test tests/*.test.cjs` | Run the regression suite, including available browser fixtures |
-| `node node_modules/typescript/bin/tsc --noEmit --incremental false` | Run TypeScript checking independently |
+| `npm test` | Run the regression suite, including available browser fixtures |
+| `npm run typecheck` | Run TypeScript checking independently |
 
 Tests use local fixtures and mocked services; passing them does not establish
-live database or deployment behavior. There are no npm `test` or `typecheck`
-scripts. Run lint and TypeScript checks separately from the build and review any
-reported failures. Font fetching during a build requires network access.
+live database or deployment behavior. Run lint and TypeScript checks separately
+from the build and review any reported failures. Font fetching during a build
+requires network access.
 
 Deployment requires separately configured hosting, environment variables and
 database prerequisites. This repository does not include a configured CI
