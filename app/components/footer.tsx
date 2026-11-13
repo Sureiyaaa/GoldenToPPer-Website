@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Facebook, Instagram, Youtube } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client'; // Ensure this matches your project's path
-import { TikTok_Sans } from 'next/font/google';
 import { CookieSettingsButton } from './cookie-consent';
 
 export default function Footer() {
